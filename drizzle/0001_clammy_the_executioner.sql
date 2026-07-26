@@ -1,0 +1,2 @@
+DROP INDEX `ledger_allocation_uq`;--> statement-breakpoint
+CREATE UNIQUE INDEX `ledger_allocation_uq` ON `increment_ledger` (`version_id`,`activity_id`,`account_id`,`sku_id`,`month`,`channel_id`,`geography_id`);
