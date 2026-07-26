@@ -83,6 +83,37 @@ type GrowthResult = {
     reconciled: boolean;
   };
 };
+type PlanResult = {
+  dataClassification: "SYNTHETIC_NON_COMMERCIAL";
+  methodId: string;
+  methodVersion: string;
+  lines: Array<{
+    accountId: string;
+    skuId: string;
+    period: string;
+    baselineUnits: number;
+    incrementalNetUnits: number;
+    planUnits: number;
+    sourceUnit: string;
+    baseUnit: string;
+    conversionFactor: number;
+    derivedCases: number;
+    unitPrice: number;
+    currency: string;
+    priceType: string;
+    validFrom: string;
+    planValue: number;
+  }>;
+  annualUnits: number;
+  annualValue: number;
+  currency: string;
+  controls: {
+    unitsReconciled: boolean;
+    valueReconciled: boolean;
+    missingConversions: number;
+    missingPrices: number;
+  };
+};
 
 const currentYear = new Date().getFullYear();
 
@@ -155,6 +186,7 @@ export default function PlansWorkspace({
   const [loadingSynthetic, setLoadingSynthetic] = useState(false);
   const [showBaselineGate, setShowBaselineGate] = useState(false);
   const [showGrowthGate, setShowGrowthGate] = useState(false);
+  const [showResultGate, setShowResultGate] = useState(false);
   const [baseline, setBaseline] = useState<BaselineResult | null>(null);
   const [baselineReview, setBaselineReview] = useState<BaselineReview | null>(null);
   const [calculatingBaseline, setCalculatingBaseline] = useState(false);
@@ -166,6 +198,8 @@ export default function PlansWorkspace({
   const [savingReview, setSavingReview] = useState(false);
   const [growth, setGrowth] = useState<GrowthResult | null>(null);
   const [buildingGrowth, setBuildingGrowth] = useState(false);
+  const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [calculatingResult, setCalculatingResult] = useState(false);
   const [comparison, setComparison] = useState<"Plan" | "Cuota" | "Proyección">("Plan");
 
   async function loadPlans() {
@@ -209,6 +243,8 @@ export default function PlansWorkspace({
             setShowInformation(false);
             setReceivedFiles([]);
             setShowBaselineGate(false);
+            setShowGrowthGate(false);
+            setShowResultGate(false);
             void loadInputFiles(requestedPlan.id);
             setView("workspace");
           }
@@ -340,9 +376,42 @@ export default function PlansWorkspace({
     try {
       const response = await fetch(`/api/growth?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
       const body = (await response.json()) as { ok: boolean; result?: GrowthResult | null };
-      if (response.ok && body.ok) setGrowth(body.result ?? null);
+      if (response.ok && body.ok) {
+        setGrowth(body.result ?? null);
+        if (body.result?.controls.reconciled) void loadPlanResult(planId);
+      }
     } catch {
       setGrowth(null);
+    }
+  }
+
+  async function loadPlanResult(planId: string) {
+    try {
+      const response = await fetch(`/api/result?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+      const body = (await response.json()) as { ok: boolean; result?: PlanResult | null };
+      if (response.ok && body.ok) setPlanResult(body.result ?? null);
+    } catch {
+      setPlanResult(null);
+    }
+  }
+
+  async function calculatePlanResult() {
+    if (!selected) return;
+    setCalculatingResult(true);
+    setError("");
+    try {
+      const response = await fetch("/api/result", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: selected.id }),
+      });
+      const body = (await response.json()) as { ok: boolean; result?: PlanResult; error?: string };
+      if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
+      setPlanResult(body.result);
+    } catch (cause) {
+      setError(friendlyError(cause instanceof Error ? cause.message : ""));
+    } finally {
+      setCalculatingResult(false);
     }
   }
 
@@ -359,6 +428,7 @@ export default function PlansWorkspace({
       const body = (await response.json()) as { ok: boolean; result?: GrowthResult; error?: string };
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setGrowth(body.result);
+      setPlanResult(null);
     } catch (cause) {
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -462,6 +532,8 @@ export default function PlansWorkspace({
     setShowInformation(false);
     setReceivedFiles([]);
     setShowBaselineGate(false);
+    setShowGrowthGate(false);
+    setShowResultGate(false);
     void loadInputFiles(plan.id);
     setView("workspace");
     setError("");
@@ -591,13 +663,13 @@ export default function PlansWorkspace({
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
         </div>
         <div className="plan-tabs">
-          <button className={!showBaselineGate && !showGrowthGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); }}>Contexto e información</button>
-          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); }}>Baseline</button>
-          <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); }}>Crecimiento</button>
-          <button disabled>Resultado y rentabilidad</button>
+          <button className={!showBaselineGate && !showGrowthGate && !showResultGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); }}>Contexto e información</button>
+          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); setShowResultGate(false); }}>Baseline</button>
+          <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); }}>Crecimiento</button>
+          <button className={showResultGate ? "active" : ""} disabled={!growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); }}>Resultado y rentabilidad</button>
           <button disabled>Versión y presentación</button>
         </div>
-        <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate ? "baseline-mode" : ""}`}>
+        <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate || showResultGate ? "baseline-mode" : ""}`}>
           {showBaselineGate && packageAccepted && (
             <div className="baseline-workspace">
               <div className="baseline-head">
@@ -808,6 +880,58 @@ export default function PlansWorkspace({
                 <div className="baseline-next-action">
                   <div><b>Crear caso gobernado de crecimiento</b><p>Generará tres actividades sintéticas trazables y comprobará el incremental neto.</p></div>
                   <button className="primary" onClick={() => void buildSyntheticGrowth()} disabled={buildingGrowth}>{buildingGrowth ? "Construyendo…" : "Construir crecimiento sintético"}</button>
+                </div>
+              )}
+            </div>
+          )}
+          {showResultGate && growth?.controls.reconciled && (
+            <div className="result-workspace">
+              <div className="baseline-head">
+                <div>
+                  <p className="eyebrow">Paso 4 · Unidades y valor</p>
+                  <h2>Plan mensual reconciliado por SKU</h2>
+                  <p>Base aprobada + incremental neto = unidades del Plan. El valor usa el precio aceptado y vigente del paquete.</p>
+                </div>
+                <span className={`calculation-state ${planResult?.controls.unitsReconciled && planResult.controls.valueReconciled ? "ready" : ""}`}>
+                  {planResult?.controls.unitsReconciled && planResult.controls.valueReconciled ? "✓ Reconciliado" : "Pendiente"}
+                </span>
+              </div>
+              <div className="synthetic-banner" role="status">
+                <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
+                <span>Unidades, precios y valores son artificiales y no representan venta, cuota ni compromiso comercial.</span>
+              </div>
+              {planResult ? (
+                <>
+                  <div className="result-kpis">
+                    <article><span>Unidades anuales</span><b>{planResult.annualUnits.toLocaleString("es-MX")}</b><small>Base + incremental neto</small></article>
+                    <article><span>Valor anual</span><b>{planResult.annualValue.toLocaleString("es-MX", { style: "currency", currency: planResult.currency })}</b><small>Precio aceptado × unidades</small></article>
+                    <article><span>Conversiones faltantes</span><b>{planResult.controls.missingConversions}</b><small>Factor por SKU</small></article>
+                    <article><span>Precios faltantes</span><b>{planResult.controls.missingPrices}</b><small>Vigencia declarada</small></article>
+                  </div>
+                  <div className="result-table">
+                    <div className="result-table-head"><span>Mes / SKU</span><span>Base aprobada</span><span>Incremental neto</span><span>Unidades Plan</span><span>Conversión</span><span>Precio</span><span>Valor</span></div>
+                    {planResult.lines.map((line) => (
+                      <div className="result-row" key={`${line.skuId}|${line.period}`}>
+                        <div><b>{line.period}</b><small>{line.skuId}</small></div>
+                        <span>{line.baselineUnits.toLocaleString("es-MX")}</span>
+                        <span>{line.incrementalNetUnits.toLocaleString("es-MX")}</span>
+                        <strong>{line.planUnits.toLocaleString("es-MX")}</strong>
+                        <span>{line.derivedCases.toLocaleString("es-MX")} cajas<small>{line.conversionFactor} {line.baseUnit} / {line.sourceUnit}</small></span>
+                        <span>{line.unitPrice.toLocaleString("es-MX", { style: "currency", currency: line.currency })}<small>{line.priceType} · desde {line.validFrom}</small></span>
+                        <b>{line.planValue.toLocaleString("es-MX", { style: "currency", currency: line.currency })}</b>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="result-reconciliation">
+                    <div><b>Unidades reconciliadas</b><span>Base aprobada + incremental neto = Plan</span></div>
+                    <div><b>Valor reconciliado</b><span>Unidades × precio aceptado = valor</span></div>
+                    <small>{planResult.methodId} v{planResult.methodVersion} · resultado persistido</small>
+                  </div>
+                </>
+              ) : (
+                <div className="baseline-next-action">
+                  <div><b>Consolidar unidades y valor mensual</b><p>Aplicará las conversiones y precios aceptados sin alterar los archivos originales.</p></div>
+                  <button className="primary" onClick={() => void calculatePlanResult()} disabled={calculatingResult}>{calculatingResult ? "Consolidando…" : "Calcular unidades y valor"}</button>
                 </div>
               )}
             </div>

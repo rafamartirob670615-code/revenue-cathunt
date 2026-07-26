@@ -22,6 +22,8 @@ test("cada etapa del dashboard conduce a una acción comercial", async () => {
     "Revisar base desimpactada",
     "Continuar construcción",
     "Construir crecimiento",
+    "Consolidar unidades y valor",
+    "Revisar rentabilidad",
     "Revisar aprobación",
     "Abrir Plan oficial",
   ]) {

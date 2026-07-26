@@ -54,6 +54,8 @@ function deriveStage(
   packageAccepted: boolean,
   baselineCalculated: boolean,
   baselineApproved: boolean,
+  growthReady: boolean,
+  resultReady: boolean,
 ): Pick<DashboardPlan, "stage" | "nextAction"> {
   const version = plan.versions.at(-1);
   const status = version?.status ?? "DRAFT";
@@ -62,6 +64,8 @@ function deriveStage(
     return { stage: "REVIEW_APPROVAL", nextAction: status === "RETURNED" ? "Revisar devolución" : "Revisar aprobación" };
   }
   if (version?.lines?.length) return { stage: "BUILD_PLAN", nextAction: "Continuar construcción" };
+  if (resultReady) return { stage: "BUILD_PLAN", nextAction: "Revisar rentabilidad" };
+  if (growthReady) return { stage: "BUILD_PLAN", nextAction: "Consolidar unidades y valor" };
   if (baselineApproved) return { stage: "BUILD_PLAN", nextAction: "Construir crecimiento" };
   if (baselineCalculated) return { stage: "BUILD_PLAN", nextAction: "Revisar cálculo técnico" };
   if (packageAccepted) return { stage: "BUILD_BASELINE", nextAction: "Revisar base desimpactada" };
@@ -107,11 +111,23 @@ export async function GET(request: Request) {
               AND br.owner_id = ?
               AND br.status = 'APPROVED_FROZEN'
           ), 0) AS baseline_approved_count
+          ,COALESCE((
+            SELECT COUNT(*)
+            FROM growth_plans gp
+            WHERE gp.plan_id = pa.plan_id
+              AND gp.owner_id = ?
+          ), 0) AS growth_count
+          ,COALESCE((
+            SELECT COUNT(*)
+            FROM plan_results pr
+            WHERE pr.plan_id = pa.plan_id
+              AND pr.owner_id = ?
+          ), 0) AS result_count
         FROM plan_aggregates pa
         WHERE json_extract(pa.aggregate_json, '$.versions[0].createdBy') = ?
         ORDER BY pa.updated_at DESC`,
       )
-      .bind(ownerId, ownerId, ownerId, ownerId, ownerId)
+      .bind(ownerId, ownerId, ownerId, ownerId, ownerId, ownerId, ownerId)
       .run<{
         aggregate_json: string;
         updated_at: string;
@@ -119,6 +135,8 @@ export async function GET(request: Request) {
         package_status: string;
         baseline_count: number;
         baseline_approved_count: number;
+        growth_count: number;
+        result_count: number;
       }>();
     const plans: DashboardPlan[] = (result.results ?? []).map((row) => {
       const plan = JSON.parse(row.aggregate_json) as Plan;
@@ -130,6 +148,8 @@ export async function GET(request: Request) {
         packageAccepted,
         row.baseline_count > 0,
         row.baseline_approved_count > 0,
+        row.growth_count > 0,
+        row.result_count > 0,
       );
       return {
         id: plan.id,

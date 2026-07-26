@@ -66,3 +66,16 @@ test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async 
   assert.match(source, /Solapamientos pendientes/);
   assert.match(source, /Construir crecimiento sintético/);
 });
+
+test("resultado muestra unidades y valor mensual con evidencia de precio y conversión", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /Plan mensual reconciliado por SKU/);
+  assert.match(source, /Base aprobada \+ incremental neto = unidades del Plan/);
+  assert.match(source, /Calcular unidades y valor/);
+  assert.match(source, /Unidades anuales/);
+  assert.match(source, /Valor anual/);
+  assert.match(source, /Conversiones faltantes/);
+  assert.match(source, /Precios faltantes/);
+  assert.match(source, /precio aceptado/);
+  assert.match(source, /DATOS SINTÉTICOS — NO COMERCIALES/);
+});
