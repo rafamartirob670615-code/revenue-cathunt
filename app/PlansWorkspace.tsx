@@ -114,6 +114,39 @@ type PlanResult = {
     missingPrices: number;
   };
 };
+type ProfitabilityResult = {
+  dataClassification: "SYNTHETIC_NON_COMMERCIAL";
+  comparator: { id: string; name: string; explanation: string };
+  parameters: {
+    id: string;
+    version: string;
+    deductionRate: number;
+    cogsRateOnNetSales: number;
+    investmentRateOnIncrementalGross: number;
+    corporatePolicy: false;
+    explanation: string;
+  };
+  currency: string;
+  comparatorAnnual: FinancialSide;
+  planAnnual: FinancialSide;
+  variance: { netSales: number; grossMargin: number; contribution: number };
+  controls: {
+    planReconciled: boolean;
+    comparatorReconciled: boolean;
+    corporatePolicyApproved: false;
+  };
+};
+type FinancialSide = {
+  grossSales: number;
+  deductions: number;
+  netSales: number;
+  cogs: number;
+  grossMargin: number;
+  investment: number;
+  contribution: number;
+  grossMarginRate: number | null;
+  contributionRate: number | null;
+};
 
 const currentYear = new Date().getFullYear();
 
@@ -200,6 +233,8 @@ export default function PlansWorkspace({
   const [buildingGrowth, setBuildingGrowth] = useState(false);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [calculatingResult, setCalculatingResult] = useState(false);
+  const [profitability, setProfitability] = useState<ProfitabilityResult | null>(null);
+  const [calculatingProfitability, setCalculatingProfitability] = useState(false);
   const [comparison, setComparison] = useState<"Plan" | "Cuota" | "Proyección">("Plan");
 
   async function loadPlans() {
@@ -389,9 +424,48 @@ export default function PlansWorkspace({
     try {
       const response = await fetch(`/api/result?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
       const body = (await response.json()) as { ok: boolean; result?: PlanResult | null };
-      if (response.ok && body.ok) setPlanResult(body.result ?? null);
+      if (response.ok && body.ok) {
+        setPlanResult(body.result ?? null);
+        if (body.result?.controls.unitsReconciled && body.result.controls.valueReconciled) {
+          void loadProfitability(planId);
+        }
+      }
     } catch {
       setPlanResult(null);
+    }
+  }
+
+  async function loadProfitability(planId: string) {
+    try {
+      const response = await fetch(`/api/profitability?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+      const body = (await response.json()) as { ok: boolean; result?: ProfitabilityResult | null };
+      if (response.ok && body.ok) setProfitability(body.result ?? null);
+    } catch {
+      setProfitability(null);
+    }
+  }
+
+  async function calculateProfitability() {
+    if (!selected) return;
+    setCalculatingProfitability(true);
+    setError("");
+    try {
+      const response = await fetch("/api/profitability", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: selected.id }),
+      });
+      const body = (await response.json()) as {
+        ok: boolean;
+        result?: ProfitabilityResult;
+        error?: string;
+      };
+      if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
+      setProfitability(body.result);
+    } catch (cause) {
+      setError(friendlyError(cause instanceof Error ? cause.message : ""));
+    } finally {
+      setCalculatingProfitability(false);
     }
   }
 
@@ -408,6 +482,7 @@ export default function PlansWorkspace({
       const body = (await response.json()) as { ok: boolean; result?: PlanResult; error?: string };
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setPlanResult(body.result);
+      setProfitability(null);
     } catch (cause) {
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -927,6 +1002,57 @@ export default function PlansWorkspace({
                     <div><b>Valor reconciliado</b><span>Unidades × precio aceptado = valor</span></div>
                     <small>{planResult.methodId} v{planResult.methodVersion} · resultado persistido</small>
                   </div>
+                  <section className="profitability-section">
+                    <div className="section-copy">
+                      <p className="eyebrow">Rentabilidad · comparador declarado</p>
+                      <h3>{profitability ? "P&L sintético reconciliado" : "Construir rentabilidad sin asumir reglas corporativas"}</h3>
+                      <p>Comparador: valor del baseline aprobado. Los parámetros financieros son artificiales, visibles y versionados.</p>
+                    </div>
+                    {profitability ? (
+                      <>
+                        <div className="financial-warning">
+                          <b>PARÁMETROS SINTÉTICOS — NO SON POLÍTICA CORPORATIVA</b>
+                          <span>{profitability.parameters.explanation}</span>
+                        </div>
+                        <div className="financial-parameters">
+                          <article><span>Deducciones</span><b>{(profitability.parameters.deductionRate * 100).toFixed(0)}%</b><small>sobre gross sales</small></article>
+                          <article><span>COGS</span><b>{(profitability.parameters.cogsRateOnNetSales * 100).toFixed(0)}%</b><small>sobre net sales</small></article>
+                          <article><span>Inversión</span><b>{(profitability.parameters.investmentRateOnIncrementalGross * 100).toFixed(0)}%</b><small>sobre valor incremental positivo</small></article>
+                          <article><span>Versión</span><b>{profitability.parameters.version}</b><small>{profitability.parameters.id}</small></article>
+                        </div>
+                        <div className="pnl-comparison">
+                          <div className="pnl-head"><span>Concepto</span><span>{profitability.comparator.name}</span><span>Plan sintético</span><span>Variación</span></div>
+                          {([
+                            ["Gross sales", "grossSales"],
+                            ["− Deducciones", "deductions"],
+                            ["= Net sales", "netSales"],
+                            ["− COGS", "cogs"],
+                            ["= Gross margin", "grossMargin"],
+                            ["− Inversión", "investment"],
+                            ["= Contribution", "contribution"],
+                          ] as const).map(([label, field]) => (
+                            <div className={`pnl-row ${field === "contribution" ? "total" : ""}`} key={field}>
+                              <b>{label}</b>
+                              <span>{profitability.comparatorAnnual[field].toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</span>
+                              <span>{profitability.planAnnual[field].toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</span>
+                              <strong>{(profitability.planAnnual[field] - profitability.comparatorAnnual[field]).toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</strong>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="profitability-kpis">
+                          <article><span>Margen bruto Plan</span><b>{profitability.planAnnual.grossMarginRate === null ? "No aplica" : `${(profitability.planAnnual.grossMarginRate * 100).toFixed(1)}%`}</b></article>
+                          <article><span>Contribution Plan</span><b>{profitability.planAnnual.contributionRate === null ? "No aplica" : `${(profitability.planAnnual.contributionRate * 100).toFixed(1)}%`}</b></article>
+                          <article><span>Variación contribution</span><b>{profitability.variance.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</b></article>
+                          <article><span>Reconciliación</span><b>{profitability.controls.planReconciled && profitability.controls.comparatorReconciled ? "Completa" : "Pendiente"}</b></article>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="baseline-next-action">
+                        <div><b>Calcular P&L sintético comparado</b><p>Usará parámetros artificiales explícitos y no declarará políticas corporativas.</p></div>
+                        <button className="primary" onClick={() => void calculateProfitability()} disabled={calculatingProfitability}>{calculatingProfitability ? "Calculando…" : "Calcular rentabilidad"}</button>
+                      </div>
+                    )}
+                  </section>
                 </>
               ) : (
                 <div className="baseline-next-action">

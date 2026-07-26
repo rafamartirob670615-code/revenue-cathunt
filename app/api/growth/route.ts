@@ -137,6 +137,7 @@ export async function POST(request: Request) {
       },
     };
     const now = new Date().toISOString();
+    await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM plan_results WHERE plan_id = ?").bind(planId).run();
     await database()
       .prepare(

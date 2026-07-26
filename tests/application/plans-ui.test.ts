@@ -79,3 +79,15 @@ test("resultado muestra unidades y valor mensual con evidencia de precio y conve
   assert.match(source, /precio aceptado/);
   assert.match(source, /DATOS SINTÉTICOS — NO COMERCIALES/);
 });
+
+test("rentabilidad declara comparador y parámetros no corporativos", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /Rentabilidad · comparador declarado/);
+  assert.match(source, /valor del baseline aprobado/);
+  assert.match(source, /PARÁMETROS SINTÉTICOS — NO SON POLÍTICA CORPORATIVA/);
+  assert.match(source, /Gross sales/);
+  assert.match(source, /Net sales/);
+  assert.match(source, /Gross margin/);
+  assert.match(source, /Contribution/);
+  assert.match(source, /Calcular rentabilidad/);
+});

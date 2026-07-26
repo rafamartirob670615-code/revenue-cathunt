@@ -116,6 +116,7 @@ export async function POST(request: Request) {
       synthetic,
     });
     const calculatedAt = new Date().toISOString();
+    await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM plan_results WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM growth_plans WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM baseline_reviews WHERE plan_id = ?").bind(planId).run();

@@ -56,6 +56,7 @@ function deriveStage(
   baselineApproved: boolean,
   growthReady: boolean,
   resultReady: boolean,
+  profitabilityReady: boolean,
 ): Pick<DashboardPlan, "stage" | "nextAction"> {
   const version = plan.versions.at(-1);
   const status = version?.status ?? "DRAFT";
@@ -64,6 +65,7 @@ function deriveStage(
     return { stage: "REVIEW_APPROVAL", nextAction: status === "RETURNED" ? "Revisar devolución" : "Revisar aprobación" };
   }
   if (version?.lines?.length) return { stage: "BUILD_PLAN", nextAction: "Continuar construcción" };
+  if (profitabilityReady) return { stage: "BUILD_PLAN", nextAction: "Preparar versión" };
   if (resultReady) return { stage: "BUILD_PLAN", nextAction: "Revisar rentabilidad" };
   if (growthReady) return { stage: "BUILD_PLAN", nextAction: "Consolidar unidades y valor" };
   if (baselineApproved) return { stage: "BUILD_PLAN", nextAction: "Construir crecimiento" };
@@ -123,11 +125,17 @@ export async function GET(request: Request) {
             WHERE pr.plan_id = pa.plan_id
               AND pr.owner_id = ?
           ), 0) AS result_count
+          ,COALESCE((
+            SELECT COUNT(*)
+            FROM financial_results fr
+            WHERE fr.plan_id = pa.plan_id
+              AND fr.owner_id = ?
+          ), 0) AS profitability_count
         FROM plan_aggregates pa
         WHERE json_extract(pa.aggregate_json, '$.versions[0].createdBy') = ?
         ORDER BY pa.updated_at DESC`,
       )
-      .bind(ownerId, ownerId, ownerId, ownerId, ownerId, ownerId, ownerId)
+      .bind(ownerId, ownerId, ownerId, ownerId, ownerId, ownerId, ownerId, ownerId)
       .run<{
         aggregate_json: string;
         updated_at: string;
@@ -137,6 +145,7 @@ export async function GET(request: Request) {
         baseline_approved_count: number;
         growth_count: number;
         result_count: number;
+        profitability_count: number;
       }>();
     const plans: DashboardPlan[] = (result.results ?? []).map((row) => {
       const plan = JSON.parse(row.aggregate_json) as Plan;
@@ -150,6 +159,7 @@ export async function GET(request: Request) {
         row.baseline_approved_count > 0,
         row.growth_count > 0,
         row.result_count > 0,
+        row.profitability_count > 0,
       );
       return {
         id: plan.id,
