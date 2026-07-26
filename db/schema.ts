@@ -281,3 +281,12 @@ export const baselineReviews = sqliteTable("baseline_reviews", {
   decidedAt: text("decided_at").notNull(),
   frozenAt: text("frozen_at"),
 });
+
+export const growthPlans = sqliteTable("growth_plans", {
+  planId: text("plan_id").primaryKey(),
+  ownerId: text("owner_id").notNull(),
+  resultJson: text("result_json").notNull(),
+  dataClassification: text("data_classification").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

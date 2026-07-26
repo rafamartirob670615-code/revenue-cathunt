@@ -55,6 +55,34 @@ type BaselineReview = {
   methodVersion: string;
   officializationAllowed?: boolean;
 };
+type GrowthResult = {
+  dataClassification: "SYNTHETIC_NON_COMMERCIAL";
+  methodId: string;
+  methodVersion: string;
+  activities: Array<{
+    id: string;
+    family: "MARKETING" | "TRADE_MARKETING";
+    name: string;
+    skuId: string;
+    period: string;
+    grossUnits: number;
+    cannibalizationUnits: number;
+    haloUnits: number;
+    pullForwardUnits: number;
+    interactionUnits: number;
+    netUnits: number;
+    evidence: string;
+    status: string;
+    createdBy: string;
+  }>;
+  grossUnits: number;
+  netUnits: number;
+  controls: {
+    duplicateEconomicIdentities: number;
+    unresolvedOverlaps: number;
+    reconciled: boolean;
+  };
+};
 
 const currentYear = new Date().getFullYear();
 
@@ -126,6 +154,7 @@ export default function PlansWorkspace({
   const [acceptingPackage, setAcceptingPackage] = useState(false);
   const [loadingSynthetic, setLoadingSynthetic] = useState(false);
   const [showBaselineGate, setShowBaselineGate] = useState(false);
+  const [showGrowthGate, setShowGrowthGate] = useState(false);
   const [baseline, setBaseline] = useState<BaselineResult | null>(null);
   const [baselineReview, setBaselineReview] = useState<BaselineReview | null>(null);
   const [calculatingBaseline, setCalculatingBaseline] = useState(false);
@@ -135,6 +164,8 @@ export default function PlansWorkspace({
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [adjustmentEvidence, setAdjustmentEvidence] = useState("");
   const [savingReview, setSavingReview] = useState(false);
+  const [growth, setGrowth] = useState<GrowthResult | null>(null);
+  const [buildingGrowth, setBuildingGrowth] = useState(false);
   const [comparison, setComparison] = useState<"Plan" | "Cuota" | "Proyección">("Plan");
 
   async function loadPlans() {
@@ -297,10 +328,41 @@ export default function PlansWorkspace({
       if (response.ok && body.ok) {
         setBaseline(body.result ?? null);
         setBaselineReview(body.review ?? null);
+        if (body.review?.status === "APPROVED_FROZEN") void loadGrowth(planId);
       }
     } catch {
       setBaseline(null);
       setBaselineReview(null);
+    }
+  }
+
+  async function loadGrowth(planId: string) {
+    try {
+      const response = await fetch(`/api/growth?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+      const body = (await response.json()) as { ok: boolean; result?: GrowthResult | null };
+      if (response.ok && body.ok) setGrowth(body.result ?? null);
+    } catch {
+      setGrowth(null);
+    }
+  }
+
+  async function buildSyntheticGrowth() {
+    if (!selected) return;
+    setBuildingGrowth(true);
+    setError("");
+    try {
+      const response = await fetch("/api/growth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: selected.id }),
+      });
+      const body = (await response.json()) as { ok: boolean; result?: GrowthResult; error?: string };
+      if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
+      setGrowth(body.result);
+    } catch (cause) {
+      setError(friendlyError(cause instanceof Error ? cause.message : ""));
+    } finally {
+      setBuildingGrowth(false);
     }
   }
 
@@ -366,6 +428,7 @@ export default function PlansWorkspace({
       const body = (await response.json()) as { ok: boolean; review?: BaselineReview; error?: string };
       if (!response.ok || !body.ok || !body.review) throw new Error(body.error);
       setBaselineReview(body.review);
+      void loadGrowth(selected.id);
       setShowAdjustment(false);
     } catch (cause) {
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
@@ -528,13 +591,13 @@ export default function PlansWorkspace({
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
         </div>
         <div className="plan-tabs">
-          <button className={showBaselineGate ? "" : "active"} onClick={() => setShowBaselineGate(false)}>Contexto e información</button>
-          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => setShowBaselineGate(true)}>Baseline</button>
-          <button disabled>Crecimiento</button>
+          <button className={!showBaselineGate && !showGrowthGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); }}>Contexto e información</button>
+          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); }}>Baseline</button>
+          <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); }}>Crecimiento</button>
           <button disabled>Resultado y rentabilidad</button>
           <button disabled>Versión y presentación</button>
         </div>
-        <section className={`panel empty-workspace ${showBaselineGate ? "baseline-mode" : ""}`}>
+        <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate ? "baseline-mode" : ""}`}>
           {showBaselineGate && packageAccepted && (
             <div className="baseline-workspace">
               <div className="baseline-head">
@@ -699,6 +762,54 @@ export default function PlansWorkspace({
                   {calculatingBaseline ? "Calculando…" : baseline ? "Recalcular baseline" : "Calcular baseline"}
                 </button>
               </div>
+            </div>
+          )}
+          {showGrowthGate && baselineReview?.status === "APPROVED_FROZEN" && (
+            <div className="growth-workspace">
+              <div className="baseline-head">
+                <div>
+                  <p className="eyebrow">Paso 3 · Crecimiento gobernado</p>
+                  <h2>Marketing y Trade Marketing sin doble conteo</h2>
+                  <p>El incremental neto parte de la base aprobada y separa cada efecto antes de alimentar el Plan.</p>
+                </div>
+                <span className={`calculation-state ${growth?.controls.reconciled ? "ready" : ""}`}>{growth?.controls.reconciled ? "✓ Reconciliado" : "Pendiente"}</span>
+              </div>
+              <div className="synthetic-banner" role="status">
+                <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
+                <span>Las actividades y sus impactos son artificiales y no representan compromisos comerciales.</span>
+              </div>
+              {growth ? (
+                <>
+                  <div className="growth-kpis">
+                    <article><span>Incremental bruto</span><b>{growth.grossUnits.toLocaleString("es-MX")} unidades</b></article>
+                    <article><span>Incremental neto</span><b>{growth.netUnits.toLocaleString("es-MX")} unidades</b></article>
+                    <article><span>Identidades duplicadas</span><b>{growth.controls.duplicateEconomicIdentities}</b></article>
+                    <article><span>Solapamientos pendientes</span><b>{growth.controls.unresolvedOverlaps}</b></article>
+                  </div>
+                  <div className="growth-table">
+                    <div className="growth-table-head"><span>Familia y actividad</span><span>Periodo / SKU</span><span>Bruto</span><span>Ajustes</span><span>Neto</span><span>Evidencia</span></div>
+                    {growth.activities.map((activity) => (
+                      <div className="growth-row" key={activity.id}>
+                        <div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</small><b>{activity.name}</b></div>
+                        <span>{activity.period}<small>{activity.skuId}</small></span>
+                        <b>{activity.grossUnits.toLocaleString("es-MX")}</b>
+                        <span>−{activity.cannibalizationUnits} +{activity.haloUnits} −{activity.pullForwardUnits} {activity.interactionUnits < 0 ? activity.interactionUnits : `+${activity.interactionUnits}`}</span>
+                        <strong>{activity.netUnits.toLocaleString("es-MX")}</strong>
+                        <small>{activity.evidence}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="growth-reconciliation">
+                    <b>Incremental bruto − canibalización + halo − compra anticipada ± interacción = incremental neto</b>
+                    <span>{growth.methodId} v{growth.methodVersion} · resultado persistido</span>
+                  </div>
+                </>
+              ) : (
+                <div className="baseline-next-action">
+                  <div><b>Crear caso gobernado de crecimiento</b><p>Generará tres actividades sintéticas trazables y comprobará el incremental neto.</p></div>
+                  <button className="primary" onClick={() => void buildSyntheticGrowth()} disabled={buildingGrowth}>{buildingGrowth ? "Construyendo…" : "Construir crecimiento sintético"}</button>
+                </div>
+              )}
             </div>
           )}
           <div className="empty-workspace-hero">

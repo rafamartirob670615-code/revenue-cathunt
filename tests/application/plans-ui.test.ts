@@ -54,3 +54,15 @@ test("la revisión del baseline cubre periodos, SKU, ajuste documentado y congel
   assert.match(source, /decidedBy/);
   assert.match(source, /methodVersion/);
 });
+
+test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /Crecimiento gobernado/);
+  assert.match(source, /Marketing y Trade Marketing sin doble conteo/);
+  assert.match(source, /Incremental bruto/);
+  assert.match(source, /Incremental neto/);
+  assert.match(source, /canibalización/);
+  assert.match(source, /compra anticipada/);
+  assert.match(source, /Solapamientos pendientes/);
+  assert.match(source, /Construir crecimiento sintético/);
+});

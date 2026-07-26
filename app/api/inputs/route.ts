@@ -232,6 +232,7 @@ export async function PUT(request: Request) {
         .run();
     }
     await database().prepare("DELETE FROM input_package_reviews WHERE plan_id = ?").bind(planId).run();
+    await database().prepare("DELETE FROM growth_plans WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM baseline_reviews WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM baseline_calculations WHERE plan_id = ?").bind(planId).run();
     return Response.json({
