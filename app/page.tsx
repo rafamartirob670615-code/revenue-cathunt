@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import PlansWorkspace from "./PlansWorkspace";
-import RevenueDashboard from "./RevenueDashboard";
+import RevenueLobby from "./RevenueLobby";
 
 type AppView = "lobby" | "plan";
 
@@ -35,7 +35,7 @@ export default function RevenueApp() {
       </header>
       <main className="recovery-main">
         {view === "lobby" && (
-          <RevenueDashboard
+          <RevenueLobby
             openPlan={openPlan}
             createPlan={createPlan}
             openSynthetic={openPlan}

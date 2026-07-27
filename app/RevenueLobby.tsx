@@ -34,7 +34,7 @@ interface DashboardData {
 
 const syntheticName = "PILOTO SINTÉTICO NO COMERCIAL";
 
-export default function RevenueDashboard({
+export default function RevenueLobby({
   openPlan,
   createPlan,
   openSynthetic,

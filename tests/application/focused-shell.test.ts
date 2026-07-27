@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("Inicio es un lobby que lleva directamente a continuar, crear o explorar el piloto", async () => {
   const source = await readFile(new URL("../../app/page.tsx", import.meta.url), "utf8");
-  const lobby = await readFile(new URL("../../app/RevenueDashboard.tsx", import.meta.url), "utf8");
+  const lobby = await readFile(new URL("../../app/RevenueLobby.tsx", import.meta.url), "utf8");
   assert.match(source, /type AppView = "lobby" \| "plan"/);
   assert.match(source, /onExit=\{\(\) => setView\("lobby"\)\}/);
   assert.doesNotMatch(source, />Monitoreo<\/button>/);
