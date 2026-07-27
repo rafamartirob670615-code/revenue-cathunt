@@ -195,9 +195,11 @@ function aggregateBaseline(
 export default function PlansWorkspace({
   initialPlanId,
   startInCreate = false,
+  onExit,
 }: {
   initialPlanId?: string;
   startInCreate?: boolean;
+  onExit?: () => void;
 }) {
   const [view, setView] = useState<View>(startInCreate ? "create" : "portfolio");
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -235,7 +237,6 @@ export default function PlansWorkspace({
   const [calculatingResult, setCalculatingResult] = useState(false);
   const [profitability, setProfitability] = useState<ProfitabilityResult | null>(null);
   const [calculatingProfitability, setCalculatingProfitability] = useState(false);
-  const [comparison, setComparison] = useState<"Plan" | "Cuota" | "Proyección">("Plan");
 
   async function loadPlans() {
     setLoading(true);
@@ -679,7 +680,7 @@ export default function PlansWorkspace({
             <h1>Comienza con el contexto, no con cifras</h1>
             <p>Revenue guardará un Plan vacío. La información y los resultados se incorporarán en los siguientes pasos.</p>
           </div>
-          <button className="secondary" onClick={() => setView("portfolio")}>← Volver a Mis Planes</button>
+          <button className="secondary" onClick={() => onExit ? onExit() : setView("portfolio")}>← Volver al lobby</button>
         </div>
         <form className="panel create-plan-card" onSubmit={createPlan}>
           <div className="create-plan-intro">
@@ -701,7 +702,7 @@ export default function PlansWorkspace({
           </div>
           {error && <div className="recoverable-error" role="alert">{error}</div>}
           <div className="create-plan-actions">
-            <button type="button" className="secondary" onClick={() => setView("portfolio")}>Cancelar</button>
+            <button type="button" className="secondary" onClick={() => onExit ? onExit() : setView("portfolio")}>Cancelar</button>
             <button className="primary" disabled={saving}>{saving ? "Guardando…" : "Crear y guardar Plan"}</button>
           </div>
         </form>
@@ -738,7 +739,7 @@ export default function PlansWorkspace({
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
         </div>
         <div className="plan-tabs">
-          <button className={!showBaselineGate && !showGrowthGate && !showResultGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); }}>Contexto e información</button>
+          <button className={!showBaselineGate && !showGrowthGate && !showResultGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); }}>Resumen del Plan</button>
           <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); setShowResultGate(false); }}>Baseline</button>
           <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); }}>Crecimiento</button>
           <button className={showResultGate ? "active" : ""} disabled={!growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); }}>Resultado y rentabilidad</button>
@@ -1062,55 +1063,55 @@ export default function PlansWorkspace({
               )}
             </div>
           )}
-          <div className="empty-workspace-hero">
-            <span>✓</span>
-            <div>
-              <p className="eyebrow">Primer resultado completado</p>
-              <h2>Tu Plan está creado y protegido</h2>
-              <p>Se guardó sin cifras inventadas. Puedes salir y volver desde Mis Planes.</p>
-            </div>
-          </div>
-          <div className="empty-plan-context">
-            <div><span>Compañía</span><b>{selected.companyName ?? selected.companyId}</b></div>
-            <div><span>Cuenta</span><b>{selected.accountName ?? selected.accountId}</b></div>
-            <div><span>Año</span><b>{selected.year}</b></div>
-            <div><span>Moneda</span><b>{selected.currency}</b></div>
-          </div>
-          <section className="plan-congruence" aria-label="Cómo se construye el Plan">
-            <div className="congruence-head">
+          {!showBaselineGate && !showGrowthGate && !showResultGate && (
+            <>
+          <section className="plan-overview" aria-label="Resumen integral del Plan">
+            <div className="plan-overview-head">
               <div>
-                <p className="eyebrow">La historia completa</p>
-                <h2>Así se construirá este Plan</h2>
-                <p>Cada resultado conservará su origen y podrá leerse por año, trimestre o mes.</p>
+                <p className="eyebrow">{syntheticPackage ? "Plan piloto · lectura integral" : "Resumen del Plan"}</p>
+                <h2>{planResult ? "Este es tu Plan anual" : "Construye el Plan desde una sola historia"}</h2>
+                <p>{planResult
+                  ? "La base, el crecimiento, las unidades, el valor y la rentabilidad están conectados en el mismo resultado."
+                  : "Completa la información necesaria; cada resultado aparecerá aquí sin perder el contexto comercial."}</p>
               </div>
               <div className="commercial-controls">
                 <div>
-                  <span>Periodo</span>
+                  <span>Lectura</span>
                   {(["Año", "Trimestre", "Mes"] as const).map((level) => (
                     <button key={level} className={periodLevel === level ? "active" : ""} onClick={() => setPeriodLevel(level)}>{level}</button>
                   ))}
                 </div>
-                <div>
-                  <span>Comparar contra</span>
-                  {(["Plan", "Cuota", "Proyección"] as const).map((option) => (
-                    <button key={option} className={comparison === option ? "active" : ""} onClick={() => setComparison(option)}>{option}</button>
-                  ))}
-                </div>
               </div>
             </div>
-            <div className="commercial-bridge">
-              <article><span>1</span><b>Base desimpactada</b><small>Lo recurrente, sin volver a sumar actividades.</small></article>
-              <strong>+</strong>
-              <article><span>2</span><b>Marketing</b><small>Planes, alcance e impacto identificados.</small></article>
-              <strong>+</strong>
-              <article><span>3</span><b>Trade Marketing</b><small>Promociones y ejecución comercial.</small></article>
-              <strong>=</strong>
-              <article className="result"><span>4</span><b>Plan</b><small>Unidades, valor y rentabilidad reconciliados.</small></article>
+            {syntheticPackage && (
+              <div className="synthetic-banner">
+                <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
+                <span>Este Plan demuestra el recorrido. No representa venta, cuota, proyección ni compromiso.</span>
+              </div>
+            )}
+            <div className="plan-overview-kpis">
+              <article><span>Base aprobada</span><b>{baselineReview?.approvedAnnualUnits?.toLocaleString("es-MX") ?? baseline?.annualUnits.toLocaleString("es-MX") ?? "Pendiente"}</b><small>{baseline ? "unidades anuales" : "requiere información"}</small></article>
+              <article><span>Incremental neto</span><b>{growth ? `+${growth.netUnits.toLocaleString("es-MX")}` : "Pendiente"}</b><small>{growth ? "Marketing + Trade Marketing" : "después de aprobar la base"}</small></article>
+              <article className="primary-result"><span>Plan anual</span><b>{planResult?.annualUnits.toLocaleString("es-MX") ?? "Pendiente"}</b><small>{planResult ? "unidades reconciliadas" : "base + incremental neto"}</small></article>
+              <article><span>Revenue del Plan</span><b>{planResult ? planResult.annualValue.toLocaleString("es-MX", { style: "currency", currency: planResult.currency, maximumFractionDigits: 0 }) : "Pendiente"}</b><small>{planResult ? `${planResult.currency} · precios aceptados` : "requiere unidades y precios"}</small></article>
+              <article><span>Contribución</span><b>{profitability ? profitability.planAnnual.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency, maximumFractionDigits: 0 }) : "Pendiente"}</b><small>{profitability ? `${((profitability.planAnnual.contributionRate ?? 0) * 100).toFixed(1)}% del net sales` : "requiere rentabilidad"}</small></article>
             </div>
-            <div className="comparison-contract">
-              <span>Vista seleccionada</span>
-              <b>{periodLevel} · contra {comparison}</b>
-              <p>No se muestran cifras porque todavía no existe un paquete real aceptado ni un resultado calculado.</p>
+            <div className="commercial-bridge plan-visible-bridge">
+              <article><span>1</span><b>Base desimpactada</b><small>{baseline ? `${baseline.annualUnits.toLocaleString("es-MX")} unidades calculadas` : "Lo recurrente antes de actividades"}</small></article>
+              <strong>+</strong>
+              <article><span>2</span><b>Marketing</b><small>{growth ? `${growth.activities.filter((item) => item.family === "MARKETING").length} actividad identificada` : "Actividades y aporte neto"}</small></article>
+              <strong>+</strong>
+              <article><span>3</span><b>Trade Marketing</b><small>{growth ? `${growth.activities.filter((item) => item.family === "TRADE_MARKETING").length} actividades identificadas` : "Promociones y ejecución"}</small></article>
+              <strong>=</strong>
+              <article className="result"><span>4</span><b>Plan</b><small>{planResult ? `${planResult.annualUnits.toLocaleString("es-MX")} unidades · resultado reconciliado` : "Unidades, valor y rentabilidad"}</small></article>
+            </div>
+            <div className="plan-status-line">
+              <div><span>Información</span><b>{packageAccepted ? "Completa" : "Pendiente"}</b></div>
+              <div><span>Baseline</span><b>{baselineReview?.status === "APPROVED_FROZEN" ? "Aprobado" : baseline ? "Por decidir" : "Pendiente"}</b></div>
+              <div><span>Crecimiento</span><b>{growth?.controls.reconciled ? "Reconciliado" : "Pendiente"}</b></div>
+              <div><span>Resultado</span><b>{planResult ? "Reconciliado" : "Pendiente"}</b></div>
+              <div><span>Rentabilidad</span><b>{profitability ? "Calculada" : "Pendiente"}</b></div>
+              <div><span>Versión</span><b>Pendiente</b></div>
             </div>
           </section>
           {!showInformation ? (
@@ -1225,10 +1226,12 @@ export default function PlansWorkspace({
               )}
             </div>
           )}
+            </>
+          )}
         </section>
         <div className="sticky-actions empty-actions">
           <span>✓ Guardado durable · {baseline ? "baseline técnico persistido" : "ningún resultado ha sido calculado"}</span>
-          <button className="secondary" onClick={() => { setView("portfolio"); void loadPlans(); }}>Salir a Mis Planes</button>
+          <button className="secondary" onClick={() => onExit ? onExit() : (setView("portfolio"), void loadPlans())}>Volver al lobby</button>
         </div>
       </div>
     );

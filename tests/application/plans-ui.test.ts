@@ -4,12 +4,12 @@ import test from "node:test";
 
 const componentUrl = new URL("../../app/PlansWorkspace.tsx", import.meta.url);
 
-test("Crear Plan comienza vacío y permite volver a Mis Planes", async () => {
+test("Crear Plan real comienza vacío y permite volver al lobby", async () => {
   const source = await readFile(componentUrl, "utf8");
   assert.match(source, /El Plan se creará vacío/);
   assert.match(source, /Crear y guardar Plan/);
-  assert.match(source, /Salir a Mis Planes/);
-  assert.match(source, /Continúa un Plan/);
+  assert.match(source, /Volver al lobby/);
+  assert.match(source, /Crea un Plan nuevo o continúa exactamente donde lo dejaste/);
   assert.match(source, /lines:\s*\[\]/);
 });
 
@@ -36,8 +36,10 @@ test("el checklist muestra requisitos pendientes y conserva bloqueado el baselin
   assert.match(source, /¿Qué venderíamos sin volver a contar las actividades\?/);
   assert.match(source, /Base desimpactada/);
   assert.match(source, /Trade Marketing/);
-  assert.match(source, /Vista seleccionada/);
-  assert.match(source, /contra \{comparison\}/);
+  assert.match(source, /Resumen integral del Plan/);
+  assert.match(source, /Este es tu Plan anual/);
+  assert.match(source, /Base aprobada/);
+  assert.match(source, /Revenue del Plan/);
 });
 
 test("la revisión del baseline cubre periodos, SKU, ajuste documentado y congelamiento", async () => {

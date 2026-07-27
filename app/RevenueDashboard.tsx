@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { PlanStatus } from "../domain/types";
+import type { Plan, PlanStatus } from "../domain/types";
 
 type DashboardStage =
   | "PREPARE_INFORMATION"
@@ -29,60 +29,26 @@ interface DashboardPlan {
 
 interface DashboardData {
   owner: { email: string; name?: string };
-  counts: {
-    total: number;
-    informationPending: number;
-    packagesAccepted: number;
-    inReview: number;
-    official: number;
-  };
   plans: DashboardPlan[];
 }
 
-const stageLabel: Record<DashboardStage, string> = {
-  PREPARE_INFORMATION: "Preparar información",
-  COMPLETE_INFORMATION: "Información incompleta",
-  REVIEW_PACKAGE: "Revisar paquete",
-  BUILD_BASELINE: "Listo para baseline",
-  BUILD_PLAN: "En construcción",
-  REVIEW_APPROVAL: "En revisión",
-  OFFICIAL: "Oficial",
-};
-
-const stageTone: Record<DashboardStage, string> = {
-  PREPARE_INFORMATION: "neutral",
-  COMPLETE_INFORMATION: "warning",
-  REVIEW_PACKAGE: "warning",
-  BUILD_BASELINE: "ready",
-  BUILD_PLAN: "active",
-  REVIEW_APPROVAL: "active",
-  OFFICIAL: "ready",
-};
-
-function formatUpdatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Sin fecha";
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
+const syntheticName = "PILOTO SINTÉTICO NO COMERCIAL";
 
 export default function RevenueDashboard({
   openPlan,
   createPlan,
+  openSynthetic,
 }: {
   openPlan: (planId: string) => void;
   createPlan: () => void;
+  openSynthetic: (planId: string) => void;
 }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [year, setYear] = useState<number | "ALL">("ALL");
+  const [preparingPilot, setPreparingPilot] = useState(false);
 
-  async function loadDashboard() {
+  async function loadLobby() {
     setLoading(true);
     setError("");
     try {
@@ -91,171 +57,219 @@ export default function RevenueDashboard({
       if (!response.ok || body.ok === false) throw new Error(body.error);
       setData(body);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No pudimos preparar tu Inicio.");
+      setError(cause instanceof Error ? cause.message : "No pudimos abrir tus Planes.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    // La carga inicia después del montaje y actualiza el estado al resolver la solicitud.
+    // La carga inicial se ejecuta una sola vez después del montaje.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadDashboard();
+    void loadLobby();
   }, []);
 
-  const years = useMemo(
-    () => [...new Set((data?.plans ?? []).map((plan) => plan.year))].sort((a, b) => b - a),
-    [data],
-  );
-  const visiblePlans = useMemo(
-    () => (data?.plans ?? []).filter((plan) => year === "ALL" || plan.year === year),
-    [data, year],
-  );
-  const priorities = visiblePlans.filter((plan) => plan.stage !== "OFFICIAL").slice(0, 4);
-  const ownerFirstName = data?.owner.name?.split(/\s+/)[0];
+  const plans = useMemo(() => data?.plans ?? [], [data]);
+  const syntheticPlan = plans.find((plan) => plan.account === syntheticName);
+  const realPlans = plans.filter((plan) => plan.account !== syntheticName);
+  const recentPlans = realPlans.slice(0, 3);
+  const ownerFirstName = data?.owner.name?.split(/\s+/)[0] ?? "Roberto";
+
+  async function ensureSyntheticPlan(planId: string, createPackage: boolean) {
+    if (createPackage) {
+      const packageResponse = await fetch("/api/inputs", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const packageBody = (await packageResponse.json()) as { ok: boolean; error?: string };
+      if (!packageResponse.ok || !packageBody.ok) throw new Error(packageBody.error);
+      const acceptResponse = await fetch("/api/inputs", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const accepted = (await acceptResponse.json()) as { ok: boolean; error?: string };
+      if (!acceptResponse.ok || !accepted.ok) throw new Error(accepted.error);
+    }
+
+    let baselineResponse = await fetch(`/api/baseline?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+    let baselineState = (await baselineResponse.json()) as { ok: boolean; result?: unknown; review?: { status?: string }; error?: string };
+    if (!baselineState.result) {
+      baselineResponse = await fetch("/api/baseline", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      baselineState = (await baselineResponse.json()) as typeof baselineState;
+      if (!baselineResponse.ok || !baselineState.ok) throw new Error(baselineState.error);
+    }
+    if (baselineState.review?.status !== "APPROVED_FROZEN") {
+      const reviewResponse = await fetch("/api/baseline", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId, decision: "CALCULATED" }),
+      });
+      const review = (await reviewResponse.json()) as { ok: boolean; error?: string };
+      if (!reviewResponse.ok || !review.ok) throw new Error(review.error);
+    }
+
+    const growthGet = await fetch(`/api/growth?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+    const growthState = (await growthGet.json()) as { ok: boolean; result?: unknown; error?: string };
+    if (!growthState.result) {
+      const growthResponse = await fetch("/api/growth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const growth = (await growthResponse.json()) as { ok: boolean; error?: string };
+      if (!growthResponse.ok || !growth.ok) throw new Error(growth.error);
+    }
+
+    const resultGet = await fetch(`/api/result?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+    const resultState = (await resultGet.json()) as { ok: boolean; result?: unknown; error?: string };
+    if (!resultState.result) {
+      const resultResponse = await fetch("/api/result", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const result = (await resultResponse.json()) as { ok: boolean; error?: string };
+      if (!resultResponse.ok || !result.ok) throw new Error(result.error);
+    }
+
+    const profitGet = await fetch(`/api/profitability?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+    const profitState = (await profitGet.json()) as { ok: boolean; result?: unknown; error?: string };
+    if (!profitState.result) {
+      const profitResponse = await fetch("/api/profitability", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId }),
+      });
+      const profit = (await profitResponse.json()) as { ok: boolean; error?: string };
+      if (!profitResponse.ok || !profit.ok) throw new Error(profit.error);
+    }
+  }
+
+  async function createSyntheticPilot() {
+    setPreparingPilot(true);
+    setError("");
+    try {
+      if (syntheticPlan) {
+        await ensureSyntheticPlan(syntheticPlan.id, false);
+        openSynthetic(syntheticPlan.id);
+        return;
+      }
+      const occurredAt = new Date().toISOString();
+      const planId = `plan:${crypto.randomUUID()}`;
+      const versionId = `version:${crypto.randomUUID()}`;
+      const plan: Plan = {
+        id: planId,
+        organizationId: "revenue-pilot",
+        companyId: "revenue-lab",
+        companyName: "REVENUE LAB",
+        accountId: "piloto-sintetico-no-comercial",
+        accountName: syntheticName,
+        year: new Date().getFullYear() + 1,
+        currency: "MXN",
+        versions: [{
+          id: versionId,
+          planId,
+          number: 1,
+          kind: "PLAN",
+          status: "DRAFT",
+          createdBy: "authenticated-user",
+          createdAt: occurredAt,
+          lines: [],
+          overrides: [],
+          validations: [],
+          approvals: [],
+        }],
+      };
+      const createResponse = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          plan,
+          context: { commandId: `create:${crypto.randomUUID()}`, actorId: "authenticated-user", occurredAt },
+        }),
+      });
+      const created = (await createResponse.json()) as { ok: boolean; result?: Plan; error?: string };
+      if (!createResponse.ok || !created.ok || !created.result) throw new Error(created.error);
+      await ensureSyntheticPlan(planId, true);
+      openSynthetic(planId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No pudimos preparar el piloto.");
+    } finally {
+      setPreparingPilot(false);
+    }
+  }
 
   if (loading) {
-    return (
-      <div className="page business-dashboard">
-        <div className="dashboard-loading">
-          <span />
-          <b>Preparando tu situación de planeación…</b>
-        </div>
-      </div>
-    );
+    return <div className="recovery-loading"><span /><b>Abriendo tu espacio de planeación…</b></div>;
   }
-
-  if (error) {
-    return (
-      <div className="page business-dashboard">
-        <section className="dashboard-error">
-          <span>!</span>
-          <div><h1>No pudimos cargar tu Inicio</h1><p>{error}</p></div>
-          <button className="secondary" onClick={() => void loadDashboard()}>Reintentar</button>
-        </section>
-      </div>
-    );
-  }
-
-  const counts = data?.counts ?? {
-    total: 0,
-    informationPending: 0,
-    packagesAccepted: 0,
-    inReview: 0,
-    official: 0,
-  };
 
   return (
-    <div className="page business-dashboard">
-      <div className="business-head">
-        <div>
-          <p className="eyebrow">Inicio · ciclo de planeación</p>
-          <h1>{ownerFirstName ? `Hola, ${ownerFirstName}` : "Tu planeación anual"}</h1>
-          <p>Esto requiere atención para que tus Planes sigan avanzando.</p>
-        </div>
-        <div className="business-actions">
-          {years.length > 1 && (
-            <label>
-              Año
-              <select value={year} onChange={(event) => setYear(event.target.value === "ALL" ? "ALL" : Number(event.target.value))}>
-                <option value="ALL">Todos</option>
-                {years.map((item) => <option value={item} key={item}>{item}</option>)}
-              </select>
-            </label>
-          )}
-          <button className="primary" onClick={createPlan}>+ Crear Plan</button>
-        </div>
-      </div>
-
-      <section className="planning-kpis" aria-label="Resumen de planeación">
-        <article><span>Planes activos</span><strong>{counts.total}</strong><small>Guardados en REVENUE</small></article>
-        <article className={counts.informationPending ? "needs-attention" : ""}><span>Información pendiente</span><strong>{counts.informationPending}</strong><small>{counts.informationPending ? "Requieren completar insumos" : "Sin pendientes"}</small></article>
-        <article><span>Paquetes aceptados</span><strong>{counts.packagesAccepted}</strong><small>Listos para la siguiente compuerta</small></article>
-        <article><span>En revisión</span><strong>{counts.inReview}</strong><small>Versiones enviadas o devueltas</small></article>
+    <div className="revenue-lobby">
+      <section className="lobby-intro">
+        <p className="eyebrow">Tu espacio de planeación</p>
+        <h1>Hola, {ownerFirstName}. ¿Qué quieres hacer?</h1>
+        <p>Elige un camino. REVENUE te llevará directamente al Plan, sin mezclar construcción con Monitoreo.</p>
       </section>
 
-      {visiblePlans.length === 0 ? (
-        <section className="dashboard-empty">
-          <div className="empty-visual"><span>01</span><i /><i /><i /></div>
+      {error && <div className="recoverable-error" role="alert">{error}</div>}
+
+      <section className="lobby-actions" aria-label="Opciones para comenzar">
+        <article className="lobby-card continue-card">
+          <span className="lobby-step">01</span>
           <div>
-            <p className="eyebrow">Comienza aquí</p>
-            <h2>Aún no hay Planes en este ciclo</h2>
-            <p>Crea el contexto del primer Plan. No necesitas cargar cifras para empezar.</p>
-            <button className="primary" onClick={createPlan}>Crear mi primer Plan</button>
+            <small>Retomar trabajo</small>
+            <h2>Continuar un Plan</h2>
+            <p>Abre un Plan guardado y sigue exactamente desde su resultado vigente.</p>
           </div>
-        </section>
-      ) : (
-        <div className="dashboard-grid">
-          <section className="decision-panel">
-            <div className="dashboard-section-head">
-              <div><p className="eyebrow">Prioridades</p><h2>Lo que necesita tu decisión</h2></div>
-              <span>{priorities.length} {priorities.length === 1 ? "pendiente" : "pendientes"}</span>
-            </div>
-            <div className="decision-list">
-              {priorities.length === 0 ? (
-                <div className="all-clear"><span>✓</span><div><b>No hay decisiones abiertas</b><small>Tus Planes visibles no tienen trabajo pendiente.</small></div></div>
-              ) : priorities.map((plan) => (
+          {recentPlans.length ? (
+            <div className="lobby-plan-list">
+              {recentPlans.map((plan) => (
                 <button key={plan.id} onClick={() => openPlan(plan.id)}>
-                  <span className={`decision-signal ${stageTone[plan.stage]}`} />
-                  <div>
-                    <b>{plan.account}</b>
-                    <small>{plan.company} · Plan {plan.year} · V{plan.version}</small>
-                  </div>
-                  <em>{plan.nextAction}</em>
-                  <strong>→</strong>
+                  <div><b>{plan.account}</b><small>{plan.company} · {plan.year} · V{plan.version}</small></div>
+                  <span>{plan.nextAction}</span><strong>→</strong>
                 </button>
               ))}
             </div>
-          </section>
+          ) : (
+            <div className="lobby-empty">Todavía no tienes Planes comerciales guardados.</div>
+          )}
+        </article>
 
-          <aside className="planning-pulse">
-            <div className="dashboard-section-head">
-              <div><p className="eyebrow">Avance del portafolio</p><h2>Etapa actual</h2></div>
-            </div>
-            <div className="stage-stack">
-              {(["PREPARE_INFORMATION", "COMPLETE_INFORMATION", "REVIEW_PACKAGE", "BUILD_BASELINE", "BUILD_PLAN", "REVIEW_APPROVAL", "OFFICIAL"] as DashboardStage[]).map((stage) => {
-                const count = visiblePlans.filter((plan) => plan.stage === stage).length;
-                return (
-                  <div key={stage} className={count ? "has-plans" : ""}>
-                    <span style={{ width: visiblePlans.length ? `${Math.max((count / visiblePlans.length) * 100, count ? 8 : 0)}%` : "0%" }} />
-                    <b>{stageLabel[stage]}</b>
-                    <strong>{count}</strong>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-        </div>
-      )}
-
-      {visiblePlans.length > 0 && (
-        <section className="plan-portfolio">
-          <div className="dashboard-section-head">
-            <div><p className="eyebrow">Mis Planes</p><h2>Situación y siguiente acción</h2></div>
-            <span>{visiblePlans.length} {visiblePlans.length === 1 ? "Plan" : "Planes"}</span>
+        <article className="lobby-card real-card">
+          <span className="lobby-step">02</span>
+          <div>
+            <small>Construcción comercial</small>
+            <h2>Crear un Plan real</h2>
+            <p>Define cuenta y año; después incorpora únicamente información comercial autorizada.</p>
           </div>
-          <div className="portfolio-head"><span>Cuenta</span><span>Etapa</span><span>Información</span><span>Actualización</span><span /></div>
-          {visiblePlans.slice(0, 8).map((plan) => (
-            <button className="portfolio-row" key={plan.id} onClick={() => openPlan(plan.id)}>
-              <div><b>{plan.account}</b><small>{plan.company} · {plan.year} · {plan.currency}</small></div>
-              <span className={`portfolio-stage ${stageTone[plan.stage]}`}>{stageLabel[plan.stage]}</span>
-              <span>{plan.packageAccepted ? "Paquete aceptado" : `${plan.readyFiles} de 4 esenciales`}</span>
-              <span>{formatUpdatedAt(plan.updatedAt)}</span>
-              <strong>{plan.nextAction} →</strong>
-            </button>
-          ))}
-        </section>
-      )}
+          <button className="lobby-primary" onClick={createPlan}>Crear Plan real <strong>→</strong></button>
+        </article>
 
-      <section className="monitoring-readiness">
-        <div>
-          <p className="eyebrow">Monitoreo del Plan</p>
-          <h2>{counts.official ? `${counts.official} Planes oficiales listos para conectar` : "Se activará con un Plan oficial y resultados comparables"}</h2>
-        </div>
-        <div className="monitoring-steps">
-          <span className={counts.official ? "done" : ""}>Plan oficial</span><i>→</i><span>Resultados reales</span><i>→</i><span>Variación y acción</span>
-        </div>
+        <article className="lobby-card pilot-card">
+          <span className="lobby-step">03</span>
+          <div>
+            <small>Recorrido guiado</small>
+            <h2>Explorar el Plan piloto</h2>
+            <p>Abre un Plan completo de prueba con datos claramente separados de cualquier resultado comercial.</p>
+          </div>
+          <div className="pilot-label">DATOS SINTÉTICOS — NO COMERCIALES</div>
+          <button className="lobby-primary pilot" onClick={() => void createSyntheticPilot()} disabled={preparingPilot}>
+            {preparingPilot ? "Preparando piloto…" : syntheticPlan ? "Abrir Plan piloto" : "Crear y abrir Plan piloto"} <strong>→</strong>
+          </button>
+        </article>
       </section>
+
+      <footer className="lobby-footer">
+        <span><i /> Guardado privado</span>
+        <p>Monitoreo aparecerá cuando exista un Plan comercial oficial y resultados reales comparables.</p>
+      </footer>
     </div>
   );
 }
