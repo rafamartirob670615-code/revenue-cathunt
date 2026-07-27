@@ -222,6 +222,7 @@ export default function PlansWorkspace({
   const [showBaselineGate, setShowBaselineGate] = useState(false);
   const [showGrowthGate, setShowGrowthGate] = useState(false);
   const [showResultGate, setShowResultGate] = useState(false);
+  const [showVersionGate, setShowVersionGate] = useState(false);
   const [baseline, setBaseline] = useState<BaselineResult | null>(null);
   const [baselineReview, setBaselineReview] = useState<BaselineReview | null>(null);
   const [calculatingBaseline, setCalculatingBaseline] = useState(false);
@@ -281,6 +282,7 @@ export default function PlansWorkspace({
             setShowBaselineGate(false);
             setShowGrowthGate(false);
             setShowResultGate(false);
+            setShowVersionGate(false);
             void loadInputFiles(requestedPlan.id);
             setView("workspace");
           }
@@ -610,6 +612,7 @@ export default function PlansWorkspace({
     setShowBaselineGate(false);
     setShowGrowthGate(false);
     setShowResultGate(false);
+    setShowVersionGate(false);
     void loadInputFiles(plan.id);
     setView("workspace");
     setError("");
@@ -739,11 +742,11 @@ export default function PlansWorkspace({
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
         </div>
         <div className="plan-tabs">
-          <button className={!showBaselineGate && !showGrowthGate && !showResultGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); }}>Resumen del Plan</button>
-          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); setShowResultGate(false); }}>Baseline</button>
-          <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); }}>Crecimiento</button>
-          <button className={showResultGate ? "active" : ""} disabled={!growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); }}>Resultado y rentabilidad</button>
-          <button disabled>Versión y presentación</button>
+          <button className={!showBaselineGate && !showGrowthGate && !showResultGate && !showVersionGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(false); }}>Resumen del Plan</button>
+          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(false); }}>Baseline</button>
+          <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); setShowVersionGate(false); }}>Crecimiento</button>
+          <button className={showResultGate ? "active" : ""} disabled={!growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); setShowVersionGate(false); }}>Resultado y rentabilidad</button>
+          <button className={showVersionGate ? "active" : ""} disabled={!profitability} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(true); }}>Versión y presentación</button>
         </div>
         <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate || showResultGate ? "baseline-mode" : ""}`}>
           {showBaselineGate && packageAccepted && (
@@ -1063,7 +1066,51 @@ export default function PlansWorkspace({
               )}
             </div>
           )}
-          {!showBaselineGate && !showGrowthGate && !showResultGate && (
+          {showVersionGate && planResult && profitability && (
+            <div className="presentation-workspace">
+              <div className="presentation-title">
+                <div>
+                  <p className="eyebrow">Vista para defender el Plan</p>
+                  <h2>{selected.accountName ?? selected.accountId} · Plan {selected.year}</h2>
+                  <p>Una lectura ejecutiva construida desde el mismo resultado persistido.</p>
+                </div>
+                <span className="status-chip">Versión {version?.number ?? 1} · Borrador</span>
+              </div>
+              {syntheticPackage && (
+                <div className="synthetic-banner">
+                  <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
+                  <span>Esta presentación prueba el recorrido y no puede enviarse como Plan comercial oficial.</span>
+                </div>
+              )}
+              <div className="presentation-hero">
+                <article><span>Revenue del Plan</span><b>{planResult.annualValue.toLocaleString("es-MX", { style: "currency", currency: planResult.currency, maximumFractionDigits: 0 })}</b><small>{planResult.currency} · año {selected.year}</small></article>
+                <article><span>Unidades del Plan</span><b>{planResult.annualUnits.toLocaleString("es-MX")}</b><small>Base + incremental neto</small></article>
+                <article><span>Incremental neto</span><b>+{growth?.netUnits.toLocaleString("es-MX")}</b><small>Marketing y Trade Marketing</small></article>
+                <article><span>Margen bruto</span><b>{((profitability.planAnnual.grossMarginRate ?? 0) * 100).toFixed(1)}%</b><small>Parámetros sintéticos visibles</small></article>
+                <article><span>Contribución</span><b>{profitability.planAnnual.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency, maximumFractionDigits: 0 })}</b><small>{((profitability.planAnnual.contributionRate ?? 0) * 100).toFixed(1)}% del net sales</small></article>
+              </div>
+              <div className="presentation-story">
+                <div>
+                  <p className="eyebrow">Historia del Plan</p>
+                  <h3>La base aprobada se convierte en crecimiento rentable y reconciliado</h3>
+                  <p>El Plan parte de {baselineReview?.approvedAnnualUnits?.toLocaleString("es-MX")} unidades de base, incorpora {growth?.netUnits.toLocaleString("es-MX")} unidades incrementales netas y llega a {planResult.annualUnits.toLocaleString("es-MX")} unidades anuales.</p>
+                </div>
+                <dl>
+                  <div><dt>Comparador financiero</dt><dd>{profitability.comparator.name}</dd></div>
+                  <div><dt>Reconciliación</dt><dd>{profitability.controls.planReconciled ? "Completa" : "Pendiente"}</dd></div>
+                  <div><dt>Datos</dt><dd>Sintéticos, aislados y no oficializables</dd></div>
+                </dl>
+              </div>
+              <div className="presentation-checklist">
+                <div><span>✓</span><b>Baseline aprobado</b></div>
+                <div><span>✓</span><b>Crecimiento reconciliado</b></div>
+                <div><span>✓</span><b>Unidades y valor reconciliados</b></div>
+                <div><span>✓</span><b>P&L comparado</b></div>
+                <div className="blocked"><span>!</span><b>Oficialización bloqueada por ser sintético</b></div>
+              </div>
+            </div>
+          )}
+          {!showBaselineGate && !showGrowthGate && !showResultGate && !showVersionGate && (
             <>
           <section className="plan-overview" aria-label="Resumen integral del Plan">
             <div className="plan-overview-head">

@@ -93,3 +93,13 @@ test("rentabilidad declara comparador y parámetros no corporativos", async () =
   assert.match(source, /Contribution/);
   assert.match(source, /Calcular rentabilidad/);
 });
+
+test("el Plan completo tiene una vista de versión y presentación", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /Versión y presentación/);
+  assert.match(source, /Vista para defender el Plan/);
+  assert.match(source, /Revenue del Plan/);
+  assert.match(source, /Historia del Plan/);
+  assert.match(source, /Baseline aprobado/);
+  assert.match(source, /Oficialización bloqueada por ser sintético/);
+});
