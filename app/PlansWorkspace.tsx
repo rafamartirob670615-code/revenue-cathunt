@@ -239,6 +239,8 @@ export default function PlansWorkspace({
   const [profitability, setProfitability] = useState<ProfitabilityResult | null>(null);
   const [calculatingProfitability, setCalculatingProfitability] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
+  const [submittingPlan, setSubmittingPlan] = useState(false);
+  const [submissionMessage, setSubmissionMessage] = useState("");
 
   async function loadPlans() {
     setLoading(true);
@@ -364,6 +366,53 @@ export default function PlansWorkspace({
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitPlanForReview(isSynthetic: boolean) {
+    if (!selected) return;
+    const version = activeVersion(selected);
+    if (!version || isSynthetic) return;
+    setSubmittingPlan(true);
+    setSubmissionMessage("");
+    setError("");
+    const occurredAt = new Date().toISOString();
+    try {
+      const response = await fetch("/api/plans", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "freezeAndSubmit",
+          planId: selected.id,
+          versionId: version.id,
+          context: {
+            commandId: `submit:${crypto.randomUUID()}`,
+            actorId: "authenticated-user",
+            occurredAt,
+          },
+        }),
+      });
+      const body = (await response.json()) as {
+        ok: boolean;
+        result?: { version: Plan["versions"][number]; snapshotSha256: string };
+        error?: string;
+      };
+      if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
+      const updatedPlan = {
+        ...selected,
+        versions: selected.versions.map((item) =>
+          item.id === body.result?.version.id ? body.result.version : item,
+        ),
+      };
+      setSelected(updatedPlan);
+      setPlans((current) =>
+        current.map((item) => item.id === updatedPlan.id ? updatedPlan : item),
+      );
+      setSubmissionMessage("Plan congelado y enviado a revisión correctamente.");
+    } catch (cause) {
+      setError(friendlyError(cause instanceof Error ? cause.message : ""));
+    } finally {
+      setSubmittingPlan(false);
     }
   }
 
@@ -1111,10 +1160,16 @@ export default function PlansWorkspace({
               </div>
               <div className="presentation-actions">
                 <button className="secondary" onClick={() => setPresentationMode(true)}>Presentar en pantalla completa</button>
-                <button className="primary" disabled={syntheticPackage} aria-describedby={syntheticPackage ? "synthetic-submit-help" : undefined}>
-                  Enviar a revisión
+                <button
+                  className="primary"
+                  disabled={syntheticPackage || submittingPlan || version?.status === "SUBMITTED"}
+                  aria-describedby={syntheticPackage ? "synthetic-submit-help" : undefined}
+                  onClick={() => void submitPlanForReview(syntheticPackage)}
+                >
+                  {submittingPlan ? "Enviando…" : version?.status === "SUBMITTED" ? "Enviado a revisión" : "Enviar a revisión"}
                 </button>
               </div>
+              {submissionMessage && <p className="presentation-submit-help" role="status">{submissionMessage}</p>}
               {syntheticPackage && (
                 <p className="presentation-submit-help" id="synthetic-submit-help">
                   El envío aparece en su lugar definitivo, pero permanece bloqueado porque este Plan utiliza datos sintéticos.

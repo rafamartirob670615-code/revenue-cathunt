@@ -40,7 +40,9 @@ test("la información identifica responsables y la versión permite presentar si
   assert.match(requirements, /suggestedOwner/);
   assert.match(workspace, /Presentar en pantalla completa/);
   assert.match(workspace, /Enviar a revisión/);
-  assert.match(workspace, /disabled=\{syntheticPackage\}/);
+  assert.match(workspace, /submitPlanForReview/);
+  assert.match(workspace, /action: "freezeAndSubmit"/);
+  assert.match(workspace, /disabled=\{syntheticPackage \|\| submittingPlan/);
   assert.match(workspace, /DATOS SINTÉTICOS — NO COMERCIALES/);
   assert.match(workspace, /\{showGrowthGate && \(/);
   assert.match(workspace, /\{showResultGate && \(/);

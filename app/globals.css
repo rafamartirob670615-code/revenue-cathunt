@@ -83,7 +83,7 @@
 @media(max-width:760px){.input-upload{grid-column:2;justify-items:start}}
 
 /* Feedback V6 — baseline explicable, sin cifras simuladas */
-.empty-workspace.baseline-mode>:not(.baseline-workspace){display:none}
+.empty-workspace.baseline-mode>:not(.baseline-workspace):not(.growth-workspace):not(.result-workspace){display:none}
 .baseline-workspace{display:grid;gap:20px}
 .baseline-head{display:flex;justify-content:space-between;gap:24px;align-items:start;padding-bottom:20px;border-bottom:1px solid var(--line)}
 .baseline-head h2{margin:5px 0 7px;font-size:23px}.baseline-head p:not(.eyebrow){max-width:760px;margin:0;color:var(--muted);font-size:10px;line-height:1.55}
