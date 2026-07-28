@@ -745,8 +745,8 @@ export default function PlansWorkspace({
         <div className="plan-tabs">
           <button className={!showBaselineGate && !showGrowthGate && !showResultGate && !showVersionGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(false); }}>Resumen del Plan</button>
           <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(false); }}>Baseline</button>
-          <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); setShowVersionGate(false); }}>Crecimiento</button>
-          <button className={showResultGate ? "active" : ""} disabled={!growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); setShowVersionGate(false); }}>Resultado y rentabilidad</button>
+          <button className={showGrowthGate ? "active" : ""} disabled={!growth && baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); setShowVersionGate(false); }}>Crecimiento</button>
+          <button className={showResultGate ? "active" : ""} disabled={!planResult && !growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); setShowVersionGate(false); }}>Resultado y rentabilidad</button>
           <button className={showVersionGate ? "active" : ""} disabled={!profitability} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(true); }}>Versión y presentación</button>
         </div>
         <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate || showResultGate ? "baseline-mode" : ""}`}>
@@ -916,7 +916,7 @@ export default function PlansWorkspace({
               </div>
             </div>
           )}
-          {showGrowthGate && baselineReview?.status === "APPROVED_FROZEN" && (
+          {showGrowthGate && (growth || baselineReview?.status === "APPROVED_FROZEN") && (
             <div className="growth-workspace">
               <div className="baseline-head">
                 <div>
@@ -964,7 +964,7 @@ export default function PlansWorkspace({
               )}
             </div>
           )}
-          {showResultGate && growth?.controls.reconciled && (
+          {showResultGate && (planResult || growth?.controls.reconciled) && (
             <div className="result-workspace">
               <div className="baseline-head">
                 <div>
