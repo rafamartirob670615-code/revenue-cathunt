@@ -8,6 +8,7 @@ export interface InputRequirement {
   criticality: InputCriticality;
   minimumCoverage: string;
   expectedGrain: string;
+  suggestedOwner: string;
   requiredFields: readonly string[];
 }
 
@@ -33,6 +34,7 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     criticality: "ESSENTIAL",
     minimumCoverage: "Al menos 12 meses; mayor historia mejora el método disponible.",
     expectedGrain: "Cuenta × SKU × periodo, con unidades y valor identificables.",
+    suggestedOwner: "Ventas y Finanzas Comercial",
     requiredFields: ["account_id", "sku_id", "period", "units", "value", "currency"],
   },
   {
@@ -42,6 +44,7 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     criticality: "ESSENTIAL",
     minimumCoverage: "Todos los códigos presentes en la historia del piloto.",
     expectedGrain: "Código fuente ↔ cuenta o SKU canónico.",
+    suggestedOwner: "Datos Maestros",
     requiredFields: ["source_type", "source_code", "canonical_id", "canonical_name"],
   },
   {
@@ -51,6 +54,7 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     criticality: "ESSENTIAL",
     minimumCoverage: "Todos los SKU y unidades utilizados en el Plan.",
     expectedGrain: "SKU × unidad de origen × unidad base × factor vigente.",
+    suggestedOwner: "Operaciones o Supply",
     requiredFields: ["sku_id", "source_unit", "base_unit", "conversion_factor"],
   },
   {
@@ -60,6 +64,7 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     criticality: "ESSENTIAL",
     minimumCoverage: "Cuenta, SKU y periodos que cubrirá el Plan.",
     expectedGrain: "Cuenta × SKU × periodo de vigencia, precio, moneda y tipo.",
+    suggestedOwner: "Finanzas Comercial",
     requiredFields: ["account_id", "sku_id", "valid_from", "price", "currency", "price_type"],
   },
   {
@@ -69,6 +74,7 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     criticality: "CONDITIONAL",
     minimumCoverage: "Periodos históricos con actividad conocida.",
     expectedGrain: "Actividad × cuenta × SKU × periodo, con tipo y alcance.",
+    suggestedOwner: "Marketing y Trade Marketing",
     requiredFields: ["activity_id", "activity_type", "account_id", "sku_id", "start_period", "end_period"],
   },
 ] as const;

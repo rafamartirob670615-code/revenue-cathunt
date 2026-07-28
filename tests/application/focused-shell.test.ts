@@ -32,3 +32,14 @@ test("el baseline explica evidencia, estados y gobierno sin inventar resultados"
   assert.match(source, /Todavía no existe un cálculo/);
   assert.match(source, /salesEvidence\?\.summary\.rowCount/);
 });
+
+test("la información identifica responsables y la versión permite presentar sin oficializar el piloto", async () => {
+  const workspace = await readFile(new URL("../../app/PlansWorkspace.tsx", import.meta.url), "utf8");
+  const requirements = await readFile(new URL("../../domain/input-package.ts", import.meta.url), "utf8");
+  assert.match(workspace, /Responsable sugerido/);
+  assert.match(requirements, /suggestedOwner/);
+  assert.match(workspace, /Presentar en pantalla completa/);
+  assert.match(workspace, /Enviar a revisión/);
+  assert.match(workspace, /disabled=\{syntheticPackage\}/);
+  assert.match(workspace, /DATOS SINTÉTICOS — NO COMERCIALES/);
+});

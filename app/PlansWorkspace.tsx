@@ -238,6 +238,7 @@ export default function PlansWorkspace({
   const [calculatingResult, setCalculatingResult] = useState(false);
   const [profitability, setProfitability] = useState<ProfitabilityResult | null>(null);
   const [calculatingProfitability, setCalculatingProfitability] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
 
   async function loadPlans() {
     setLoading(true);
@@ -1108,6 +1109,36 @@ export default function PlansWorkspace({
                 <div><span>✓</span><b>P&L comparado</b></div>
                 <div className="blocked"><span>!</span><b>Oficialización bloqueada por ser sintético</b></div>
               </div>
+              <div className="presentation-actions">
+                <button className="secondary" onClick={() => setPresentationMode(true)}>Presentar en pantalla completa</button>
+                <button className="primary" disabled={syntheticPackage} aria-describedby={syntheticPackage ? "synthetic-submit-help" : undefined}>
+                  Enviar a revisión
+                </button>
+              </div>
+              {syntheticPackage && (
+                <p className="presentation-submit-help" id="synthetic-submit-help">
+                  El envío aparece en su lugar definitivo, pero permanece bloqueado porque este Plan utiliza datos sintéticos.
+                </p>
+              )}
+              {presentationMode && (
+                <div className="plan-presentation-mode" role="dialog" aria-modal="true" aria-label="Presentación del Plan">
+                  <header>
+                    <div><b>REVENUE</b><span>{selected.accountName ?? selected.accountId} · Plan {selected.year}</span></div>
+                    <button onClick={() => setPresentationMode(false)}>Cerrar presentación</button>
+                  </header>
+                  <main>
+                    <p>PLAN ANUAL · VERSIÓN {version?.number ?? 1}</p>
+                    <h2>La base aprobada se convierte en crecimiento rentable y reconciliado</h2>
+                    <div>
+                      <article><span>Revenue del Plan</span><b>{planResult.annualValue.toLocaleString("es-MX", { style: "currency", currency: planResult.currency, maximumFractionDigits: 0 })}</b></article>
+                      <article><span>Unidades del Plan</span><b>{planResult.annualUnits.toLocaleString("es-MX")}</b></article>
+                      <article><span>Contribución</span><b>{profitability.planAnnual.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency, maximumFractionDigits: 0 })}</b></article>
+                    </div>
+                    {syntheticPackage && <strong>DATOS SINTÉTICOS — NO COMERCIALES</strong>}
+                  </main>
+                  <footer><span>Resumen ejecutivo · 1 de 5</span><button>Siguiente →</button></footer>
+                </div>
+              )}
             </div>
           )}
           {!showBaselineGate && !showGrowthGate && !showResultGate && !showVersionGate && (
@@ -1207,6 +1238,7 @@ export default function PlansWorkspace({
                         </div>
                         <p>{requirement.purpose}</p>
                         <dl>
+                          <div><dt>Responsable sugerido</dt><dd>{requirement.suggestedOwner}</dd></div>
                           <div><dt>Detalle esperado</dt><dd>{requirement.expectedGrain}</dd></div>
                           <div><dt>Cobertura mínima</dt><dd>{requirement.minimumCoverage}</dd></div>
                         </dl>
