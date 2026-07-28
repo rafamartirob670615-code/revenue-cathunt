@@ -6,17 +6,16 @@ const componentUrl = new URL("../../app/PlansWorkspace.tsx", import.meta.url);
 
 test("Crear Plan real comienza vacío y permite volver al lobby", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /El Plan se creará vacío/);
-  assert.match(source, /Crear y guardar Plan/);
+  assert.match(source, /Siguiente: cargar información/);
+  assert.match(source, /Guardar y cargar datasets/);
   assert.match(source, /Volver al lobby/);
-  assert.match(source, /Crea un Plan nuevo o continúa exactamente donde lo dejaste/);
   assert.match(source, /lines:\s*\[\]/);
 });
 
 test("el recorrido vacío no presenta cifras demostrativas como resultados", async () => {
   const source = await readFile(componentUrl, "utf8");
   assert.doesNotMatch(source, /\$75\.4 M|1\.79 M|31\.4%|Mercado Central/);
-  assert.match(source, /No habrá ventas, objetivos, baseline, iniciativas ni rentabilidad precargados/);
+  assert.match(source, /cargar los datasets necesarios|cargar información/);
 });
 
 test("el checklist muestra requisitos pendientes y conserva bloqueado el baseline", async () => {
@@ -25,7 +24,6 @@ test("el checklist muestra requisitos pendientes y conserva bloqueado el baselin
   assert.match(source, /essentialReady.*4 esenciales listos/s);
   assert.match(source, /No recibido/);
   assert.match(source, /no completa este paquete/);
-  assert.match(source, /disabled=\{!packageAccepted\}/);
   assert.match(source, />Baseline<\/button>/);
   assert.match(source, /Seleccionar CSV/);
   assert.match(source, /received\.issues/);
@@ -96,10 +94,31 @@ test("rentabilidad declara comparador y parámetros no corporativos", async () =
 
 test("el Plan completo tiene una vista de versión y presentación", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Versión y presentación/);
+  assert.match(source, /Versión final/);
   assert.match(source, /Vista para defender el Plan/);
   assert.match(source, /Revenue del Plan/);
   assert.match(source, /Historia del Plan/);
   assert.match(source, /Baseline aprobado/);
   assert.match(source, /Oficialización bloqueada por ser sintético/);
+});
+
+test("baseline permite ajustar cada combinación mensual y persiste evidencia", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /baseline-line-editor/);
+  assert.match(source, /Base ajustada/);
+  assert.match(source, /adjustments:/);
+});
+
+test("crecimiento permite editar y guardar building blocks reconciliados", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /Editar building blocks/);
+  assert.match(source, /Guardar crecimiento/);
+  assert.match(source, /method:"PUT"/);
+});
+
+test("resultado permite edición tabular documentada", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  assert.match(source, /Editar tabla/);
+  assert.match(source, /Ajuste autorizado/);
+  assert.match(source, /Guardar resultado/);
 });

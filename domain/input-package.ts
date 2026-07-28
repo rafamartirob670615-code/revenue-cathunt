@@ -77,6 +77,8 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     suggestedOwner: "Marketing y Trade Marketing",
     requiredFields: ["activity_id", "activity_type", "account_id", "sku_id", "start_period", "end_period"],
   },
+  { id:"sales-quota", name:"Cuota comercial", purpose:"Comparar el Plan y el desempeño contra la cuota autorizada.", criticality:"CONDITIONAL", minimumCoverage:"Los 12 meses del año del Plan para cada cuenta o SKU aplicable.", expectedGrain:"Cuenta × SKU × mes, con cuota en unidades o valor y moneda identificados.", suggestedOwner:"Dirección Comercial", requiredFields:["account_id","sku_id","period","quota_value","currency"] },
+  { id:"actual-sales", name:"Ventas actuales", purpose:"Monitorear avance, cobertura y variaciones con fecha de corte.", criticality:"CONDITIONAL", minimumCoverage:"Desde enero hasta el último corte confiable del año del Plan.", expectedGrain:"Cuenta × SKU × periodo × corte, con unidades y valor observados.", suggestedOwner:"Ventas y Finanzas Comercial", requiredFields:["account_id","sku_id","period","cutoff_date","actual_units","actual_value","currency"] },
 ] as const;
 
 export function createEmptyInputPackage(planId: string): InputPackage {
@@ -238,6 +240,8 @@ export function validateCsvContent(
     "sales-history": ["units", "value"],
     "unit-conversions": ["conversion_factor"],
     "prices-currency": ["price"],
+    "sales-quota": ["quota_value"],
+    "actual-sales": ["actual_units","actual_value"],
   };
   const invalidNumericRows = records
     .filter((record) =>
@@ -288,6 +292,8 @@ export function validateCsvContent(
     "unit-conversions": ["sku_id", "source_unit", "base_unit"],
     "prices-currency": ["account_id", "sku_id", "valid_from", "price_type"],
     "activity-history": ["activity_id", "account_id", "sku_id", "start_period", "end_period"],
+    "sales-quota": ["account_id","sku_id","period"],
+    "actual-sales": ["account_id","sku_id","period","cutoff_date"],
   };
   const seen = new Map<string, number>();
   const duplicateRows: number[] = [];

@@ -37,6 +37,94 @@ async function approvedSyntheticBaseline(planId: string, ownerId: string) {
   return JSON.parse(row.result_json) as { targetYear: number; lines: Array<{ accountId: string; skuId: string }> };
 }
 
+interface EditableActivity {
+  id?: string;
+  family?: "MARKETING" | "TRADE_MARKETING";
+  name?: string;
+  accountId?: string;
+  skuId?: string;
+  period?: string;
+  grossUnits?: number;
+  cannibalizationUnits?: number;
+  haloUnits?: number;
+  pullForwardUnits?: number;
+  interactionUnits?: number;
+  evidence?: string;
+}
+
+function reconcileActivities(input: EditableActivity[], ownerId: string) {
+  if (input.length === 0) throw new Error("Agrega al menos una actividad");
+  const ids = new Set<string>();
+  const identities = new Set<string>();
+  let duplicateEconomicIdentities = 0;
+  const activities = input.map((item, index) => {
+    const id = item.id?.trim() || `ACT-${index + 1}`;
+    if (ids.has(id)) throw new Error(`Identificador duplicado: ${id}`);
+    ids.add(id);
+    if (item.family !== "MARKETING" && item.family !== "TRADE_MARKETING") {
+      throw new Error(`Familia inválida en ${id}`);
+    }
+    if (!item.name?.trim() || !item.accountId?.trim() || !item.skuId?.trim()) {
+      throw new Error(`Actividad incompleta: ${id}`);
+    }
+    if (!/^\d{4}-\d{2}$/.test(item.period ?? "")) throw new Error(`Periodo inválido en ${id}`);
+    if (!item.evidence?.trim()) throw new Error(`Evidencia obligatoria en ${id}`);
+    const values = [
+      item.grossUnits, item.cannibalizationUnits, item.haloUnits,
+      item.pullForwardUnits, item.interactionUnits,
+    ].map(Number);
+    if (values.some((value) => !Number.isFinite(value))) throw new Error(`Valores inválidos en ${id}`);
+    if (values.slice(0, 4).some((value) => value < 0)) {
+      throw new Error(`Bruto, canibalización, halo y compra anticipada no pueden ser negativos en ${id}`);
+    }
+    const [grossUnits, cannibalizationUnits, haloUnits, pullForwardUnits, interactionUnits] = values;
+    const identity = `${item.accountId.trim()}|${item.skuId.trim()}|${item.period}|${item.family}|${item.name.trim().toLowerCase()}`;
+    if (identities.has(identity)) duplicateEconomicIdentities += 1;
+    identities.add(identity);
+    return {
+      id, family: item.family, name: item.name.trim(), accountId: item.accountId.trim(),
+      skuId: item.skuId.trim(), period: item.period, grossUnits, cannibalizationUnits,
+      haloUnits, pullForwardUnits, interactionUnits,
+      netUnits: grossUnits - cannibalizationUnits + haloUnits - pullForwardUnits + interactionUnits,
+      evidence: item.evidence.trim(), status: "APPROVED_FOR_SYNTHETIC_PLAN", createdBy: ownerId,
+    };
+  });
+  const grossUnits = activities.reduce((sum, activity) => sum + activity.grossUnits, 0);
+  const netUnits = activities.reduce((sum, activity) => sum + activity.netUnits, 0);
+  return {
+    dataClassification: "SYNTHETIC_NON_COMMERCIAL",
+    methodId: "GOVERNED_INCREMENT_LEDGER",
+    methodVersion: "1.1.0",
+    activities, grossUnits, netUnits,
+    controls: {
+      duplicateEconomicIdentities,
+      unresolvedOverlaps: duplicateEconomicIdentities,
+      reconciled: duplicateEconomicIdentities === 0 && netUnits === activities.reduce(
+        (sum, activity) => sum + activity.grossUnits - activity.cannibalizationUnits
+          + activity.haloUnits - activity.pullForwardUnits + activity.interactionUnits, 0,
+      ),
+    },
+  };
+}
+
+async function persistGrowth(planId: string, ownerId: string, result: ReturnType<typeof reconcileActivities>) {
+  const now = new Date().toISOString();
+  await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
+  await database().prepare("DELETE FROM plan_results WHERE plan_id = ?").bind(planId).run();
+  await database()
+    .prepare(
+      `INSERT INTO growth_plans
+      (plan_id, owner_id, result_json, data_classification, created_at, updated_at)
+      VALUES (?, ?, ?, 'SYNTHETIC_NON_COMMERCIAL', ?, ?)
+      ON CONFLICT(plan_id) DO UPDATE SET owner_id=excluded.owner_id,
+      result_json=excluded.result_json, data_classification=excluded.data_classification,
+      updated_at=excluded.updated_at`,
+    )
+    .bind(planId, ownerId, JSON.stringify(result), now, now)
+    .run();
+  return now;
+}
+
 export async function GET(request: Request) {
   try {
     const ownerId = owner(request);
@@ -151,6 +239,22 @@ export async function POST(request: Request) {
       .bind(planId, ownerId, JSON.stringify(result), now, now)
       .run();
     return Response.json({ ok: true, result, updatedAt: now });
+  } catch (error) {
+    return responseError(error);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const ownerId = owner(request);
+    if (!ownerId) throw new Error("Autenticación requerida");
+    const body = (await request.json()) as { planId?: string; activities?: EditableActivity[] };
+    const planId = body.planId ?? "";
+    if (!planId) throw new Error("planId es obligatorio");
+    await approvedSyntheticBaseline(planId, ownerId);
+    const result = reconcileActivities(body.activities ?? [], ownerId);
+    const updatedAt = await persistGrowth(planId, ownerId, result);
+    return Response.json({ ok: true, result, updatedAt });
   } catch (error) {
     return responseError(error);
   }

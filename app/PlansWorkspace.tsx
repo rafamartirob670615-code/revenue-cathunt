@@ -53,6 +53,7 @@ type BaselineReview = {
   frozenAt?: string | null;
   methodId: string;
   methodVersion: string;
+  adjustedLines?: Array<{accountId:string;skuId:string;period:string;adjustedUnits:number}>|null;
   officializationAllowed?: boolean;
 };
 type GrowthResult = {
@@ -93,6 +94,7 @@ type PlanResult = {
     period: string;
     baselineUnits: number;
     incrementalNetUnits: number;
+    authorizedAdjustmentUnits?: number;
     planUnits: number;
     sourceUnit: string;
     baseUnit: string;
@@ -228,13 +230,19 @@ export default function PlansWorkspace({
   const [calculatingBaseline, setCalculatingBaseline] = useState(false);
   const [periodLevel, setPeriodLevel] = useState<"Año" | "Trimestre" | "Mes" | "SKU">("Año");
   const [showAdjustment, setShowAdjustment] = useState(false);
-  const [adjustedAnnualUnits, setAdjustedAnnualUnits] = useState("");
+  const [baselineEdits,setBaselineEdits]=useState<Record<string,string>>({});
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [adjustmentEvidence, setAdjustmentEvidence] = useState("");
   const [savingReview, setSavingReview] = useState(false);
   const [growth, setGrowth] = useState<GrowthResult | null>(null);
+  const [editingGrowth,setEditingGrowth]=useState(false);
+  const [growthDraft,setGrowthDraft]=useState<GrowthResult["activities"]>([]);
   const [buildingGrowth, setBuildingGrowth] = useState(false);
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [editingResult,setEditingResult]=useState(false);
+  const [resultDraft,setResultDraft]=useState<PlanResult["lines"]>([]);
+  const [resultEditReason,setResultEditReason]=useState("");
+  const [resultEditEvidence,setResultEditEvidence]=useState("");
   const [calculatingResult, setCalculatingResult] = useState(false);
   const [profitability, setProfitability] = useState<ProfitabilityResult | null>(null);
   const [calculatingProfitability, setCalculatingProfitability] = useState(false);
@@ -280,7 +288,7 @@ export default function PlansWorkspace({
             : undefined;
           if (requestedPlan) {
             setSelected(requestedPlan);
-            setShowInformation(false);
+            setShowInformation(true);
             setReceivedFiles([]);
             setShowBaselineGate(false);
             setShowGrowthGate(false);
@@ -361,6 +369,7 @@ export default function PlansWorkspace({
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setPlans((current) => [body.result as Plan, ...current]);
       setSelected(body.result);
+      setShowInformation(true);
       setView("workspace");
     } catch (cause) {
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
@@ -428,6 +437,7 @@ export default function PlansWorkspace({
       };
       if (response.ok && body.ok) {
         setReceivedFiles(body.files ?? []);
+        setShowInformation(body.accepted !== true);
         setPackageIssues(body.packageIssues ?? []);
         setSystemReady(body.systemReady ?? false);
         setPackageAccepted(body.accepted ?? false);
@@ -542,6 +552,7 @@ export default function PlansWorkspace({
       setCalculatingResult(false);
     }
   }
+  async function savePlanResult(event:React.FormEvent){event.preventDefault();if(!selected)return;setCalculatingResult(true);setError("");try{const response=await fetch("/api/result",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({planId:selected.id,reason:resultEditReason,evidence:resultEditEvidence,lines:resultDraft.map(line=>({skuId:line.skuId,period:line.period,authorizedAdjustmentUnits:line.authorizedAdjustmentUnits??0,unitPrice:line.unitPrice}))})});const body=await response.json() as {ok:boolean;result?:PlanResult;error?:string};if(!response.ok||!body.ok||!body.result)throw new Error(body.error);setPlanResult(body.result);setProfitability(null);setEditingResult(false);}catch(cause){setError(friendlyError(cause instanceof Error?cause.message:""));}finally{setCalculatingResult(false);}}
 
   async function buildSyntheticGrowth() {
     if (!selected) return;
@@ -563,6 +574,7 @@ export default function PlansWorkspace({
       setBuildingGrowth(false);
     }
   }
+  async function saveGrowth(){if(!selected)return;setBuildingGrowth(true);setError("");try{const response=await fetch("/api/growth",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({planId:selected.id,activities:growthDraft})});const body=await response.json() as {ok:boolean;result?:GrowthResult;error?:string};if(!response.ok||!body.ok||!body.result)throw new Error(body.error);setGrowth(body.result);setPlanResult(null);setProfitability(null);setEditingGrowth(false);}catch(cause){setError(friendlyError(cause instanceof Error?cause.message:""));}finally{setBuildingGrowth(false);}}
 
   async function loadSyntheticPackage() {
     if (!selected) return;
@@ -618,7 +630,7 @@ export default function PlansWorkspace({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           planId: selected.id,
-          proposedAnnualUnits: Number(adjustedAnnualUnits),
+          adjustments: baseline?.lines.map(line=>({accountId:line.accountId,skuId:line.skuId,period:line.period,adjustedUnits:Number(baselineEdits[`${line.accountId}|${line.skuId}|${line.period}`]??baselineReview?.adjustedLines?.find(item=>item.accountId===line.accountId&&item.skuId===line.skuId&&item.period===line.period)?.adjustedUnits??line.calculatedUnits)})),
           reason: adjustmentReason,
           evidence: adjustmentEvidence,
         }),
@@ -657,7 +669,7 @@ export default function PlansWorkspace({
 
   function openPlan(plan: Plan) {
     setSelected(plan);
-    setShowInformation(false);
+    setShowInformation(true);
     setReceivedFiles([]);
     setShowBaselineGate(false);
     setShowGrowthGate(false);
@@ -730,8 +742,7 @@ export default function PlansWorkspace({
         <div className="page-head">
           <div>
             <p className="eyebrow">Crear Plan anual</p>
-            <h1>Comienza con el contexto, no con cifras</h1>
-            <p>Revenue guardará un Plan vacío. La información y los resultados se incorporarán en los siguientes pasos.</p>
+            <h1>Crea un Plan por cuenta</h1><p>Identifica el Plan. Al guardarlo pasarás directamente a cargar y validar los datasets imprescindibles.</p>
           </div>
           <button className="secondary" onClick={() => onExit ? onExit() : setView("portfolio")}>← Volver al lobby</button>
         </div>
@@ -739,8 +750,7 @@ export default function PlansWorkspace({
           <div className="create-plan-intro">
             <span>1</span>
             <div>
-              <h2>¿Qué Plan quieres crear?</h2>
-              <p>Sólo necesitamos identificarlo. Aquí no se calcula ni se supone ningún resultado.</p>
+              <h2>Datos del Plan</h2><p>La cuenta, el año y la moneda quedarán asociados a toda la construcción y sus versiones.</p>
             </div>
           </div>
           <div className="form-grid">
@@ -749,14 +759,13 @@ export default function PlansWorkspace({
             <label>Año del Plan<input type="number" min={currentYear} max={currentYear + 5} value={year} onChange={(event) => setYear(Number(event.target.value))} required /></label>
             <label>Moneda base<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>MXN</option><option>USD</option></select></label>
           </div>
-          <div className="empty-plan-notice">
-            <span>✓</span>
-            <div><b>El Plan se creará vacío</b><small>No habrá ventas, objetivos, baseline, iniciativas ni rentabilidad precargados.</small></div>
+          <div className="dataset-first-notice">
+            <span>1</span><div><b>Siguiente: cargar información</b><small>Ventas del año anterior, actividades y promociones, catálogo de productos, conversiones y precios. REVENUE validará estructura y cobertura antes de calcular.</small></div>
           </div>
           {error && <div className="recoverable-error" role="alert">{error}</div>}
           <div className="create-plan-actions">
             <button type="button" className="secondary" onClick={() => onExit ? onExit() : setView("portfolio")}>Cancelar</button>
-            <button className="primary" disabled={saving}>{saving ? "Guardando…" : "Crear y guardar Plan"}</button>
+            <button className="primary" disabled={saving}>{saving ? "Guardando…" : "Guardar y cargar datasets"}</button>
           </div>
         </form>
       </div>
@@ -786,17 +795,18 @@ export default function PlansWorkspace({
         <div className="page-head">
           <div>
             <p className="eyebrow">{selected.companyName ?? selected.companyId} · {selected.accountName ?? selected.accountId} · {selected.year}</p>
-            <h1>Plan anual {selected.year}</h1>
+            <h1>{selected.accountName ?? selected.accountId} · Plan anual {selected.year}</h1>
             <p>Versión {version?.number ?? 1} · Borrador guardado</p>
           </div>
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
         </div>
         <div className="plan-tabs">
-          <button className={!showBaselineGate && !showGrowthGate && !showResultGate && !showVersionGate ? "active" : ""} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(false); }}>Resumen del Plan</button>
-          <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => { setShowBaselineGate(true); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(false); }}>Baseline</button>
-          <button className={showGrowthGate ? "active" : ""} disabled={!growth && baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(true); setShowResultGate(false); setShowVersionGate(false); }}>Crecimiento</button>
-          <button className={showResultGate ? "active" : ""} disabled={!planResult && !growth?.controls.reconciled} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(true); setShowVersionGate(false); }}>Resultado y rentabilidad</button>
-          <button className={showVersionGate ? "active" : ""} disabled={!profitability} onClick={() => { setShowBaselineGate(false); setShowGrowthGate(false); setShowResultGate(false); setShowVersionGate(true); }}>Versión y presentación</button>
+          <button className={showInformation?"active":""} onClick={()=>{setShowInformation(true);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Datasets</button>
+          <button className={!showInformation&&!showBaselineGate&&!showGrowthGate&&!showResultGate&&!showVersionGate?"active":""} onClick={()=>{setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Vista integral</button>
+          <button className={showBaselineGate ? "active" : ""} onClick={() => packageAccepted ? (setShowBaselineGate(true),setShowInformation(false),setShowGrowthGate(false),setShowResultGate(false),setShowVersionGate(false)) : (setShowInformation(true),setShowBaselineGate(false))}>Baseline</button>
+          <button className={showGrowthGate ? "active" : ""} onClick={() => baselineReview?.status === "APPROVED_FROZEN" ? (setShowInformation(false),setShowBaselineGate(false),setShowGrowthGate(true),setShowResultGate(false),setShowVersionGate(false)) : (setShowInformation(packageAccepted),setShowBaselineGate(packageAccepted),setShowGrowthGate(false))}>Crecimiento</button>
+          <button className={showResultGate ? "active" : ""} onClick={() => growth?.controls.reconciled ? (setShowInformation(false),setShowBaselineGate(false),setShowGrowthGate(false),setShowResultGate(true),setShowVersionGate(false)) : (setShowInformation(!packageAccepted),setShowBaselineGate(packageAccepted&&baselineReview?.status!=="APPROVED_FROZEN"),setShowGrowthGate(baselineReview?.status==="APPROVED_FROZEN"),setShowResultGate(false))}>Resultado y rentabilidad</button>
+          <button className={showVersionGate ? "active" : ""} onClick={() => profitability ? (setShowInformation(false),setShowBaselineGate(false),setShowGrowthGate(false),setShowResultGate(false),setShowVersionGate(true)) : (setShowInformation(!packageAccepted),setShowBaselineGate(packageAccepted&&baselineReview?.status!=="APPROVED_FROZEN"),setShowGrowthGate(baselineReview?.status==="APPROVED_FROZEN"&&!growth?.controls.reconciled),setShowResultGate(Boolean(growth?.controls.reconciled)))}>Versión final</button>
         </div>
         <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate || showResultGate ? "baseline-mode" : ""}`}>
           {showBaselineGate && packageAccepted && (
@@ -943,7 +953,14 @@ export default function PlansWorkspace({
                       </div>
                       {showAdjustment && (
                         <form className="baseline-adjustment-form" onSubmit={proposeBaselineAdjustment}>
-                          <label>Base anual propuesta (unidades)<input type="number" min="1" value={adjustedAnnualUnits} onChange={(event) => setAdjustedAnnualUnits(event.target.value)} required /></label>
+                          <div className="baseline-line-editor">
+                            <div className="baseline-line-editor-head"><span>Mes / SKU</span><span>Calculada</span><span>Ajustada</span><span>Diferencia</span></div>
+                            {baseline.lines.map((line) => {
+                              const key=`${line.accountId}|${line.skuId}|${line.period}`;
+                              const adjusted=Number(baselineEdits[key]??baselineReview?.adjustedLines?.find(item=>item.accountId===line.accountId&&item.skuId===line.skuId&&item.period===line.period)?.adjustedUnits??line.calculatedUnits);
+                              return <div className="baseline-line-editor-row" key={key}><span><b>{line.period}</b><small>{line.skuId}</small></span><span>{line.calculatedUnits.toLocaleString("es-MX")}</span><input aria-label={`Base ajustada ${line.period} ${line.skuId}`} type="number" min="0" step="1" value={baselineEdits[key]??adjusted} onChange={event=>setBaselineEdits(current=>({...current,[key]:event.target.value}))}/><strong>{(adjusted-line.calculatedUnits).toLocaleString("es-MX")}</strong></div>;
+                            })}
+                          </div>
                           <label>Motivo del ajuste<textarea value={adjustmentReason} onChange={(event) => setAdjustmentReason(event.target.value)} placeholder="Explica por qué el cálculo debe cambiar" required /></label>
                           <label>Evidencia<textarea value={adjustmentEvidence} onChange={(event) => setAdjustmentEvidence(event.target.value)} placeholder="Identifica el archivo, fuente o comprobante" required /></label>
                           <button className="primary" disabled={savingReview}>{savingReview ? "Guardando…" : "Guardar propuesta"}</button>
@@ -989,16 +1006,19 @@ export default function PlansWorkspace({
                   </div>
                   <div className="growth-table">
                     <div className="growth-table-head"><span>Familia y actividad</span><span>Periodo / SKU</span><span>Bruto</span><span>Ajustes</span><span>Neto</span><span>Evidencia</span></div>
-                    {growth.activities.map((activity) => (
+                    {(editingGrowth?growthDraft:growth.activities).map((activity,index) => (
                       <div className="growth-row" key={activity.id}>
-                        <div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</small><b>{activity.name}</b></div>
-                        <span>{activity.period}<small>{activity.skuId}</small></span>
-                        <b>{activity.grossUnits.toLocaleString("es-MX")}</b>
-                        <span>−{activity.cannibalizationUnits} +{activity.haloUnits} −{activity.pullForwardUnits} {activity.interactionUnits < 0 ? activity.interactionUnits : `+${activity.interactionUnits}`}</span>
+                        <div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</small>{editingGrowth?<input aria-label={`Actividad ${index+1}`} value={activity.name} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,name:event.target.value}:item))}/>:<b>{activity.name}</b>}</div>
+                        {editingGrowth?<div><input aria-label={`Periodo ${index+1}`} value={activity.period} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,period:event.target.value}:item))}/><input aria-label={`SKU ${index+1}`} value={activity.skuId} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,skuId:event.target.value}:item))}/></div>:<span>{activity.period}<small>{activity.skuId}</small></span>}
+                        {editingGrowth?<input aria-label={`Bruto ${index+1}`} type="number" min="0" value={activity.grossUnits} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,grossUnits:Number(event.target.value)}:item))}/>:<b>{activity.grossUnits.toLocaleString("es-MX")}</b>}
+                        {editingGrowth?<div className="growth-adjustment-inputs">{(["cannibalizationUnits","haloUnits","pullForwardUnits","interactionUnits"] as const).map(field=><input key={field} aria-label={`${field} ${index+1}`} type="number" value={activity[field]} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,[field]:Number(event.target.value)}:item))}/>)}</div>:<span>−{activity.cannibalizationUnits} +{activity.haloUnits} −{activity.pullForwardUnits} {activity.interactionUnits < 0 ? activity.interactionUnits : `+${activity.interactionUnits}`}</span>}
                         <strong>{activity.netUnits.toLocaleString("es-MX")}</strong>
-                        <small>{activity.evidence}</small>
+                        {editingGrowth?<div><input aria-label={`Evidencia ${index+1}`} value={activity.evidence} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,evidence:event.target.value}:item))}/><button type="button" className="text-action" onClick={()=>setGrowthDraft(current=>current.filter((_,i)=>i!==index))}>Eliminar</button></div>:<small>{activity.evidence}</small>}
                       </div>
                     ))}
+                  </div>
+                  <div className="workspace-edit-actions">
+                    {editingGrowth?<><button className="secondary" onClick={()=>setGrowthDraft(current=>[...current,{...growth.activities[0],id:`ACT-${crypto.randomUUID()}`,name:"",grossUnits:0,cannibalizationUnits:0,haloUnits:0,pullForwardUnits:0,interactionUnits:0,netUnits:0,evidence:""}])}>Agregar actividad</button><button className="secondary" onClick={()=>setEditingGrowth(false)}>Cancelar</button><button className="primary" disabled={buildingGrowth} onClick={()=>void saveGrowth()}>{buildingGrowth?"Guardando…":"Guardar crecimiento"}</button></>:<button className="primary" onClick={()=>{setGrowthDraft(growth.activities);setEditingGrowth(true);}}>Editar building blocks</button>}
                   </div>
                   <div className="growth-reconciliation">
                     <b>Incremental bruto − canibalización + halo − compra anticipada ± interacción = incremental neto</b>
@@ -1039,18 +1059,19 @@ export default function PlansWorkspace({
                   </div>
                   <div className="result-table">
                     <div className="result-table-head"><span>Mes / SKU</span><span>Base aprobada</span><span>Incremental neto</span><span>Unidades Plan</span><span>Conversión</span><span>Precio</span><span>Valor</span></div>
-                    {planResult.lines.map((line) => (
+                    {(editingResult?resultDraft:planResult.lines).map((line,index) => (
                       <div className="result-row" key={`${line.skuId}|${line.period}`}>
                         <div><b>{line.period}</b><small>{line.skuId}</small></div>
                         <span>{line.baselineUnits.toLocaleString("es-MX")}</span>
                         <span>{line.incrementalNetUnits.toLocaleString("es-MX")}</span>
-                        <strong>{line.planUnits.toLocaleString("es-MX")}</strong>
+                        {editingResult?<input aria-label={`Ajuste autorizado ${line.period} ${line.skuId}`} type="number" value={line.authorizedAdjustmentUnits??0} onChange={event=>setResultDraft(current=>current.map((item,i)=>i===index?{...item,authorizedAdjustmentUnits:Number(event.target.value)}:item))}/>:<strong>{line.planUnits.toLocaleString("es-MX")}</strong>}
                         <span>{line.derivedCases.toLocaleString("es-MX")} cajas<small>{line.conversionFactor} {line.baseUnit} / {line.sourceUnit}</small></span>
-                        <span>{line.unitPrice.toLocaleString("es-MX", { style: "currency", currency: line.currency })}<small>{line.priceType} · desde {line.validFrom}</small></span>
+                        {editingResult?<input aria-label={`Precio ${line.period} ${line.skuId}`} type="number" min="0" step="0.01" value={line.unitPrice} onChange={event=>setResultDraft(current=>current.map((item,i)=>i===index?{...item,unitPrice:Number(event.target.value)}:item))}/>:<span>{line.unitPrice.toLocaleString("es-MX", { style: "currency", currency: line.currency })}<small>{line.priceType} · desde {line.validFrom}</small></span>}
                         <b>{line.planValue.toLocaleString("es-MX", { style: "currency", currency: line.currency })}</b>
                       </div>
                     ))}
                   </div>
+                  {editingResult?<form className="result-edit-form" onSubmit={savePlanResult}><label>Motivo<textarea required value={resultEditReason} onChange={event=>setResultEditReason(event.target.value)}/></label><label>Evidencia<textarea required value={resultEditEvidence} onChange={event=>setResultEditEvidence(event.target.value)}/></label><div><button type="button" className="secondary" onClick={()=>setEditingResult(false)}>Cancelar</button><button className="primary" disabled={calculatingResult}>{calculatingResult?"Guardando…":"Guardar resultado"}</button></div></form>:<div className="workspace-edit-actions"><button className="primary" onClick={()=>{setResultDraft(planResult.lines);setEditingResult(true);}}>Editar tabla</button></div>}
                   <div className="result-reconciliation">
                     <div><b>Unidades reconciliadas</b><span>Base aprobada + incremental neto = Plan</span></div>
                     <div><b>Valor reconciliado</b><span>Unidades × precio aceptado = valor</span></div>

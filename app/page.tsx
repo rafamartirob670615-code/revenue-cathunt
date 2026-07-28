@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import PlansWorkspace from "./PlansWorkspace";
+import PlanMonitor from "./PlanMonitor";
 import RevenueLobby from "./RevenueLobby";
 
-type AppView = "lobby" | "plan";
+type AppView = "lobby" | "plan" | "monitor";
 
 export default function RevenueApp() {
   const [view, setView] = useState<AppView>("lobby");
@@ -22,6 +23,7 @@ export default function RevenueApp() {
     setStartCreate(true);
     setView("plan");
   }
+  function openMonitor(planId:string){setRequestedPlanId(planId);setStartCreate(false);setView("monitor");}
 
   return (
     <div className="revenue-recovery-shell">
@@ -30,17 +32,18 @@ export default function RevenueApp() {
           <span>R</span>
           <div><b>REVENUE</b><small>Planeación anual</small></div>
         </button>
-        <div className="recovery-private"><i /> Sitio privado</div>
-        <button className="avatar" aria-label="Perfil de Roberto Martínez">RM</button>
+        <nav className="global-nav" aria-label="Navegación principal"><button onClick={()=>setView("lobby")}>Inicio</button><button onClick={()=>createPlan()}>Crear Plan</button></nav>
+        <button className="avatar" aria-label="Perfil de usuario">U</button>
       </header>
       <main className="recovery-main">
         {view === "lobby" && (
           <RevenueLobby
             openPlan={openPlan}
+            openMonitor={openMonitor}
             createPlan={createPlan}
-            openSynthetic={openPlan}
           />
         )}
+        {view==="monitor"&&requestedPlanId&&<PlanMonitor planId={requestedPlanId} onExit={()=>setView("lobby")}/>}
         {view === "plan" && (
           <PlansWorkspace
             key={`${requestedPlanId ?? "new"}:${startCreate}`}

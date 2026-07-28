@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     const salesObject = await files().get(salesRow.object_key);
     const activityObject = activityRow ? await files().get(activityRow.object_key) : null;
     if (!salesObject) throw new Error("No fue posible leer la historia aceptada");
-    const synthetic = rows.every((row) => row.original_name.startsWith("SINTETICO_NO_COMERCIAL_"));
+    const synthetic = rows.every((row) => row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_"));
     const result = calculateBaselineFromAcceptedPackage({
       salesCsv: await salesObject.text(),
       activitiesCsv: activityObject ? await activityObject.text() : undefined,
@@ -150,7 +150,12 @@ export async function PUT(request: Request) {
     if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as {
       planId?: string;
-      proposedAnnualUnits?: number;
+      adjustments?: Array<{
+        accountId?: string;
+        skuId?: string;
+        period?: string;
+        adjustedUnits?: number;
+      }>;
       reason?: string;
       evidence?: string;
     };
@@ -164,27 +169,42 @@ export async function PUT(request: Request) {
       .bind(planId, ownerId)
       .first<{ result_json: string; calculated_at: string }>();
     if (!calculation) throw new Error("Calcula primero el baseline");
-    const proposedAnnualUnits = Number(body.proposedAnnualUnits);
-    if (!Number.isFinite(proposedAnnualUnits) || proposedAnnualUnits <= 0) {
-      throw new Error("El valor ajustado debe ser mayor que cero");
-    }
     if (!body.reason?.trim()) throw new Error("El motivo del ajuste es obligatorio");
     if (!body.evidence?.trim()) throw new Error("La evidencia del ajuste es obligatoria");
     const result = JSON.parse(calculation.result_json) as {
       annualUnits: number;
-      lines: Array<{ calculatedUnits: number }>;
+      lines: Array<{ accountId: string; skuId: string; period: string; calculatedUnits: number }>;
       methodId: string;
       methodVersion: string;
     };
-    const ratio = proposedAnnualUnits / result.annualUnits;
-    let assigned = 0;
-    const adjustedLines = result.lines.map((line, index) => {
-      const adjustedUnits = index === result.lines.length - 1
-        ? Math.round(proposedAnnualUnits - assigned)
-        : Math.round(line.calculatedUnits * ratio);
-      assigned += adjustedUnits;
+    const adjustments = body.adjustments ?? [];
+    if (adjustments.length !== result.lines.length) {
+      throw new Error("El ajuste debe incluir exactamente cada combinación cuenta, SKU y mes");
+    }
+    const inputByKey = new Map<string, number>();
+    for (const line of adjustments) {
+      const key = `${line.accountId?.trim()}|${line.skuId?.trim()}|${line.period?.trim()}`;
+      const adjustedUnits = Number(line.adjustedUnits);
+      if (!line.accountId?.trim() || !line.skuId?.trim() || !/^\d{4}-\d{2}$/.test(line.period ?? "")) {
+        throw new Error("Cada ajuste requiere cuenta, SKU y periodo mensual");
+      }
+      if (!Number.isFinite(adjustedUnits) || adjustedUnits < 0) {
+        throw new Error(`Unidades ajustadas inválidas para ${key}`);
+      }
+      if (inputByKey.has(key)) throw new Error(`Ajuste duplicado para ${key}`);
+      inputByKey.set(key, adjustedUnits);
+    }
+    const adjustedLines = result.lines.map((line) => {
+      const key = `${line.accountId}|${line.skuId}|${line.period}`;
+      const adjustedUnits = inputByKey.get(key);
+      if (adjustedUnits === undefined) throw new Error(`Falta el ajuste para ${key}`);
       return { ...line, adjustedUnits };
     });
+    const proposedAnnualUnits = adjustedLines.reduce((sum, line) => sum + line.adjustedUnits, 0);
+    if (proposedAnnualUnits <= 0) throw new Error("El total ajustado debe ser mayor que cero");
+    if (adjustedLines.every((line) => line.adjustedUnits === line.calculatedUnits)) {
+      throw new Error("Modifica al menos una línea para proponer un ajuste");
+    }
     const decidedAt = new Date().toISOString();
     const review = {
       status: "ADJUSTMENT_PROPOSED",

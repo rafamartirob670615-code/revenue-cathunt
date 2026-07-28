@@ -218,3 +218,101 @@ export async function POST(request: Request) {
     return responseError(error);
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const ownerId = owner(request);
+    if (!ownerId) throw new Error("Autenticación requerida");
+    const body = (await request.json()) as {
+      planId?: string;
+      reason?: string;
+      evidence?: string;
+      lines?: Array<{ skuId?: string; period?: string; authorizedAdjustmentUnits?: number; unitPrice?: number }>;
+    };
+    const planId = body.planId ?? "";
+    if (!planId) throw new Error("planId es obligatorio");
+    if (!body.reason?.trim()) throw new Error("El motivo de edición es obligatorio");
+    if (!body.evidence?.trim()) throw new Error("La evidencia de edición es obligatoria");
+    await prerequisites(planId, ownerId);
+    const stored = await database()
+      .prepare("SELECT result_json FROM plan_results WHERE plan_id = ? AND owner_id = ?")
+      .bind(planId, ownerId)
+      .first<{ result_json: string }>();
+    if (!stored) throw new Error("Calcula primero unidades y valor");
+    const current = JSON.parse(stored.result_json) as {
+      dataClassification: string;
+      methodId: string;
+      methodVersion: string;
+      currency: string;
+      lines: Array<{
+        accountId: string; skuId: string; period: string; baselineUnits: number;
+        incrementalNetUnits: number; sourceUnit: string; baseUnit: string;
+        conversionFactor: number; currency: string; priceType: string; validFrom: string;
+      }>;
+    };
+    const edits = body.lines ?? [];
+    if (edits.length !== current.lines.length) {
+      throw new Error("La edición debe incluir exactamente cada combinación SKU y mes");
+    }
+    const byKey = new Map<string, { authorizedAdjustmentUnits: number; unitPrice: number }>();
+    for (const edit of edits) {
+      const key = `${edit.skuId?.trim()}|${edit.period?.trim()}`;
+      const authorizedAdjustmentUnits = Number(edit.authorizedAdjustmentUnits ?? 0);
+      const unitPrice = Number(edit.unitPrice);
+      if (!edit.skuId?.trim() || !/^\d{4}-\d{2}$/.test(edit.period ?? "")) {
+        throw new Error(`Llave inválida: ${key}`);
+      }
+      if (byKey.has(key)) throw new Error(`Línea duplicada: ${key}`);
+      if (!Number.isFinite(authorizedAdjustmentUnits) || !Number.isFinite(unitPrice) || unitPrice < 0) {
+        throw new Error(`Valores inválidos para ${key}`);
+      }
+      byKey.set(key, { authorizedAdjustmentUnits, unitPrice });
+    }
+    const lines = current.lines.map((line) => {
+      const edit = byKey.get(`${line.skuId}|${line.period}`);
+      if (!edit) throw new Error(`Falta la línea ${line.skuId}|${line.period}`);
+      const planUnits = line.baselineUnits + line.incrementalNetUnits + edit.authorizedAdjustmentUnits;
+      if (planUnits < 0) throw new Error(`Las unidades Plan no pueden ser negativas para ${line.skuId}|${line.period}`);
+      return {
+        ...line,
+        authorizedAdjustmentUnits: edit.authorizedAdjustmentUnits,
+        planUnits,
+        derivedCases: Number((planUnits / line.conversionFactor).toFixed(4)),
+        unitPrice: edit.unitPrice,
+        planValue: Number((planUnits * edit.unitPrice).toFixed(2)),
+      };
+    });
+    const annualUnits = lines.reduce((sum, line) => sum + line.planUnits, 0);
+    const annualValue = Number(lines.reduce((sum, line) => sum + line.planValue, 0).toFixed(2));
+    const result = {
+      ...current,
+      methodVersion: "1.1.0",
+      lines,
+      annualUnits,
+      annualValue,
+      controls: {
+        unitsReconciled: annualUnits === lines.reduce(
+          (sum, line) => sum + line.baselineUnits + line.incrementalNetUnits + line.authorizedAdjustmentUnits, 0,
+        ),
+        valueReconciled: annualValue === Number(lines.reduce(
+          (sum, line) => sum + line.planUnits * line.unitPrice, 0,
+        ).toFixed(2)),
+        missingConversions: 0,
+        missingPrices: 0,
+      },
+      edit: {
+        reason: body.reason.trim(), evidence: body.evidence.trim(),
+        editedBy: ownerId, editedAt: new Date().toISOString(),
+      },
+    };
+    const now = new Date().toISOString();
+    await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
+    await database()
+      .prepare("UPDATE plan_results SET result_json = ?, updated_at = ? WHERE plan_id = ? AND owner_id = ?")
+      .bind(JSON.stringify(result), now, planId, ownerId)
+      .run();
+    return Response.json({ ok: true, result, updatedAt: now });
+  } catch (error) {
+    return responseError(error);
+  }
+}

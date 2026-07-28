@@ -99,7 +99,7 @@ export async function GET(request: Request) {
         issues: JSON.parse(row.validation_json),
         summary: JSON.parse(row.summary_json),
         receivedAt: row.received_at,
-        synthetic: row.original_name.startsWith("SINTETICO_NO_COMERCIAL_"),
+        synthetic: row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_"),
       })),
       packageIssues,
       systemReady,
@@ -201,6 +201,7 @@ export async function PUT(request: Request) {
     const plan = JSON.parse(row.aggregate_json) as { year: number; accountId: string };
     const generated = createSyntheticPilotPackage(plan.year, plan.accountId);
     const receivedAt = new Date().toISOString();
+    await database().prepare("DELETE FROM input_package_files WHERE plan_id = ? AND owner_id = ?").bind(planId,ownerId).run();
 
     for (const item of generated) {
       const bytes = new TextEncoder().encode(item.content);
@@ -241,7 +242,7 @@ export async function PUT(request: Request) {
       ok: true,
       result: {
         classification: "SYNTHETIC_NON_COMMERCIAL",
-        label: "DATOS SINTÉTICOS — NO COMERCIALES",
+        label: "CASO TÉCNICO V2 — NO COMERCIAL",
         fileCount: generated.length,
       },
     });
