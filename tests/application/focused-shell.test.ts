@@ -42,6 +42,6 @@ test("la información identifica responsables y la versión permite presentar si
   assert.match(workspace, /Enviar a revisión/);
   assert.match(workspace, /disabled=\{syntheticPackage\}/);
   assert.match(workspace, /DATOS SINTÉTICOS — NO COMERCIALES/);
-  assert.match(workspace, /showGrowthGate && \(growth \|\| baselineReview/);
-  assert.match(workspace, /showResultGate && \(planResult \|\| growth/);
+  assert.match(workspace, /\{showGrowthGate && \(/);
+  assert.match(workspace, /\{showResultGate && \(/);
 });

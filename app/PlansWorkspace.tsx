@@ -916,7 +916,7 @@ export default function PlansWorkspace({
               </div>
             </div>
           )}
-          {showGrowthGate && (growth || baselineReview?.status === "APPROVED_FROZEN") && (
+          {showGrowthGate && (
             <div className="growth-workspace">
               <div className="baseline-head">
                 <div>
@@ -964,7 +964,7 @@ export default function PlansWorkspace({
               )}
             </div>
           )}
-          {showResultGate && (planResult || growth?.controls.reconciled) && (
+          {showResultGate && (
             <div className="result-workspace">
               <div className="baseline-head">
                 <div>
