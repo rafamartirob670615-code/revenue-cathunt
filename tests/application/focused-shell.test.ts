@@ -14,6 +14,8 @@ test("Inicio es un lobby que lleva directamente a continuar, crear o explorar el
   assert.match(lobby, /DATOS SINTÉTICOS — NO COMERCIALES/);
   assert.match(lobby, /method: "PUT"/);
   assert.match(lobby, /method: "PATCH"/);
+  assert.match(lobby, /inputState\.accepted === true/);
+  assert.match(lobby, /inputState\.files\?\.every/);
   assert.match(lobby, /openSynthetic\(planId\)/);
   assert.doesNotMatch(source, /Mercado Central|\$131\.4 M|Sistema confiable|Confianza del dato/);
   assert.doesNotMatch(lobby, /Mercado Central|\$131\.4 M|Sistema confiable|Confianza del dato/);

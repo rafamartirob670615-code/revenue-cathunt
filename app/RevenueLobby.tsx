@@ -75,8 +75,23 @@ export default function RevenueLobby({
   const recentPlans = realPlans.slice(0, 3);
   const ownerFirstName = data?.owner.name?.split(/\s+/)[0] ?? "Roberto";
 
-  async function ensureSyntheticPlan(planId: string, createPackage: boolean) {
-    if (createPackage) {
+  async function ensureSyntheticPlan(planId: string) {
+    const inputResponse = await fetch(`/api/inputs?planId=${encodeURIComponent(planId)}`, { cache: "no-store" });
+    const inputState = (await inputResponse.json()) as {
+      ok: boolean;
+      files?: Array<{ synthetic?: boolean }>;
+      systemReady?: boolean;
+      accepted?: boolean;
+      error?: string;
+    };
+    if (!inputResponse.ok || !inputState.ok) throw new Error(inputState.error);
+    const syntheticPackageReady =
+      inputState.accepted === true &&
+      inputState.systemReady === true &&
+      Boolean(inputState.files?.length) &&
+      inputState.files?.every((file) => file.synthetic === true);
+
+    if (!syntheticPackageReady) {
       const packageResponse = await fetch("/api/inputs", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -156,7 +171,7 @@ export default function RevenueLobby({
     setError("");
     try {
       if (syntheticPlan) {
-        await ensureSyntheticPlan(syntheticPlan.id, false);
+        await ensureSyntheticPlan(syntheticPlan.id);
         openSynthetic(syntheticPlan.id);
         return;
       }
@@ -197,7 +212,7 @@ export default function RevenueLobby({
       });
       const created = (await createResponse.json()) as { ok: boolean; result?: Plan; error?: string };
       if (!createResponse.ok || !created.ok || !created.result) throw new Error(created.error);
-      await ensureSyntheticPlan(planId, true);
+      await ensureSyntheticPlan(planId);
       openSynthetic(planId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No pudimos preparar el piloto.");
