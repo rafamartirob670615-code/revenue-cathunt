@@ -196,11 +196,21 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
   }).filter((item) => item.rate !== null && Math.abs(item.rate) >= 0.05);
   const quotaReady = data.quota.ready;
   const actualReady = data.actuals.ready;
+  const planYtd = Number(planValues.YTD ?? 0);
+  const actualYtd = actualReady ? Number(actualValues.YTD ?? 0) : null;
+  const ytdVariance = actualYtd === null || planYtd === 0 ? null : actualYtd / planYtd - 1;
+  const statusLabel = data.plan.status === "SUBMITTED"
+    ? "En revisión"
+    : data.plan.status === "COMMERCIAL_APPROVED"
+      ? "Aprobado comercialmente"
+      : data.plan.status === "FINANCE_VALIDATED"
+        ? "Validado por Finanzas"
+        : data.plan.status === "OFFICIAL" ? "Oficial" : "En preparación";
 
   return (
     <div className="monitor-shell">
       <header className="monitor-head">
-        <div><p className="eyebrow">Monitoreo · {data.plan.status}</p><h1>{data.plan.account} · {data.plan.year}</h1><p>{data.plan.company} · Versión {data.plan.version} · {data.plan.currency}</p></div>
+        <div><p className="eyebrow">Seguimiento · {statusLabel}</p><h1>{data.plan.account} · {data.plan.year}</h1><p>{data.plan.company} · Versión {data.plan.version} · {data.plan.currency}</p></div>
         <button className="secondary" onClick={onExit}>← Volver al lobby</button>
       </header>
       <nav className="monitor-tabs" aria-label="Vistas de Monitoreo">
@@ -244,17 +254,26 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
           </div>
           {uploadMessage && <div className="monitor-upload-message">{uploadMessage}</div>}
           {actualReady && <div className="monitor-cutoff"><b>Corte comparable</b><span>{data.actuals.cutoffDate ?? "Sin fecha"} · {data.actuals.includedRows} filas incorporadas{data.actuals.excludedRows ? ` · ${data.actuals.excludedRows} fuera del Plan` : ""}</span></div>}
-          <div className="billing-scroll">
-            <div className="billing-grid header"><b>Métrica</b>{periods.map((period) => <span key={period}>{period}</span>)}</div>
-            <div className="billing-grid"><b>Plan</b>{monthKeys.map((key) => <span key={key}>{formatValue(planValues[key as keyof typeof planValues] ?? null)}</span>)}</div>
-            <div className={`billing-grid ${quotaReady ? "" : "muted"}`}><b>Cuota</b>{monthKeys.map((key) => <span key={key}>{quotaReady ? formatValue(quotaValues[key as keyof typeof quotaValues] ?? null) : "Sin dato"}</span>)}</div>
-            <div className={`billing-grid actual-row ${actualReady ? "" : "muted"}`}><b>Actual</b>{monthKeys.map((key) => <span key={key}>{actualReady ? formatValue(actualComparable(key)) : "Sin dato"}</span>)}</div>
-            <div className={`billing-grid ${actualReady ? "" : "muted"}`}><b>Vs. Plan %</b>{monthKeys.map((key) => <span key={key}>{actualReady ? formatValue(variance(actualComparable(key), planValues[key as keyof typeof planValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
-            <div className={`billing-grid ${actualReady ? "" : "muted"}`}><b>Gap vs. Plan</b>{monthKeys.map((key) => <span key={key}>{actualReady ? formatValue(variance(actualComparable(key), planValues[key as keyof typeof planValues] ?? null)) : "Sin dato"}</span>)}</div>
-            <div className={`billing-grid ${actualReady && quotaReady ? "" : "muted"}`}><b>Vs. cuota %</b>{monthKeys.map((key) => <span key={key}>{actualReady && quotaReady ? formatValue(variance(actualComparable(key), quotaValues[key as keyof typeof quotaValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
-            <div className={`billing-grid ${data.priorYear.year && actualReady ? "" : "muted"}`}><b>Año anterior</b>{monthKeys.map((key) => <span key={key}>{data.priorYear.year ? formatValue(priorValues[key as keyof typeof priorValues] ?? null) : "Sin dato"}</span>)}</div>
-            <div className={`billing-grid ${data.priorYear.year && actualReady ? "" : "muted"}`}><b>Variación vs. AA</b>{monthKeys.map((key) => <span key={key}>{data.priorYear.year && actualReady ? formatValue(variance(actualComparable(key), priorValues[key as keyof typeof priorValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
+          <div className="monitor-kpis performance-summary">
+            <article><span>Plan acumulado</span><b>{formatValue(planYtd)}</b><small>hasta el corte</small></article>
+            <article><span>Venta real acumulada</span><b>{actualYtd === null ? "Pendiente" : formatValue(actualYtd)}</b><small>{data.actuals.cutoffDate ?? "sin corte"}</small></article>
+            <article><span>Variación contra Plan</span><b className={ytdVariance !== null && ytdVariance < 0 ? "negative" : "positive"}>{formatValue(ytdVariance, true)}</b><small>acumulado comparable</small></article>
+            <article><span>Desviaciones a atender</span><b>{materialDeviations.length}</b><small>meses fuera del umbral</small></article>
           </div>
+          <details className="monitor-detail">
+            <summary>Ver comparación completa por mes, trimestre y año</summary>
+            <div className="billing-scroll">
+              <div className="billing-grid header"><b>Métrica</b>{periods.map((period) => <span key={period}>{period}</span>)}</div>
+              <div className="billing-grid"><b>Plan</b>{monthKeys.map((key) => <span key={key}>{formatValue(planValues[key as keyof typeof planValues] ?? null)}</span>)}</div>
+              <div className={`billing-grid ${quotaReady ? "" : "muted"}`}><b>Cuota</b>{monthKeys.map((key) => <span key={key}>{quotaReady ? formatValue(quotaValues[key as keyof typeof quotaValues] ?? null) : "Sin dato"}</span>)}</div>
+              <div className={`billing-grid actual-row ${actualReady ? "" : "muted"}`}><b>Actual</b>{monthKeys.map((key) => <span key={key}>{actualReady ? formatValue(actualComparable(key)) : "Sin dato"}</span>)}</div>
+              <div className={`billing-grid ${actualReady ? "" : "muted"}`}><b>Vs. Plan %</b>{monthKeys.map((key) => <span key={key}>{actualReady ? formatValue(variance(actualComparable(key), planValues[key as keyof typeof planValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
+              <div className={`billing-grid ${actualReady ? "" : "muted"}`}><b>Gap vs. Plan</b>{monthKeys.map((key) => <span key={key}>{actualReady ? formatValue(variance(actualComparable(key), planValues[key as keyof typeof planValues] ?? null)) : "Sin dato"}</span>)}</div>
+              <div className={`billing-grid ${actualReady && quotaReady ? "" : "muted"}`}><b>Vs. cuota %</b>{monthKeys.map((key) => <span key={key}>{actualReady && quotaReady ? formatValue(variance(actualComparable(key), quotaValues[key as keyof typeof quotaValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
+              <div className={`billing-grid ${data.priorYear.year && actualReady ? "" : "muted"}`}><b>Año anterior</b>{monthKeys.map((key) => <span key={key}>{data.priorYear.year ? formatValue(priorValues[key as keyof typeof priorValues] ?? null) : "Sin dato"}</span>)}</div>
+              <div className={`billing-grid ${data.priorYear.year && actualReady ? "" : "muted"}`}><b>Variación vs. AA</b>{monthKeys.map((key) => <span key={key}>{data.priorYear.year && actualReady ? formatValue(variance(actualComparable(key), priorValues[key as keyof typeof priorValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
+            </div>
+          </details>
           <div className="billing-note"><b>Comparaciones protegidas</b><span>Los cálculos sólo usan cuenta, SKU, periodo y moneda que coinciden con el Plan. YTD termina en el mes de la fecha de corte recibida.</span></div>
           <div className="deviation-callout"><div><b>{materialDeviations.length} desviaciones requieren explicación</b><span>Umbral operativo del MVP: diferencia absoluta de 5% contra el Plan. No sustituye una política corporativa.</span></div><button className="primary" onClick={() => setView("actions")}>Gestionar desviaciones →</button></div>
         </section>
