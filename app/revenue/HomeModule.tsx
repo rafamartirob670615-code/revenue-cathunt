@@ -9,14 +9,14 @@ export default function HomeModule({
   onCreate,
   onOpen,
   onMonitor,
-  onNavigate,
+  onWork,
 }: {
   identity: RevenueIdentity;
   plans: DashboardPlan[];
   onCreate: () => void;
   onOpen: (id: string) => void;
   onMonitor: (id: string) => void;
-  onNavigate: (module: RevenueModule) => void;
+  onWork: (module: RevenueModule) => void;
 }) {
   const monitorable = plans.filter((plan) => ["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(plan.status));
   return (
@@ -28,10 +28,10 @@ export default function HomeModule({
         <div><small>Trabajo pendiente</small><b>{plans[0]?.nextAction ?? "Crear el primer Plan"}</b><span>Las tareas de otras áreas permanecen visibles, con dueño.</span></div>
       </section>
       <section className="contribution-lanes" aria-label="Aportaciones por función">
-        <button onClick={() => onNavigate("plan-marketing")}><small>Marketing</small><b>Registrar mi Plan de Marketing</b><span>Importar un archivo o construir campañas, temporadas y lanzamientos.</span><strong>→</strong></button>
-        <button onClick={() => onNavigate("plan-trade")}><small>Trade Marketing</small><b>Entregar promociones y ejecución</b><span>Recibir la app de promociones o construir actividades de la cadena.</span><strong>→</strong></button>
+        <button onClick={() => onWork("plan-marketing")}><small>Marketing</small><b>Registrar mi Plan de Marketing</b><span>Importar un archivo o construir campañas, temporadas y lanzamientos.</span><strong>→</strong></button>
+        <button onClick={() => onWork("plan-trade")}><small>Trade Marketing</small><b>Entregar promociones y ejecución</b><span>Recibir la app de promociones o construir actividades de la cadena.</span><strong>→</strong></button>
         <button onClick={onCreate}><small>Responsable del Plan</small><b>Integrar una cuenta</b><span>Conectar histórico, aportaciones y economía en una sola versión.</span><strong>→</strong></button>
-        <button onClick={() => onNavigate("revision")}><small>Aprobación comercial</small><b>Revisar una versión</b><span>La autoridad comercial revisa y decide; Finanzas únicamente puede consultar.</span><strong>→</strong></button>
+        <button onClick={() => onWork("revision")}><small>Aprobación comercial</small><b>Revisar una versión</b><span>La autoridad comercial revisa y decide; Finanzas únicamente puede consultar.</span><strong>→</strong></button>
       </section>
       <section className="answer-strip">
         <div><span>Planes activos</span><b>{plans.length}</b></div>

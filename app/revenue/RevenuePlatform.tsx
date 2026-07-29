@@ -96,6 +96,9 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
         systemReady: inputs.systemReady ?? false,
         packageIssues: inputs.packageIssues ?? [],
       };
+      const contributionResponse = await fetch(`/api/contributions?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
+      const contributionBody = await contributionResponse.json() as { ok: boolean; contributions?: Contribution[] };
+      if (contributionResponse.ok && contributionBody.ok) next.contributions = contributionBody.contributions ?? [];
       if (next.accepted) {
         const baselineResponse = await fetch(`/api/baseline?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
         const baseline = await baselineResponse.json() as { ok: boolean; result?: BaselineResult | null; review?: BaselineReview | null };
@@ -105,14 +108,9 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
         }
       }
       if (next.review?.status === "APPROVED_FROZEN") {
-        const [growthResponse, contributionResponse] = await Promise.all([
-          fetch(`/api/growth?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" }),
-          fetch(`/api/contributions?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" }),
-        ]);
+        const growthResponse = await fetch(`/api/growth?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
         const body = await growthResponse.json() as { ok: boolean; result?: GrowthResult | null };
-        const contributionBody = await contributionResponse.json() as { ok: boolean; contributions?: Contribution[] };
         if (growthResponse.ok && body.ok) next.growth = body.result ?? null;
-        if (contributionResponse.ok && contributionBody.ok) next.contributions = contributionBody.contributions ?? [];
       }
       if (next.growth?.controls.reconciled) {
         const response = await fetch(`/api/result?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
@@ -379,7 +377,11 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
-      active === "inicio" ? <HomeModule identity={identity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onNavigate={navigate} /> :
+      active === "inicio" ? <HomeModule identity={identity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onWork={(module) => {
+        const candidate = dashboardPlans.find((plan) => !/simulaci|revenue lab/i.test(`${plan.company} ${plan.account}`)) ?? dashboardPlans[0];
+        if (candidate) openDashboardPlan(candidate.id, module);
+        else navigate(module);
+      }} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
