@@ -20,6 +20,27 @@ type ReceivedFile = {
     accountIds: string[];
     skuIds: string[];
     periods: string[];
+    currencies?: string[];
+    workbook?: {
+      sheetNames: string[];
+      selectedSheet: string | null;
+      headerRow: number | null;
+      sourceHeaders: string[];
+      mapping: Partial<Record<"account_id" | "sku_id" | "period" | "units" | "value" | "currency", string>>;
+      confidence: number;
+      sourceRowCount: number;
+      validRowCount: number;
+      rejectedRowCount: number;
+      coverageMonths: number;
+      preview: Array<{
+        account_id: string;
+        sku_id: string;
+        period: string;
+        units: number;
+        value: number;
+        currency: string;
+      }>;
+    };
   };
   receivedAt: string;
   synthetic?: boolean;
@@ -151,6 +172,14 @@ type FinancialSide = {
 };
 
 const currentYear = new Date().getFullYear();
+const salesFieldLabels = {
+  account_id: "Cuenta",
+  sku_id: "Producto / SKU",
+  period: "Periodo",
+  units: "Unidades",
+  value: "Valor",
+  currency: "Moneda",
+};
 
 function activeVersion(plan: Plan) {
   return plan.versions.at(-1);
@@ -1277,13 +1306,20 @@ export default function PlansWorkspace({
             <div className="input-package">
               <div className="input-package-head">
                 <div>
-                  <p className="eyebrow">Paquete controlado · versión 1</p>
-                  <h2>Información necesaria para calcular</h2>
+                  <p className="eyebrow">Centro de datos · versión 1</p>
+                  <h2>Convierte tus archivos en información utilizable</h2>
                   <p>{receivedFiles.length
-                    ? "REVENUE valida estructura, cobertura y correspondencias antes de permitir el cálculo."
-                    : "REVENUE no calculará el baseline hasta que los cuatro esenciales estén completos y validados."}</p>
+                    ? "REVENUE preserva el original, explica cómo lo interpretó y valida la información antes de calcular."
+                    : "Empieza con el Excel de historia de ventas. No necesitas convertirlo ni cambiar sus encabezados."}</p>
                 </div>
                 <span className={essentialReady === 4 && packageIssues.length === 0 ? "pill good" : "pill danger"}>{essentialReady} de 4 esenciales listos</span>
+              </div>
+              <div className="data-center-principle">
+                <span>01</span>
+                <div>
+                  <b>Lo más importante de REVENUE es la información</b>
+                  <p>Sube el archivo que ya produce tu empresa. REVENUE localizará la tabla, propondrá equivalencias y separará el original del dataset que usará el Plan.</p>
+                </div>
               </div>
               <div className="synthetic-package-card">
                 <div>
@@ -1330,6 +1366,59 @@ export default function PlansWorkspace({
                             </span>
                           </div>
                         )}
+                        {received?.summary.workbook && (
+                          <div className="workbook-analysis">
+                            <div className="workbook-analysis-head">
+                              <div>
+                                <small>Hoja elegida</small>
+                                <b>{received.summary.workbook.selectedSheet ?? "Sin identificar"}</b>
+                              </div>
+                              <div>
+                                <small>Encabezados</small>
+                                <b>{received.summary.workbook.headerRow ? `Fila ${received.summary.workbook.headerRow}` : "Pendientes"}</b>
+                              </div>
+                              <div>
+                                <small>Confianza</small>
+                                <b>{received.summary.workbook.confidence}%</b>
+                              </div>
+                              <div>
+                                <small>Cobertura</small>
+                                <b>{received.summary.workbook.coverageMonths} meses</b>
+                              </div>
+                            </div>
+                            <p className="workbook-sheets">
+                              Hojas encontradas: {received.summary.workbook.sheetNames.join(", ")}
+                            </p>
+                            <div className="mapping-grid">
+                              {Object.entries(salesFieldLabels).map(([field, label]) => (
+                                <div key={field}>
+                                  <span>{label}</span>
+                                  <b>{received.summary.workbook?.mapping[field as keyof typeof salesFieldLabels] ?? "No identificado"}</b>
+                                </div>
+                              ))}
+                            </div>
+                            {received.summary.workbook.preview.length > 0 && (
+                              <div className="canonical-preview">
+                                <div className="canonical-preview-head">
+                                  <b>Vista del dataset canónico</b>
+                                  <span>{received.summary.workbook.validRowCount} filas válidas · {received.summary.workbook.rejectedRowCount} rechazadas</span>
+                                </div>
+                                <div className="canonical-table">
+                                  <div className="canonical-row heading">
+                                    <span>Cuenta</span><span>SKU</span><span>Periodo</span><span>Unidades</span><span>Valor</span><span>Moneda</span>
+                                  </div>
+                                  {received.summary.workbook.preview.map((row, index) => (
+                                    <div className="canonical-row" key={`${row.account_id}-${row.sku_id}-${row.period}-${index}`}>
+                                      <span>{row.account_id}</span><span>{row.sku_id}</span><span>{row.period}</span>
+                                      <span>{row.units.toLocaleString("es-MX")}</span>
+                                      <span>{row.value.toLocaleString("es-MX")}</span><span>{row.currency}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="input-upload">
                         <strong>{received?.status === "READY" ? "Estructura lista" : received ? "Incompleto" : item?.status === "NOT_RECEIVED" ? "No recibido" : item?.status}</strong>
@@ -1341,10 +1430,16 @@ export default function PlansWorkspace({
                           ↓ Descargar plantilla
                         </button>
                         <label className="secondary file-button">
-                          {uploadingRequirement === requirement.id ? "Validando…" : received ? "Reemplazar CSV" : "Seleccionar CSV"}
+                          {uploadingRequirement === requirement.id
+                            ? "Leyendo archivo…"
+                            : requirement.id === "sales-history"
+                              ? received ? "Reemplazar Excel o CSV" : "Seleccionar Excel o CSV"
+                              : received ? "Reemplazar CSV" : "Seleccionar CSV"}
                           <input
                             type="file"
-                            accept=".csv,text/csv"
+                            accept={requirement.id === "sales-history"
+                              ? ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                              : ".csv,text/csv"}
                             disabled={uploadingRequirement === requirement.id}
                             onChange={(event) => void uploadInput(requirement.id, event.target.files?.[0])}
                           />

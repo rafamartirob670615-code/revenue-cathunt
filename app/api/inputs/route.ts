@@ -1,10 +1,15 @@
 import { env } from "cloudflare:workers";
+import * as XLSX from "xlsx";
 import {
   canAcceptInputPackage,
   PILOT_INPUT_REQUIREMENTS,
   validateCsvContent,
   validatePackageCorrespondence,
 } from "../../../domain/input-package.ts";
+import {
+  analyzeSalesWorkbook,
+  type WorkbookCell,
+} from "../../../domain/excel-intake.ts";
 import { createSyntheticPilotPackage } from "../../../domain/synthetic-pilot.ts";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 
@@ -122,27 +127,111 @@ export async function POST(request: Request) {
     if (!planId || !PILOT_INPUT_REQUIREMENTS.some((item) => item.id === requirementId)) {
       throw new Error("Plan o tipo de información no reconocido");
     }
-    if (!(file instanceof File)) throw new Error("Selecciona un archivo CSV");
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      throw new Error("Por ahora utiliza CSV. El archivo Excel no fue cargado ni marcado como válido.");
+    if (!(file instanceof File)) throw new Error("Selecciona un archivo Excel o CSV");
+    const extension = file.name.toLowerCase().split(".").at(-1);
+    const isExcel = extension === "xlsx" || extension === "xls";
+    const isCsv = extension === "csv";
+    if (!isExcel && !isCsv) {
+      throw new Error("Utiliza un archivo Excel (.xlsx o .xls) o CSV.");
     }
-    if (file.size === 0 || file.size > 5_000_000) {
-      throw new Error("El archivo debe contener información y pesar menos de 5 MB");
+    if (isExcel && requirementId !== "sales-history") {
+      throw new Error("La primera ingesta inteligente de Excel está habilitada para Historia de ventas.");
+    }
+    if (file.size === 0 || file.size > 20_000_000) {
+      throw new Error("El archivo debe contener información y pesar menos de 20 MB");
     }
     await assertPlanOwner(planId, ownerId);
     const bytes = await file.arrayBuffer();
-    const text = new TextDecoder().decode(bytes);
-    const validation = validateCsvContent(requirementId, text);
-    const missingFields = validation.issues
-      .filter((issue) => issue.code === "MISSING_FIELDS")
-      .flatMap((issue) =>
-        issue.message.replace(/^Faltan columnas:\s*/, "").replace(/\.$/, "").split(", ").filter(Boolean),
-      );
+    let status: "READY" | "INCOMPLETE";
+    let issues: Array<{ code: string; message: string; rows?: number[] }>;
+    let summary: Record<string, unknown>;
+    let missingFields: string[];
+    let canonicalPayload: string | null = null;
+    let selectedSheet: string | null = null;
+    let headerRow: number | null = null;
+    let mapping: Record<string, string> = {};
+    if (isExcel) {
+      let workbook: XLSX.WorkBook;
+      try {
+        workbook = XLSX.read(bytes, {
+          type: "array",
+          cellDates: true,
+          dense: true,
+          sheetRows: 100_001,
+        });
+      } catch {
+        throw new Error("No pudimos abrir el libro. Comprueba que sea un Excel válido y no esté protegido.");
+      }
+      const sheets = workbook.SheetNames.map((name) => ({
+        name,
+        rows: XLSX.utils.sheet_to_json<WorkbookCell[]>(workbook.Sheets[name], {
+          header: 1,
+          raw: true,
+          defval: null,
+          blankrows: false,
+        }),
+      }));
+      const analysis = analyzeSalesWorkbook(sheets);
+      status = analysis.status;
+      issues = analysis.issues;
+      selectedSheet = analysis.selectedSheet;
+      headerRow = analysis.headerRow;
+      mapping = analysis.mapping as Record<string, string>;
+      missingFields = analysis.issues
+        .filter((issue) => issue.code === "MISSING_FIELDS")
+        .flatMap((issue) => issue.message.replace(/^Falta identificar:\s*/, "").replace(/\.$/, "").split(", ").filter(Boolean));
+      summary = {
+        rowCount: analysis.summary.validRowCount,
+        accountIds: analysis.summary.accountIds,
+        skuIds: analysis.summary.skuIds,
+        periods: analysis.summary.periods,
+        currencies: analysis.summary.currencies,
+        workbook: {
+          sheetNames: analysis.sheetNames,
+          selectedSheet: analysis.selectedSheet,
+          headerRow: analysis.headerRow,
+          sourceHeaders: analysis.sourceHeaders,
+          mapping: analysis.mapping,
+          confidence: analysis.confidence,
+          sourceRowCount: analysis.summary.rowCount,
+          validRowCount: analysis.summary.validRowCount,
+          rejectedRowCount: analysis.summary.rejectedRowCount,
+          coverageMonths: analysis.summary.coverageMonths,
+          preview: analysis.canonicalRows.slice(0, 5),
+        },
+      };
+      canonicalPayload = JSON.stringify({
+        contract: "REVENUE-CANONICAL-SALES-V1",
+        source: {
+          originalName: file.name,
+          selectedSheet: analysis.selectedSheet,
+          headerRow: analysis.headerRow,
+          mapping: analysis.mapping,
+        },
+        rows: analysis.canonicalRows,
+      });
+    } else {
+      const text = new TextDecoder().decode(bytes);
+      const validation = validateCsvContent(requirementId, text);
+      status = validation.status;
+      issues = validation.issues;
+      summary = validation.summary;
+      missingFields = validation.issues
+        .filter((issue) => issue.code === "MISSING_FIELDS")
+        .flatMap((issue) =>
+          issue.message.replace(/^Faltan columnas:\s*/, "").replace(/\.$/, "").split(", ").filter(Boolean),
+        );
+    }
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     const checksum = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
     const receivedAt = new Date().toISOString();
-    const objectKey = `${ownerId}/${planId}/${requirementId}/${checksum}.csv`;
-    await files().put(objectKey, bytes, { httpMetadata: { contentType: "text/csv" } });
+    const objectKey = `${ownerId}/${planId}/${requirementId}/source/${checksum}.${extension}`;
+    const contentType = isExcel
+      ? extension === "xls"
+        ? "application/vnd.ms-excel"
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      : "text/csv";
+    await files().put(objectKey, bytes, { httpMetadata: { contentType } });
     const id = `input:${crypto.randomUUID()}`;
     await database()
       .prepare(
@@ -157,11 +246,47 @@ export async function POST(request: Request) {
         summary_json=excluded.summary_json, received_at=excluded.received_at`,
       )
       .bind(
-        id, planId, requirementId, ownerId, file.name, objectKey, "text/csv",
-        file.size, checksum, validation.status, JSON.stringify(missingFields),
-        JSON.stringify(validation.issues), JSON.stringify(validation.summary), receivedAt,
+        id, planId, requirementId, ownerId, file.name, objectKey, contentType,
+        file.size, checksum, status, JSON.stringify(missingFields),
+        JSON.stringify(issues), JSON.stringify(summary), receivedAt,
       )
       .run();
+    if (canonicalPayload) {
+      const canonicalBytes = new TextEncoder().encode(canonicalPayload);
+      const canonicalObjectKey = `${ownerId}/${planId}/${requirementId}/canonical/${checksum}.json`;
+      await files().put(
+        canonicalObjectKey,
+        canonicalBytes.buffer.slice(
+          canonicalBytes.byteOffset,
+          canonicalBytes.byteOffset + canonicalBytes.byteLength,
+        ) as ArrayBuffer,
+        { httpMetadata: { contentType: "application/json" } },
+      );
+      await database()
+        .prepare(
+          `INSERT INTO canonical_datasets
+          (id, plan_id, requirement_id, owner_id, source_checksum, source_object_key,
+          canonical_object_key, selected_sheet, header_row, mapping_json, summary_json, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(plan_id, requirement_id) DO UPDATE SET
+          id=excluded.id, owner_id=excluded.owner_id, source_checksum=excluded.source_checksum,
+          source_object_key=excluded.source_object_key, canonical_object_key=excluded.canonical_object_key,
+          selected_sheet=excluded.selected_sheet, header_row=excluded.header_row,
+          mapping_json=excluded.mapping_json, summary_json=excluded.summary_json,
+          status=excluded.status, created_at=excluded.created_at`,
+        )
+        .bind(
+          `dataset:${crypto.randomUUID()}`, planId, requirementId, ownerId, checksum,
+          objectKey, canonicalObjectKey, selectedSheet, headerRow, JSON.stringify(mapping),
+          JSON.stringify(summary), status, receivedAt,
+        )
+        .run();
+    } else {
+      await database()
+        .prepare("DELETE FROM canonical_datasets WHERE plan_id = ? AND requirement_id = ?")
+        .bind(planId, requirementId)
+        .run();
+    }
     await database()
       .prepare("DELETE FROM input_package_reviews WHERE plan_id = ?")
       .bind(planId)
@@ -173,10 +298,10 @@ export async function POST(request: Request) {
         originalName: file.name,
         sizeBytes: file.size,
         checksum,
-        status: validation.status,
+        status,
         missingFields,
-        issues: validation.issues,
-        summary: validation.summary,
+        issues,
+        summary,
         receivedAt,
       },
     });
@@ -202,6 +327,7 @@ export async function PUT(request: Request) {
     const generated = createSyntheticPilotPackage(plan.year, plan.accountId);
     const receivedAt = new Date().toISOString();
     await database().prepare("DELETE FROM input_package_files WHERE plan_id = ? AND owner_id = ?").bind(planId,ownerId).run();
+    await database().prepare("DELETE FROM canonical_datasets WHERE plan_id = ? AND owner_id = ?").bind(planId,ownerId).run();
 
     for (const item of generated) {
       const bytes = new TextEncoder().encode(item.content);

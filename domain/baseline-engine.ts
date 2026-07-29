@@ -1,4 +1,5 @@
 import { parseCsv } from "./input-package.ts";
+import type { CanonicalSalesRow } from "./excel-intake.ts";
 
 export interface BaselineLine {
   accountId: string;
@@ -34,6 +35,41 @@ export function calculateBaselineFromAcceptedPackage(input: {
   synthetic: boolean;
 }): BaselineCalculation {
   const sales = records(input.salesCsv);
+  return calculateBaseline({
+    sales,
+    activitiesCsv: input.activitiesCsv,
+    targetYear: input.targetYear,
+    synthetic: input.synthetic,
+  });
+}
+
+export function calculateBaselineFromCanonicalSales(input: {
+  sales: CanonicalSalesRow[];
+  activitiesCsv?: string;
+  targetYear: number;
+}): BaselineCalculation {
+  return calculateBaseline({
+    sales: input.sales.map((row) => ({
+      account_id: row.account_id,
+      sku_id: row.sku_id,
+      period: row.period,
+      units: String(row.units),
+      value: String(row.value),
+      currency: row.currency,
+    })),
+    activitiesCsv: input.activitiesCsv,
+    targetYear: input.targetYear,
+    synthetic: false,
+  });
+}
+
+function calculateBaseline(input: {
+  sales: Array<Record<string, string>>;
+  activitiesCsv?: string;
+  targetYear: number;
+  synthetic: boolean;
+}): BaselineCalculation {
+  const sales = input.sales;
   if (!sales.length) throw new Error("La historia aceptada no contiene ventas para calcular");
   const activities = input.activitiesCsv ? records(input.activitiesCsv) : [];
   const activityImpact = new Map<string, number>();

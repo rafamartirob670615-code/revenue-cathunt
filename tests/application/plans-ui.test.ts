@@ -25,7 +25,10 @@ test("el checklist muestra requisitos pendientes y conserva bloqueado el baselin
   assert.match(source, /No recibido/);
   assert.match(source, /no completa este paquete/);
   assert.match(source, />Baseline<\/button>/);
-  assert.match(source, /Seleccionar CSV/);
+  assert.match(source, /Seleccionar Excel o CSV/);
+  assert.match(source, /Centro de datos/);
+  assert.match(source, /Hoja elegida/);
+  assert.match(source, /Vista del dataset canónico/);
   assert.match(source, /received\.issues/);
   assert.match(source, /correspondencias pendientes/);
   assert.match(source, /Descargar plantilla/);

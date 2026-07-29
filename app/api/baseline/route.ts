@@ -1,5 +1,9 @@
 import { env } from "cloudflare:workers";
-import { calculateBaselineFromAcceptedPackage } from "../../../domain/baseline-engine.ts";
+import {
+  calculateBaselineFromAcceptedPackage,
+  calculateBaselineFromCanonicalSales,
+} from "../../../domain/baseline-engine.ts";
+import type { CanonicalSalesRow } from "../../../domain/excel-intake.ts";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 
 export const runtime = "edge";
@@ -105,16 +109,35 @@ export async function POST(request: Request) {
     const salesRow = rows.find((row) => row.requirement_id === "sales-history");
     if (!salesRow) throw new Error("Falta la historia de ventas aceptada");
     const activityRow = rows.find((row) => row.requirement_id === "activity-history");
-    const salesObject = await files().get(salesRow.object_key);
     const activityObject = activityRow ? await files().get(activityRow.object_key) : null;
-    if (!salesObject) throw new Error("No fue posible leer la historia aceptada");
     const synthetic = rows.every((row) => row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_"));
-    const result = calculateBaselineFromAcceptedPackage({
-      salesCsv: await salesObject.text(),
-      activitiesCsv: activityObject ? await activityObject.text() : undefined,
-      targetYear: plan.year,
-      synthetic,
-    });
+    const activityCsv = activityObject ? await activityObject.text() : undefined;
+    const canonical = await database()
+      .prepare(
+        "SELECT canonical_object_key, status FROM canonical_datasets WHERE plan_id = ? AND requirement_id = 'sales-history' AND owner_id = ?",
+      )
+      .bind(planId, ownerId)
+      .first<{ canonical_object_key: string; status: string }>();
+    let result;
+    if (canonical?.status === "READY") {
+      const canonicalObject = await files().get(canonical.canonical_object_key);
+      if (!canonicalObject) throw new Error("No fue posible leer el dataset canónico aceptado");
+      const payload = JSON.parse(await canonicalObject.text()) as { rows?: CanonicalSalesRow[] };
+      result = calculateBaselineFromCanonicalSales({
+        sales: payload.rows ?? [],
+        activitiesCsv: activityCsv,
+        targetYear: plan.year,
+      });
+    } else {
+      const salesObject = await files().get(salesRow.object_key);
+      if (!salesObject) throw new Error("No fue posible leer la historia aceptada");
+      result = calculateBaselineFromAcceptedPackage({
+        salesCsv: await salesObject.text(),
+        activitiesCsv: activityCsv,
+        targetYear: plan.year,
+        synthetic,
+      });
+    }
     const calculatedAt = new Date().toISOString();
     await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM plan_results WHERE plan_id = ?").bind(planId).run();

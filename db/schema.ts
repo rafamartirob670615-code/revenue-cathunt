@@ -261,6 +261,29 @@ export const inputPackageReviews = sqliteTable("input_package_reviews", {
   acceptedAt: text("accepted_at").notNull(),
 });
 
+export const canonicalDatasets = sqliteTable(
+  "canonical_datasets",
+  {
+    id: text("id").primaryKey(),
+    planId: text("plan_id").notNull(),
+    requirementId: text("requirement_id").notNull(),
+    ownerId: text("owner_id").notNull(),
+    sourceChecksum: text("source_checksum").notNull(),
+    sourceObjectKey: text("source_object_key").notNull(),
+    canonicalObjectKey: text("canonical_object_key").notNull(),
+    selectedSheet: text("selected_sheet"),
+    headerRow: integer("header_row"),
+    mappingJson: text("mapping_json").notNull(),
+    summaryJson: text("summary_json").notNull(),
+    status: text("status").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("canonical_dataset_plan_requirement_uq").on(table.planId, table.requirementId),
+    index("canonical_dataset_plan_idx").on(table.planId),
+  ],
+);
+
 export const baselineCalculations = sqliteTable("baseline_calculations", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
