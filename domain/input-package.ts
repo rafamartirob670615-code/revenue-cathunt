@@ -97,6 +97,36 @@ export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
     suggestedOwner: "Trade Marketing",
     requiredFields: ["activity_id","activity_name","account_id","sku_id","start_period","end_period","corporate_gross_units","allocation_share","cannibalization_units","halo_units","pull_forward_units","interaction_units","evidence"],
   },
+  {
+    id: "commercial-conditions",
+    name: "Condiciones comerciales",
+    purpose: "Convertir GSV en NSV con los descuentos y deducciones pactados para la cuenta.",
+    criticality: "CONDITIONAL",
+    minimumCoverage: "Cuenta, SKU y vigencias del año del Plan.",
+    expectedGrain: "Cuenta × SKU × vigencia, con tasas y evidencia aprobada.",
+    suggestedOwner: "Finanzas Comercial y Ventas",
+    requiredFields: ["account_id","sku_id","valid_from","discount_rate","rebate_rate","returns_rate","other_deduction_rate","evidence"],
+  },
+  {
+    id: "product-costs",
+    name: "Costos por producto",
+    purpose: "Calcular COGS y margen con costo vigente por SKU.",
+    criticality: "CONDITIONAL",
+    minimumCoverage: "Todos los SKU y vigencias del año del Plan.",
+    expectedGrain: "SKU × vigencia, con costo unitario y moneda.",
+    suggestedOwner: "Finanzas",
+    requiredFields: ["sku_id","valid_from","unit_cost","currency","evidence"],
+  },
+  {
+    id: "activity-investments",
+    name: "Inversión de actividades",
+    purpose: "Restar la inversión aprobada de Marketing y Trade Marketing para calcular contribución.",
+    criticality: "CONDITIONAL",
+    minimumCoverage: "Todas las actividades incorporadas al Crecimiento.",
+    expectedGrain: "Actividad × cuenta × SKU × periodo, con inversión y moneda.",
+    suggestedOwner: "Marketing y Trade Marketing",
+    requiredFields: ["activity_id","account_id","sku_id","period","investment_value","currency","evidence"],
+  },
   { id:"sales-quota", name:"Cuota comercial", purpose:"Comparar el Plan y el desempeño contra la cuota autorizada.", criticality:"CONDITIONAL", minimumCoverage:"Los 12 meses del año del Plan para cada cuenta o SKU aplicable.", expectedGrain:"Cuenta × SKU × mes, con cuota en unidades o valor y moneda identificados.", suggestedOwner:"Dirección Comercial", requiredFields:["account_id","sku_id","period","quota_value","currency"] },
   { id:"actual-sales", name:"Ventas actuales", purpose:"Monitorear avance, cobertura y variaciones con fecha de corte.", criticality:"CONDITIONAL", minimumCoverage:"Desde enero hasta el último corte confiable del año del Plan.", expectedGrain:"Cuenta × SKU × periodo × corte, con unidades y valor observados.", suggestedOwner:"Ventas y Finanzas Comercial", requiredFields:["account_id","sku_id","period","cutoff_date","actual_units","actual_value","currency"] },
 ] as const;
@@ -262,6 +292,9 @@ export function validateCsvContent(
     "prices-currency": ["price"],
     "sales-quota": ["quota_value"],
     "actual-sales": ["actual_units","actual_value"],
+    "commercial-conditions": ["discount_rate","rebate_rate","returns_rate","other_deduction_rate"],
+    "product-costs": ["unit_cost"],
+    "activity-investments": ["investment_value"],
   };
   const invalidNumericRows = records
     .filter((record) =>
@@ -314,6 +347,9 @@ export function validateCsvContent(
     "activity-history": ["activity_id", "account_id", "sku_id", "start_period", "end_period"],
     "sales-quota": ["account_id","sku_id","period"],
     "actual-sales": ["account_id","sku_id","period","cutoff_date"],
+    "commercial-conditions": ["account_id","sku_id","valid_from"],
+    "product-costs": ["sku_id","valid_from"],
+    "activity-investments": ["activity_id","account_id","sku_id","period"],
   };
   const seen = new Map<string, number>();
   const duplicateRows: number[] = [];

@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 
 export const runtime = "edge";
+interface StoredObject { text(): Promise<string> }
+interface R2BucketLike { get(key:string): Promise<StoredObject|null> }
 
 const SYNTHETIC_PARAMETERS = {
   id: "SYNTHETIC_PNL_PARAMETERS",
@@ -17,6 +19,10 @@ const SYNTHETIC_PARAMETERS = {
 function database(): D1DatabaseLike {
   if (!env.DB) throw new Error("Persistencia no disponible");
   return env.DB as unknown as D1DatabaseLike;
+}
+function files(): R2BucketLike {
+  if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
+  return env.FILES as unknown as R2BucketLike;
 }
 
 function owner(request: Request) {
@@ -37,10 +43,8 @@ async function planResult(planId: string, ownerId: string) {
     .bind(planId, ownerId)
     .first<{ result_json: string; data_classification: string }>();
   if (!row) throw new Error("Consolida primero unidades y valor");
-  if (row.data_classification !== "SYNTHETIC_NON_COMMERCIAL") {
-    throw new Error("Esta compuerta sólo está habilitada para el Plan sintético aislado");
-  }
-  return JSON.parse(row.result_json) as {
+  return {
+    ...(JSON.parse(row.result_json) as {
     currency: string;
     lines: Array<{
       accountId: string;
@@ -53,7 +57,19 @@ async function planResult(planId: string, ownerId: string) {
       planValue: number;
     }>;
     controls: { unitsReconciled: boolean; valueReconciled: boolean };
+    }),
+    dataClassification: row.data_classification,
   };
+}
+
+async function canonicalRows(planId:string, ownerId:string, requirementId:string) {
+  const row=await database().prepare(
+    "SELECT canonical_object_key, status FROM canonical_datasets WHERE plan_id=? AND owner_id=? AND requirement_id=?",
+  ).bind(planId,ownerId,requirementId).first<{canonical_object_key:string;status:string}>();
+  if(!row || row.status!=="READY") throw new Error(`Falta validar ${requirementId}`);
+  const object=await files().get(row.canonical_object_key);
+  if(!object) throw new Error(`No encontramos ${requirementId}`);
+  return (JSON.parse(await object.text()) as {rows:Array<Record<string,string|number>>}).rows;
 }
 
 export async function GET(request: Request) {
@@ -106,6 +122,76 @@ export async function POST(request: Request) {
     const source = await planResult(planId, ownerId);
     if (!source.controls.unitsReconciled || !source.controls.valueReconciled) {
       throw new Error("Unidades y valor deben estar reconciliados");
+    }
+    if(source.dataClassification==="USER_PROVIDED"){
+      const conditions=await canonicalRows(planId,ownerId,"commercial-conditions");
+      const costs=await canonicalRows(planId,ownerId,"product-costs");
+      const investments=await canonicalRows(planId,ownerId,"activity-investments");
+      const growthRow=await database().prepare(
+        "SELECT result_json FROM growth_plans WHERE plan_id=? AND owner_id=?",
+      ).bind(planId,ownerId).first<{result_json:string}>();
+      if(!growthRow) throw new Error("Falta Crecimiento reconciliado");
+      const growth=JSON.parse(growthRow.result_json) as {activities:Array<{id:string;accountId:string;skuId:string;period:string}>};
+      const expectedActivities=new Set(growth.activities.map((a)=>`${a.id}|${a.accountId}|${a.skuId}|${a.period}`));
+      const receivedActivities=new Set(investments.map((a)=>`${a.activity_id}|${a.account_id}|${a.sku_id}|${a.period}`));
+      const missing=[...expectedActivities].filter((key)=>!receivedActivities.has(key));
+      if(missing.length) throw new Error("Faltan inversiones para actividades incorporadas al Crecimiento");
+      const investmentByKey=new Map<string,number>();
+      investments.forEach((row)=>{
+        const key=`${row.account_id}|${row.sku_id}|${row.period}`;
+        investmentByKey.set(key,(investmentByKey.get(key)??0)+Number(row.investment_value));
+      });
+      const realLines=source.lines.map((line)=>{
+        const condition=conditions.filter((row)=>row.account_id===line.accountId&&row.sku_id===line.skuId&&String(row.valid_from)<=line.period)
+          .sort((a,b)=>String(b.valid_from).localeCompare(String(a.valid_from)))[0];
+        const cost=costs.filter((row)=>row.sku_id===line.skuId&&String(row.valid_from)<=line.period)
+          .sort((a,b)=>String(b.valid_from).localeCompare(String(a.valid_from)))[0];
+        if(!condition) throw new Error(`Faltan condiciones comerciales para ${line.accountId} · ${line.skuId}`);
+        if(!cost) throw new Error(`Falta costo para ${line.skuId}`);
+        if(String(cost.currency)!==source.currency) throw new Error(`Moneda de costo incompatible para ${line.skuId}`);
+        const rates=["discount_rate","rebate_rate","returns_rate","other_deduction_rate"].map((field)=>Number(condition[field]));
+        const deductionRate=rates.reduce((sum,value)=>sum+value,0);
+        const unitCost=Number(cost.unit_cost);
+        const build=(units:number,grossSales:number,investment:number)=>{
+          const deductions=Number((grossSales*deductionRate).toFixed(2));
+          const netSales=Number((grossSales-deductions).toFixed(2));
+          const cogs=Number((units*unitCost).toFixed(2));
+          const grossMargin=Number((netSales-cogs).toFixed(2));
+          const contribution=Number((grossMargin-investment).toFixed(2));
+          return {grossSales,deductions,netSales,cogs,grossMargin,investment,contribution,
+            grossMarginRate:netSales===0?null:Number((grossMargin/netSales).toFixed(4)),
+            contributionRate:netSales===0?null:Number((contribution/netSales).toFixed(4))};
+        };
+        const key=`${line.accountId}|${line.skuId}|${line.period}`;
+        const comparator=build(line.baselineUnits,Number((line.baselineUnits*line.unitPrice).toFixed(2)),0);
+        const plan=build(line.planUnits,line.planValue,investmentByKey.get(key)??0);
+        return {accountId:line.accountId,skuId:line.skuId,period:line.period,comparator,plan,
+          contributionVariance:Number((plan.contribution-comparator.contribution).toFixed(2))};
+      });
+      const sumSide=(side:"comparator"|"plan",field:keyof ReturnType<typeof pnl>)=>Number(realLines.reduce((total,line)=>total+Number(line[side][field]??0),0).toFixed(2));
+      const annual=(side:"comparator"|"plan")=>{
+        const grossSales=sumSide(side,"grossSales"),deductions=sumSide(side,"deductions"),netSales=sumSide(side,"netSales"),
+          cogs=sumSide(side,"cogs"),grossMargin=sumSide(side,"grossMargin"),investment=sumSide(side,"investment"),
+          contribution=sumSide(side,"contribution");
+        return {grossSales,deductions,netSales,cogs,grossMargin,investment,contribution,
+          grossMarginRate:netSales===0?null:Number((grossMargin/netSales).toFixed(4)),
+          contributionRate:netSales===0?null:Number((contribution/netSales).toFixed(4))};
+      };
+      const comparatorAnnual=annual("comparator"),planAnnual=annual("plan");
+      const result={dataClassification:"USER_PROVIDED",comparator:{id:"APPROVED_BASELINE_VALUE",name:"Valor del baseline aprobado",explanation:"Baseline aprobado con precios, condiciones y costos vigentes; sin inversión incremental."},
+        parameters:{id:"COMMERCIAL_CONDITIONS_AND_COSTS",version:"1.0.0",
+          deductionRate:planAnnual.grossSales===0?0:Number((planAnnual.deductions/planAnnual.grossSales).toFixed(4)),
+          cogsRateOnNetSales:planAnnual.netSales===0?0:Number((planAnnual.cogs/planAnnual.netSales).toFixed(4)),
+          investmentRateOnIncrementalGross:0,corporatePolicy:true,
+          explanation:"Condiciones comerciales, costos e inversiones provenientes de archivos aprobados."},
+        currency:source.currency,lines:realLines,comparatorAnnual,planAnnual,
+        variance:{netSales:Number((planAnnual.netSales-comparatorAnnual.netSales).toFixed(2)),grossMargin:Number((planAnnual.grossMargin-comparatorAnnual.grossMargin).toFixed(2)),contribution:Number((planAnnual.contribution-comparatorAnnual.contribution).toFixed(2))},
+        controls:{planReconciled:planAnnual.contribution===Number((planAnnual.netSales-planAnnual.cogs-planAnnual.investment).toFixed(2)),comparatorReconciled:comparatorAnnual.contribution===Number((comparatorAnnual.netSales-comparatorAnnual.cogs).toFixed(2)),corporatePolicyApproved:true}};
+      const now=new Date().toISOString();
+      await database().prepare(`INSERT INTO financial_results (plan_id,owner_id,result_json,data_classification,created_at,updated_at)
+        VALUES (?,?,?,'USER_PROVIDED',?,?) ON CONFLICT(plan_id) DO UPDATE SET owner_id=excluded.owner_id,result_json=excluded.result_json,data_classification=excluded.data_classification,updated_at=excluded.updated_at`)
+        .bind(planId,ownerId,JSON.stringify(result),now,now).run();
+      return Response.json({ok:true,result,updatedAt:now});
     }
     const lines = source.lines.map((line) => {
       const comparatorGrossSales = Number((line.baselineUnits * line.unitPrice).toFixed(2));

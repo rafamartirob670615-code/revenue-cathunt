@@ -31,3 +31,14 @@ test("P&L declara comparador, reconcilia y persiste", async () => {
   assert.match(source, /comparatorReconciled/);
   assert.match(source, /INSERT INTO financial_results/);
 });
+
+test("la rentabilidad real exige condiciones, costos e inversión trazables", async () => {
+  const source = await readFile(routeUrl, "utf8");
+  assert.match(source, /commercial-conditions/);
+  assert.match(source, /product-costs/);
+  assert.match(source, /activity-investments/);
+  assert.match(source, /Faltan inversiones para actividades incorporadas al Crecimiento/);
+  assert.match(source, /USER_PROVIDED/);
+  assert.match(source, /grossSales\*deductionRate/);
+  assert.match(source, /units\*unitCost/);
+});

@@ -9,6 +9,7 @@ import {
 import {
   analyzeSalesWorkbook,
   analyzeActivityWorkbook,
+  analyzeFinancialWorkbook,
   type WorkbookCell,
 } from "../../../domain/excel-intake.ts";
 import { createSyntheticPilotPackage } from "../../../domain/synthetic-pilot.ts";
@@ -135,11 +136,12 @@ export async function POST(request: Request) {
     if (!isExcel && !isCsv) {
       throw new Error("Utiliza un archivo Excel (.xlsx o .xls) o CSV.");
     }
-    const intelligentExcelRequirements = new Set(["sales-history", "marketing-plan", "trade-marketing-plan"]);
+    const financialRequirements = new Set(["commercial-conditions","product-costs","activity-investments"]);
+    const intelligentExcelRequirements = new Set(["sales-history", "marketing-plan", "trade-marketing-plan", ...financialRequirements]);
     if (isExcel && !intelligentExcelRequirements.has(requirementId)) {
       throw new Error("Este insumo utiliza por ahora el formato CSV indicado.");
     }
-    if (isCsv && (requirementId === "marketing-plan" || requirementId === "trade-marketing-plan")) {
+    if (isCsv && (requirementId === "marketing-plan" || requirementId === "trade-marketing-plan" || financialRequirements.has(requirementId))) {
       throw new Error("Para construir Crecimiento, carga este plan en Excel (.xlsx o .xls).");
     }
     if (file.size === 0 || file.size > 20_000_000) {
@@ -178,7 +180,9 @@ export async function POST(request: Request) {
       }));
       const analysis = requirementId === "sales-history"
         ? analyzeSalesWorkbook(sheets)
-        : analyzeActivityWorkbook(
+        : financialRequirements.has(requirementId)
+          ? analyzeFinancialWorkbook(sheets, requirementId as "commercial-conditions"|"product-costs"|"activity-investments")
+          : analyzeActivityWorkbook(
             sheets,
             requirementId === "marketing-plan" ? "MARKETING" : "TRADE_MARKETING",
           );
@@ -215,7 +219,9 @@ export async function POST(request: Request) {
       canonicalPayload = JSON.stringify({
         contract: requirementId === "sales-history"
           ? "REVENUE-CANONICAL-SALES-V1"
-          : "REVENUE-CANONICAL-GROWTH-V1",
+          : financialRequirements.has(requirementId)
+            ? "REVENUE-CANONICAL-FINANCIAL-V1"
+            : "REVENUE-CANONICAL-GROWTH-V1",
         source: {
           originalName: file.name,
           selectedSheet: analysis.selectedSheet,

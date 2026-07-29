@@ -423,3 +423,107 @@ export function analyzeActivityWorkbook(
     canonicalRows,
   };
 }
+
+const FINANCIAL_FIELDS = {
+  "commercial-conditions": ["account_id","sku_id","valid_from","discount_rate","rebate_rate","returns_rate","other_deduction_rate","evidence"],
+  "product-costs": ["sku_id","valid_from","unit_cost","currency","evidence"],
+  "activity-investments": ["activity_id","account_id","sku_id","period","investment_value","currency","evidence"],
+} as const;
+export type FinancialRequirement = keyof typeof FINANCIAL_FIELDS;
+
+const financialAliases: Record<string, string[]> = {
+  account_id: ["account id","cuenta","id cuenta","cliente"],
+  sku_id: ["sku id","sku","producto","codigo producto"],
+  valid_from: ["valid from","vigente desde","vigencia","fecha vigencia"],
+  discount_rate: ["discount rate","descuento","tasa descuento"],
+  rebate_rate: ["rebate rate","rebate","tasa rebate","bonificacion"],
+  returns_rate: ["returns rate","devoluciones","tasa devoluciones"],
+  other_deduction_rate: ["other deduction rate","otras deducciones","tasa otras deducciones"],
+  evidence: ["evidence","evidencia","fuente","soporte"],
+  unit_cost: ["unit cost","costo unitario","costo por unidad"],
+  currency: ["currency","moneda","divisa"],
+  activity_id: ["activity id","id actividad","codigo actividad"],
+  period: ["period","periodo","mes"],
+  investment_value: ["investment value","inversion","valor inversion","inversion aprobada"],
+};
+
+export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: FinancialRequirement) {
+  const fields = [...FINANCIAL_FIELDS[requirement]];
+  const candidates = sheets.map((sheet) => {
+    let best: { index: number; score: number; indexes: Record<string, number> } | null = null;
+    sheet.rows.slice(0, 30).forEach((row, index) => {
+      const indexes: Record<string, number> = {};
+      row.forEach((cell, column) => {
+        const header = normalized(cell);
+        const field = fields.find((name) => financialAliases[name].some((alias) => normalized(alias) === header));
+        if (field && indexes[field] === undefined) indexes[field] = column;
+      });
+      const score = Object.keys(indexes).length;
+      if (!best || score > best.score) best = { index, score, indexes };
+    });
+    return { sheet, header: best };
+  }).sort((a,b) => (b.header?.score ?? 0) - (a.header?.score ?? 0));
+  const selected = candidates[0];
+  const header = selected?.header;
+  const sourceHeaders = header ? selected.sheet.rows[header.index].map(asText) : [];
+  const mapping: Record<string,string> = {};
+  if (header) fields.forEach((field) => {
+    const column = header.indexes[field];
+    if (column !== undefined) mapping[field] = sourceHeaders[column] || `Columna ${column + 1}`;
+  });
+  const missing = fields.filter((field) => !mapping[field]);
+  const issues: Array<{code:string;message:string;rows?:number[]}> = [];
+  if (!header || header.score < 3) issues.push({code:"TABLE_NOT_FOUND",message:"No encontramos una tabla financiera reconocible."});
+  else if (missing.length) issues.push({code:"MISSING_FIELDS",message:`Falta identificar: ${missing.join(", ")}.`});
+  const canonicalRows: Array<Record<string,string|number>> = [];
+  const rejectedRows: number[] = [];
+  if (selected && header && !missing.length) {
+    selected.sheet.rows.slice(header.index + 1).forEach((row, offset) => {
+      if (row.every((cell) => asText(cell) === "")) return;
+      const record: Record<string,string|number> = {};
+      let valid = true;
+      for (const field of fields) {
+        const cell = row[header.indexes[field]];
+        if (field.endsWith("_rate") || field === "unit_cost" || field === "investment_value") {
+          let value = asNumber(cell);
+          if (value === null || value < 0) valid = false;
+          if (field.endsWith("_rate") && value !== null && value > 1 && value <= 100) value /= 100;
+          if (field.endsWith("_rate") && value !== null && value > 1) valid = false;
+          record[field] = value ?? 0;
+        } else if (field === "valid_from" || field === "period") {
+          const value = asPeriod(cell);
+          if (!value) valid = false;
+          record[field] = value ?? "";
+        } else {
+          const value = asText(cell);
+          if (!value) valid = false;
+          record[field] = field === "currency" ? value.toUpperCase() : value;
+        }
+      }
+      if (requirement === "commercial-conditions") {
+        const total = ["discount_rate","rebate_rate","returns_rate","other_deduction_rate"]
+          .reduce((sum, field) => sum + Number(record[field]), 0);
+        if (total > 1) valid = false;
+      }
+      if (!valid) rejectedRows.push(header.index + offset + 2);
+      else canonicalRows.push(record);
+    });
+  }
+  if (rejectedRows.length) issues.push({code:"REJECTED_ROWS",message:`${rejectedRows.length} filas tienen valores inválidos.`,rows:rejectedRows.slice(0,20)});
+  if (!canonicalRows.length && header && !missing.length) issues.push({code:"NO_VALID_ROWS",message:"No fue posible convertir ninguna fila."});
+  const periods = [...new Set(canonicalRows.map((row) => String(row.valid_from ?? row.period ?? "")))].sort();
+  return {
+    status: issues.some((issue) => ["TABLE_NOT_FOUND","MISSING_FIELDS","NO_VALID_ROWS"].includes(issue.code)) ? "INCOMPLETE" as const : "READY" as const,
+    selectedSheet:selected?.sheet.name ?? null, sheetNames:sheets.map((sheet)=>sheet.name),
+    headerRow:header ? header.index + 1 : null, sourceHeaders, mapping,
+    confidence:header ? Math.round((header.score / fields.length) * 100) : 0, issues,
+    summary:{
+      rowCount:canonicalRows.length + rejectedRows.length, validRowCount:canonicalRows.length,
+      rejectedRowCount:rejectedRows.length,
+      accountIds:[...new Set(canonicalRows.map((row)=>String(row.account_id ?? "")).filter(Boolean))].sort(),
+      skuIds:[...new Set(canonicalRows.map((row)=>String(row.sku_id ?? "")).filter(Boolean))].sort(),
+      periods, currencies:[...new Set(canonicalRows.map((row)=>String(row.currency ?? "")).filter(Boolean))].sort(),
+    },
+    canonicalRows,
+  };
+}

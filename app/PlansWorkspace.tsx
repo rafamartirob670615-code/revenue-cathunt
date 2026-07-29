@@ -139,7 +139,7 @@ type PlanResult = {
   };
 };
 type ProfitabilityResult = {
-  dataClassification: "SYNTHETIC_NON_COMMERCIAL";
+  dataClassification: "SYNTHETIC_NON_COMMERCIAL" | "USER_PROVIDED";
   comparator: { id: string; name: string; explanation: string };
   parameters: {
     id: string;
@@ -147,7 +147,7 @@ type ProfitabilityResult = {
     deductionRate: number;
     cogsRateOnNetSales: number;
     investmentRateOnIncrementalGross: number;
-    corporatePolicy: false;
+    corporatePolicy: boolean;
     explanation: string;
   };
   currency: string;
@@ -1114,13 +1114,13 @@ export default function PlansWorkspace({
                   <section className="profitability-section">
                     <div className="section-copy">
                       <p className="eyebrow">Rentabilidad · comparador declarado</p>
-                      <h3>{profitability ? "P&L sintético reconciliado" : "Construir rentabilidad sin asumir reglas corporativas"}</h3>
-                      <p>Comparador: valor del baseline aprobado. Los parámetros financieros son artificiales, visibles y versionados.</p>
+                      <h3>{profitability ? (profitability.dataClassification==="USER_PROVIDED" ? "Rentabilidad real reconciliada" : "P&L sintético reconciliado") : "Construir rentabilidad desde condiciones comerciales"}</h3>
+                      <p>Comparador: valor del baseline aprobado. La app separa GSV, condiciones comerciales, NSV, costos, margen, inversión y contribución.</p>
                     </div>
                     {profitability ? (
                       <>
                         <div className="financial-warning">
-                          <b>PARÁMETROS SINTÉTICOS — NO SON POLÍTICA CORPORATIVA</b>
+                          <b>{profitability.dataClassification==="USER_PROVIDED" ? "CONDICIONES COMERCIALES Y COSTOS — TRAZABLES" : "PARÁMETROS SINTÉTICOS — NO SON CONDICIONES COMERCIALES"}</b>
                           <span>{profitability.parameters.explanation}</span>
                         </div>
                         <div className="financial-parameters">
@@ -1130,7 +1130,7 @@ export default function PlansWorkspace({
                           <article><span>Versión</span><b>{profitability.parameters.version}</b><small>{profitability.parameters.id}</small></article>
                         </div>
                         <div className="pnl-comparison">
-                          <div className="pnl-head"><span>Concepto</span><span>{profitability.comparator.name}</span><span>Plan sintético</span><span>Variación</span></div>
+                          <div className="pnl-head"><span>Concepto</span><span>{profitability.comparator.name}</span><span>{profitability.dataClassification==="USER_PROVIDED" ? "Plan" : "Plan sintético"}</span><span>Variación</span></div>
                           {([
                             ["Gross sales", "grossSales"],
                             ["− Deducciones", "deductions"],
@@ -1157,7 +1157,7 @@ export default function PlansWorkspace({
                       </>
                     ) : (
                       <div className="baseline-next-action">
-                        <div><b>Calcular P&L sintético comparado</b><p>Usará parámetros artificiales explícitos y no declarará políticas corporativas.</p></div>
+                        <div><b>{planResult?.dataClassification==="USER_PROVIDED" ? "Calcular rentabilidad real" : "Calcular P&L sintético comparado"}</b><p>{planResult?.dataClassification==="USER_PROVIDED" ? "Usará condiciones comerciales, costos e inversiones aprobadas desde Datasets." : "Usará parámetros artificiales explícitos y no declarará condiciones comerciales."}</p></div>
                         <button className="primary" onClick={() => void calculateProfitability()} disabled={calculatingProfitability}>{calculatingProfitability ? "Calculando…" : "Calcular rentabilidad"}</button>
                       </div>
                     )}
@@ -1437,12 +1437,12 @@ export default function PlansWorkspace({
                         <label className="secondary file-button">
                           {uploadingRequirement === requirement.id
                             ? "Leyendo archivo…"
-                            : ["sales-history","marketing-plan","trade-marketing-plan"].includes(requirement.id)
+                            : ["sales-history","marketing-plan","trade-marketing-plan","commercial-conditions","product-costs","activity-investments"].includes(requirement.id)
                               ? received ? "Reemplazar Excel o CSV" : "Seleccionar Excel o CSV"
                               : received ? "Reemplazar CSV" : "Seleccionar CSV"}
                           <input
                             type="file"
-                            accept={["sales-history","marketing-plan","trade-marketing-plan"].includes(requirement.id)
+                            accept={["sales-history","marketing-plan","trade-marketing-plan","commercial-conditions","product-costs","activity-investments"].includes(requirement.id)
                               ? ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
                               : ".csv,text/csv"}
                             disabled={uploadingRequirement === requirement.id}

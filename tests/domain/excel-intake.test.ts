@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { analyzeActivityWorkbook, analyzeSalesWorkbook } from "../../domain/excel-intake.ts";
+import { analyzeActivityWorkbook, analyzeFinancialWorkbook, analyzeSalesWorkbook } from "../../domain/excel-intake.ts";
 
 test("detecta una tabla de ventas aunque los encabezados estén en español y no comiencen en la primera fila", () => {
   const rows: Array<Array<string | number | null>> = [
@@ -74,4 +74,27 @@ test("separa filas inválidas y conserva la trazabilidad de la fila fuente", () 
   assert.equal(result.canonicalRows[0].source_sheet, "Export ERP");
   assert.equal(result.canonicalRows[0].source_row, 2);
   assert.ok(result.issues.some((issue) => issue.code === "REJECTED_ROWS"));
+});
+
+test("normaliza condiciones comerciales y bloquea deducciones mayores a cien por ciento", () => {
+  const valid = analyzeFinancialWorkbook([{
+    name: "Condiciones",
+    rows: [
+      ["Cuenta","SKU","Vigencia","Descuento","Rebate","Devoluciones","Otras deducciones","Evidencia"],
+      ["CUENTA-1","SKU-1","2027-01-01",8,3,0.01,0.005,"Acuerdo 2027"],
+    ],
+  }], "commercial-conditions");
+  assert.equal(valid.status, "READY");
+  assert.equal(valid.canonicalRows[0].discount_rate, 0.08);
+  assert.equal(valid.canonicalRows[0].other_deduction_rate, 0.005);
+
+  const invalid = analyzeFinancialWorkbook([{
+    name: "Condiciones",
+    rows: [
+      ["Cuenta","SKU","Vigencia","Descuento","Rebate","Devoluciones","Otras deducciones","Evidencia"],
+      ["CUENTA-1","SKU-1","2027-01-01",80,30,0.01,0.005,"Acuerdo 2027"],
+    ],
+  }], "commercial-conditions");
+  assert.equal(invalid.status, "INCOMPLETE");
+  assert.ok(invalid.issues.some((issue) => issue.code === "REJECTED_ROWS"));
 });
