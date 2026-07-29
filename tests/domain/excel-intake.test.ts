@@ -98,3 +98,18 @@ test("normaliza condiciones comerciales y bloquea deducciones mayores a cien por
   assert.equal(invalid.status, "INCOMPLETE");
   assert.ok(invalid.issues.some((issue) => issue.code === "REJECTED_ROWS"));
 });
+
+test("convierte Actuals con corte y bloquea duplicados económicos", () => {
+  const rows = [
+    ["Cuenta","SKU","Periodo","Fecha corte","Unidades reales","Valor actual","Moneda"],
+    ["CUENTA-1","SKU-1","2027-01","2027-01-31",90,9000,"MXN"],
+  ];
+  const valid = analyzeFinancialWorkbook([{ name:"Actuals", rows }], "actual-sales");
+  assert.equal(valid.status, "READY");
+  assert.equal(valid.canonicalRows[0].cutoff_date, "2027-01-31");
+  assert.equal(valid.canonicalRows[0].actual_value, 9000);
+
+  const duplicate = analyzeFinancialWorkbook([{ name:"Actuals", rows:[...rows, rows[1]] }], "actual-sales");
+  assert.equal(duplicate.status, "INCOMPLETE");
+  assert.ok(duplicate.issues.some((issue) => issue.code === "DUPLICATE_GRAIN"));
+});

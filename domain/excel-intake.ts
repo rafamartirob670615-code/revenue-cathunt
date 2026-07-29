@@ -428,6 +428,8 @@ const FINANCIAL_FIELDS = {
   "commercial-conditions": ["account_id","sku_id","valid_from","discount_rate","rebate_rate","returns_rate","other_deduction_rate","evidence"],
   "product-costs": ["sku_id","valid_from","unit_cost","currency","evidence"],
   "activity-investments": ["activity_id","account_id","sku_id","period","investment_value","currency","evidence"],
+  "sales-quota": ["account_id","sku_id","period","quota_value","currency"],
+  "actual-sales": ["account_id","sku_id","period","cutoff_date","actual_units","actual_value","currency"],
 } as const;
 export type FinancialRequirement = keyof typeof FINANCIAL_FIELDS;
 
@@ -445,6 +447,10 @@ const financialAliases: Record<string, string[]> = {
   activity_id: ["activity id","id actividad","codigo actividad"],
   period: ["period","periodo","mes"],
   investment_value: ["investment value","inversion","valor inversion","inversion aprobada"],
+  quota_value: ["quota value","cuota","valor cuota","presupuesto","budget"],
+  cutoff_date: ["cutoff date","fecha corte","corte","fecha de corte"],
+  actual_units: ["actual units","unidades actuales","unidades real","unidades reales","actual unidades"],
+  actual_value: ["actual value","venta actual","ventas actuales","valor actual","actual","actuals"],
 };
 
 export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: FinancialRequirement) {
@@ -484,7 +490,7 @@ export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: F
       let valid = true;
       for (const field of fields) {
         const cell = row[header.indexes[field]];
-        if (field.endsWith("_rate") || field === "unit_cost" || field === "investment_value") {
+        if (field.endsWith("_rate") || ["unit_cost","investment_value","quota_value","actual_units","actual_value"].includes(field)) {
           let value = asNumber(cell);
           if (value === null || value < 0) valid = false;
           if (field.endsWith("_rate") && value !== null && value > 1 && value <= 100) value /= 100;
@@ -494,6 +500,16 @@ export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: F
           const value = asPeriod(cell);
           if (!value) valid = false;
           record[field] = value ?? "";
+        } else if (field === "cutoff_date") {
+          const period = asPeriod(cell);
+          const text = asText(cell);
+          const date = cell instanceof Date
+            ? cell.toISOString().slice(0, 10)
+            : /^\d{4}-\d{2}-\d{2}/.test(text)
+              ? text.slice(0, 10)
+              : period ? `${period}-01` : "";
+          if (!date) valid = false;
+          record[field] = date;
         } else {
           const value = asText(cell);
           if (!value) valid = false;
@@ -505,15 +521,32 @@ export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: F
           .reduce((sum, field) => sum + Number(record[field]), 0);
         if (total > 1) valid = false;
       }
+      if (requirement === "actual-sales" && String(record.cutoff_date).slice(0, 7) < String(record.period)) valid = false;
       if (!valid) rejectedRows.push(header.index + offset + 2);
       else canonicalRows.push(record);
     });
   }
   if (rejectedRows.length) issues.push({code:"REJECTED_ROWS",message:`${rejectedRows.length} filas tienen valores inválidos.`,rows:rejectedRows.slice(0,20)});
+  const grainFields: Partial<Record<FinancialRequirement, string[]>> = {
+    "commercial-conditions":["account_id","sku_id","valid_from"],
+    "product-costs":["sku_id","valid_from"],
+    "activity-investments":["activity_id","account_id","sku_id","period"],
+    "sales-quota":["account_id","sku_id","period"],
+    "actual-sales":["account_id","sku_id","period","cutoff_date"],
+  };
+  const grain = grainFields[requirement] ?? [];
+  const seen = new Set<string>();
+  const duplicateRows: number[] = [];
+  canonicalRows.forEach((row, index) => {
+    const key = grain.map((field) => String(row[field])).join("|");
+    if (seen.has(key)) duplicateRows.push(index + 2);
+    seen.add(key);
+  });
+  if (duplicateRows.length) issues.push({code:"DUPLICATE_GRAIN",message:"Hay combinaciones económicas duplicadas.",rows:duplicateRows.slice(0,20)});
   if (!canonicalRows.length && header && !missing.length) issues.push({code:"NO_VALID_ROWS",message:"No fue posible convertir ninguna fila."});
   const periods = [...new Set(canonicalRows.map((row) => String(row.valid_from ?? row.period ?? "")))].sort();
   return {
-    status: issues.some((issue) => ["TABLE_NOT_FOUND","MISSING_FIELDS","NO_VALID_ROWS"].includes(issue.code)) ? "INCOMPLETE" as const : "READY" as const,
+    status: issues.some((issue) => ["TABLE_NOT_FOUND","MISSING_FIELDS","NO_VALID_ROWS","DUPLICATE_GRAIN"].includes(issue.code)) ? "INCOMPLETE" as const : "READY" as const,
     selectedSheet:selected?.sheet.name ?? null, sheetNames:sheets.map((sheet)=>sheet.name),
     headerRow:header ? header.index + 1 : null, sourceHeaders, mapping,
     confidence:header ? Math.round((header.score / fields.length) * 100) : 0, issues,

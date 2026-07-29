@@ -136,13 +136,13 @@ export async function POST(request: Request) {
     if (!isExcel && !isCsv) {
       throw new Error("Utiliza un archivo Excel (.xlsx o .xls) o CSV.");
     }
-    const financialRequirements = new Set(["commercial-conditions","product-costs","activity-investments"]);
+    const financialRequirements = new Set(["commercial-conditions","product-costs","activity-investments","sales-quota","actual-sales"]);
     const intelligentExcelRequirements = new Set(["sales-history", "marketing-plan", "trade-marketing-plan", ...financialRequirements]);
     if (isExcel && !intelligentExcelRequirements.has(requirementId)) {
       throw new Error("Este insumo utiliza por ahora el formato CSV indicado.");
     }
     if (isCsv && (requirementId === "marketing-plan" || requirementId === "trade-marketing-plan" || financialRequirements.has(requirementId))) {
-      throw new Error("Para construir Crecimiento, carga este plan en Excel (.xlsx o .xls).");
+      throw new Error("Para este insumo, carga un Excel (.xlsx o .xls).");
     }
     if (file.size === 0 || file.size > 20_000_000) {
       throw new Error("El archivo debe contener información y pesar menos de 20 MB");
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
       const analysis = requirementId === "sales-history"
         ? analyzeSalesWorkbook(sheets)
         : financialRequirements.has(requirementId)
-          ? analyzeFinancialWorkbook(sheets, requirementId as "commercial-conditions"|"product-costs"|"activity-investments")
+          ? analyzeFinancialWorkbook(sheets, requirementId as "commercial-conditions"|"product-costs"|"activity-investments"|"sales-quota"|"actual-sales")
           : analyzeActivityWorkbook(
             sheets,
             requirementId === "marketing-plan" ? "MARKETING" : "TRADE_MARKETING",
