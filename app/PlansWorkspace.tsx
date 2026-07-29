@@ -1614,7 +1614,7 @@ export default function PlansWorkspace({
           )}
         </section>
         <div className="sticky-actions empty-actions">
-          <span>✓ Guardado durable · {baseline ? "baseline técnico persistido" : "ningún resultado ha sido calculado"}</span>
+          <span>✓ {baseline ? "Plan guardado con sus resultados" : "Plan guardado · todavía sin resultados"}</span>
           <button className="secondary" onClick={() => onExit ? onExit() : (setView("portfolio"), void loadPlans())}>Volver al lobby</button>
         </div>
       </div>

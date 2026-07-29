@@ -233,7 +233,7 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
           </div>
           <div className="blocks-table">
             <div className="blocks-row head"><span>Actividad</span><span>Área</span><span>Periodo</span><span>Producto</span><span>Bruto</span><span>Neto</span><span>Estado</span></div>
-            {activities.map((item) => <div className="blocks-row" key={item.id}><b>{item.name}</b><span>{item.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</span><span>{item.period}</span><span>{item.skuId}</span><span>{item.grossUnits.toLocaleString("es-MX")}</span><strong>{item.netUnits.toLocaleString("es-MX")}</strong><small>{item.status}</small></div>)}
+            {activities.map((item) => <div className="blocks-row" key={item.id}><b>{item.name}</b><span>{item.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</span><span>{item.period}</span><span>{item.skuId}</span><span>{item.grossUnits.toLocaleString("es-MX")}</span><strong>{item.netUnits.toLocaleString("es-MX")}</strong><small>{item.status === "IMPORTED_FROM_APPROVED_SOURCE" ? "Fuente aprobada" : "Revisada"}</small></div>)}
             {!activities.length && <div className="monitor-empty">Esta versión no tiene actividades comerciales guardadas.</div>}
           </div>
         </section>
