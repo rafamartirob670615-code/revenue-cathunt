@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
+import { authorizePlan } from "../_access.ts";
 
 export const runtime = "edge";
 interface StoredObject { text(): Promise<string> }
@@ -25,9 +26,6 @@ function files(): R2BucketLike {
   return env.FILES as unknown as R2BucketLike;
 }
 
-function owner(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
-}
 
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos calcular la rentabilidad";
@@ -74,10 +72,9 @@ async function canonicalRows(planId:string, ownerId:string, requirementId:string
 
 export async function GET(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["VIEW_FINANCIALS","PLAN_INTEGRATE","REVIEW","APPROVE"]);
     await planResult(planId, ownerId);
     const row = await database()
       .prepare("SELECT result_json, updated_at FROM financial_results WHERE plan_id = ? AND owner_id = ?")
@@ -114,11 +111,10 @@ function pnl(grossSales: number, investment: number) {
 
 export async function POST(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const source = await planResult(planId, ownerId);
     if (!source.controls.unitsReconciled || !source.controls.valueReconciled) {
       throw new Error("Unidades y valor deben estar reconciliados");

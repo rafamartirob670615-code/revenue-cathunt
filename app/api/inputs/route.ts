@@ -14,15 +14,12 @@ import {
 } from "../../../domain/excel-intake.ts";
 import { createSyntheticPilotPackage } from "../../../domain/synthetic-pilot.ts";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
+import { authorizePlan } from "../_access.ts";
 
 export const runtime = "edge";
 
 interface R2BucketLike {
   put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
-}
-
-function email(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
 }
 
 function database(): D1DatabaseLike {
@@ -35,16 +32,6 @@ function files(): R2BucketLike {
   return env.FILES as unknown as R2BucketLike;
 }
 
-async function assertPlanOwner(planId: string, ownerId: string) {
-  const row = await database()
-    .prepare("SELECT aggregate_json FROM plan_aggregates WHERE plan_id = ?")
-    .bind(planId)
-    .first<{ aggregate_json: string }>();
-  if (!row) throw new Error("Plan no encontrado");
-  const plan = JSON.parse(row.aggregate_json) as { versions?: Array<{ createdBy?: string }> };
-  if (plan.versions?.[0]?.createdBy !== ownerId) throw new Error("Plan no autorizado");
-}
-
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos recibir el archivo";
   const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
@@ -53,11 +40,9 @@ function responseError(error: unknown) {
 
 export async function GET(request: Request) {
   try {
-    const ownerId = email(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const planId = new URL(request.url).searchParams.get("planId");
     if (!planId) throw new Error("planId es obligatorio");
-    await assertPlanOwner(planId, ownerId);
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId);
     const result = await database()
       .prepare(
         "SELECT requirement_id, original_name, size_bytes, checksum, status, missing_fields_json, validation_json, summary_json, received_at FROM input_package_files WHERE plan_id = ? AND owner_id = ? ORDER BY received_at DESC",
@@ -120,8 +105,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ownerId = email(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const form = await request.formData();
     const planId = String(form.get("planId") ?? "");
     const requirementId = String(form.get("requirementId") ?? "");
@@ -147,7 +130,9 @@ export async function POST(request: Request) {
     if (file.size === 0 || file.size > 20_000_000) {
       throw new Error("El archivo debe contener información y pesar menos de 20 MB");
     }
-    await assertPlanOwner(planId, ownerId);
+    const uploadCapability = requirementId === "marketing-plan" ? "MARKETING_CONTRIBUTE"
+      : requirementId === "trade-marketing-plan" ? "TRADE_CONTRIBUTE" : "PLAN_INTEGRATE";
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, [uploadCapability]);
     const bytes = await file.arrayBuffer();
     let status: "READY" | "INCOMPLETE";
     let issues: Array<{ code: string; message: string; rows?: number[] }>;
@@ -332,12 +317,10 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const ownerId = email(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    await assertPlanOwner(planId, ownerId);
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const row = await database()
       .prepare("SELECT aggregate_json FROM plan_aggregates WHERE plan_id = ?")
       .bind(planId)
@@ -399,12 +382,10 @@ export async function PUT(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const ownerId = email(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    await assertPlanOwner(planId, ownerId);
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const result = await database()
       .prepare(
         "SELECT requirement_id, status, checksum, summary_json FROM input_package_files WHERE plan_id = ? AND owner_id = ?",

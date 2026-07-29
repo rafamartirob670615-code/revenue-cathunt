@@ -47,6 +47,7 @@ function friendly(message?: string) {
 }
 
 export default function RevenuePlatform({ identity }: { identity: RevenueIdentity }) {
+  const [effectiveIdentity, setEffectiveIdentity] = useState(identity);
   const [active, setActive] = useState<RevenueModule>("inicio");
   const [dashboardPlans, setDashboardPlans] = useState<DashboardPlan[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -61,16 +62,19 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     setLoading(true);
     setError("");
     try {
-      const [dashboardResponse, plansResponse] = await Promise.all([
+      const [dashboardResponse, plansResponse, accessResponse] = await Promise.all([
         fetch("/api/dashboard", { cache: "no-store" }),
         fetch("/api/plans", { cache: "no-store" }),
+        fetch("/api/access", { cache: "no-store" }),
       ]);
       const dashboard = await dashboardResponse.json() as { ok?: boolean; plans?: DashboardPlan[]; error?: string };
       const planBody = await plansResponse.json() as { ok: boolean; plans?: Plan[]; error?: string };
+      const accessBody = await accessResponse.json() as { ok: boolean; identity?: RevenueIdentity };
       if (!dashboardResponse.ok) throw new Error(dashboard.error);
       if (!plansResponse.ok || !planBody.ok) throw new Error(planBody.error);
       setDashboardPlans(dashboard.plans ?? []);
       setPlans(planBody.plans ?? []);
+      if (accessResponse.ok && accessBody.ok && accessBody.identity) setEffectiveIdentity(accessBody.identity);
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -371,13 +375,18 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       : !(tradeReady || tradeContributionReady)
         ? "Falta una aportación o archivo de Trade Marketing."
         : "Las fuentes están listas.";
+  const can = (capability: RevenueIdentity["capabilities"][number]) => effectiveIdentity.capabilities.includes(capability);
+  const canIntegrate = can("PLAN_INTEGRATE");
+  const canContributeMarketing = can("MARKETING_CONTRIBUTE");
+  const canContributeTrade = can("TRADE_CONTRIBUTE");
+  const financeOnly = can("VIEW_FINANCIALS") && !canIntegrate && !can("REVIEW") && !can("APPROVE");
 
   return (
-    <Shell active={active} plan={selected} identity={identity} completed={completed} onNavigate={navigate}>
+    <Shell active={active} plan={selected} identity={effectiveIdentity} completed={completed} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
-      active === "inicio" ? <HomeModule identity={identity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onWork={(module) => {
+      active === "inicio" ? <HomeModule identity={effectiveIdentity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onWork={(module) => {
         const candidate = dashboardPlans.find((plan) =>
           plans.some((stored) => stored.id === plan.id)
           && !/simulaci|revenue lab/i.test(`${plan.company} ${plan.account}`),
@@ -388,13 +397,13 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeMarketing} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
-      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={startCreate} /> :
+      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <NoPlan onCreate={startCreate} /> :
-      <AdministrationModule />}
+      <AdministrationModule plan={selected} onChanged={loadHome} />}
     </Shell>
   );
 }
@@ -407,6 +416,41 @@ function CreatePlanModule({ busy, onSubmit, onCancel }: { busy: string; onSubmit
   return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Compañía, cuenta, año y moneda acompañarán cada cálculo, decisión y versión." /><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required placeholder="Ej. Liverpool" /></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
-function AdministrationModule() {
-  return <div className="module-page"><ModuleHead eyebrow="Administración" title="La estructura común para todas las aplicaciones" description="Compañías, cuentas, usuarios, permisos y reglas vivirán en una superficie compartida, compatible con la integración futura." /><section className="admin-foundation"><article><b>Compañías y cuentas</b><p>Contexto maestro reutilizable por Plan.</p></article><article><b>Usuarios y permisos</b><p>Acceso privado y responsabilidades por rol.</p></article><article><b>Reglas de gobierno</b><p>Aprobaciones, tolerancias, versiones y controles.</p></article></section></div>;
+function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {
+  const [assignments, setAssignments] = useState<Array<Record<string,string>>>([]);
+  const [message, setMessage] = useState("");
+  const load = useCallback(async () => {
+    if (!plan) return;
+    const response = await fetch(`/api/admin/access?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
+    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; error?: string };
+    if (response.ok && body.ok) setAssignments(body.assignments ?? []);
+    else setMessage(body.error ?? "No pudimos recuperar los accesos.");
+  }, [plan]);
+  useEffect(() => { void load(); }, [load]);
+  async function grant(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!plan) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const response = await fetch("/api/admin/access", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ planId: plan.id, email: form.get("email"), displayName: form.get("displayName"), capability: form.get("capability") }),
+    });
+    const body = await response.json() as { ok: boolean; error?: string };
+    setMessage(response.ok && body.ok ? "Acceso concedido para esta cuenta." : body.error ?? "No pudimos guardar el acceso.");
+    if (response.ok && body.ok) { formElement.reset(); await load(); await onChanged(); }
+  }
+  return <div className="module-page"><ModuleHead eyebrow="Administración" title="Asignaciones por Plan y cuenta" description="Concede únicamente aportación, integración, revisión, aprobación o consulta financiera. Cada permiso queda limitado al Plan activo." />
+    {!plan ? <EmptyAnswer title="Selecciona primero una cuenta" copy="Abre un Plan desde Inicio y vuelve a Administración para asignar a las personas correctas." /> : <>
+      <section className="plain-note"><b>{plan.accountName} · {plan.year}</b><p>Los administradores configuran acceso; no obtienen autoridad comercial por ese hecho.</p></section>
+      <form className="contribution-builder access-form" onSubmit={grant}>
+        <label>Nombre<input name="displayName" required placeholder="Nombre de la persona" /></label>
+        <label>Correo del workspace<input name="email" type="email" required placeholder="persona@empresa.com" /></label>
+        <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option><option value="MARKETING_CONTRIBUTE">Aportar Marketing</option><option value="TRADE_CONTRIBUTE">Aportar Trade Marketing</option><option value="PLAN_INTEGRATE">Integrar Plan (KAM)</option><option value="REVIEW">Revisar comercialmente</option><option value="APPROVE">Aprobar comercialmente</option><option value="VIEW_FINANCIALS">Consultar Finanzas</option></select></label>
+        <button className="clay-primary">Conceder acceso</button>
+      </form>
+      {message && <section className="plain-note"><p>{message}</p></section>}
+      <section className="contribution-register"><div className="section-title"><small>Acceso vigente</small><h2>Personas asignadas a esta cuenta</h2></div>{assignments.map((item, index) => <article key={`${item.email}:${item.capability}:${index}`}><div><b>{item.display_name}</b><span>{item.email}</span></div><div><strong>{String(item.capability).replaceAll("_"," ")}</strong><span>{item.business_function}</span></div></article>)}</section>
+    </>}
+  </div>;
 }

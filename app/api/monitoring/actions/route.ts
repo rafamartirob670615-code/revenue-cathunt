@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../../application/d1-repository.ts";
+import { authorizePlan } from "../../_access.ts";
 
 export const runtime = "edge";
 
@@ -15,10 +16,6 @@ function database(): D1DatabaseLike {
 function files(): R2BucketLike {
   if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
   return env.FILES as unknown as R2BucketLike;
-}
-
-function owner(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
 }
 
 function responseError(error: unknown) {
@@ -37,7 +34,6 @@ async function planContext(planId: string, ownerId: string) {
     currency: string;
     versions: Array<{ number: number; status: string; createdBy: string }>;
   };
-  if (plan.versions[0]?.createdBy !== ownerId) throw new Error("Plan no autorizado");
   const active = plan.versions.at(-1);
   if (!active || !["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(active.status)) {
     throw new Error("El Plan debe estar enviado o aprobado para gestionar desviaciones");
@@ -64,10 +60,9 @@ const selectActions = `SELECT id, plan_id, version_number, period, comparison, p
 
 export async function GET(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["MONITOR","PLAN_INTEGRATE"]);
     await planContext(planId, ownerId);
     const rows = await database().prepare(selectActions).bind(planId, ownerId).run<Record<string, unknown>>();
     return Response.json({ ok: true, actions: rows.results ?? [] });
@@ -78,13 +73,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = await request.json() as {
       planId?: string; period?: string; cause?: string; evidence?: string;
       action?: string; responsible?: string; dueDate?: string;
     };
     const planId = body.planId ?? "";
+    const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["MONITOR","PLAN_INTEGRATE"]);
     const period = body.period ?? "";
     if (!planId || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new Error("Selecciona un mes válido");
     if (![body.cause,body.evidence,body.action,body.responsible].every((value) => value?.trim())) {
@@ -130,7 +124,7 @@ export async function POST(request: Request) {
     ).bind(
       id, planId, ownerId, active.number, period, planValue, actualValue, varianceValue,
       varianceRate, material ? 1 : 0, body.cause!.trim(), body.evidence!.trim(),
-      body.action!.trim(), body.responsible!.trim(), body.dueDate, ownerId, now, now,
+      body.action!.trim(), body.responsible!.trim(), body.dueDate, actor.email, now, now,
     ).run();
     const created = await database().prepare(
       `${selectActions.replace("WHERE plan_id = ? AND owner_id = ?", "WHERE id = ? AND owner_id = ?")}`,
@@ -143,12 +137,11 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = await request.json() as {
       planId?: string; actionId?: string; status?: string; outcomeNote?: string;
     };
     const planId = body.planId ?? "";
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["MONITOR","PLAN_INTEGRATE"]);
     const actionId = body.actionId ?? "";
     if (!planId || !actionId) throw new Error("Acción no reconocida");
     await planContext(planId, ownerId);

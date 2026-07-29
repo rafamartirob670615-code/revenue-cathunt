@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
+import { authorizePlan } from "../_access.ts";
 import { parseCsv } from "../../../domain/input-package.ts";
 
 export const runtime = "edge";
@@ -22,9 +23,6 @@ function files(): R2BucketLike {
   return env.FILES as unknown as R2BucketLike;
 }
 
-function owner(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
-}
 
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos consolidar unidades y valor";
@@ -69,10 +67,9 @@ async function prerequisites(planId: string, ownerId: string) {
 
 export async function GET(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId);
     await prerequisites(planId, ownerId);
     const row = await database()
       .prepare("SELECT result_json, updated_at FROM plan_results WHERE plan_id = ? AND owner_id = ?")
@@ -90,11 +87,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const source = await prerequisites(planId, ownerId);
     const baseline = JSON.parse(source.baseline_json) as {
       lines: Array<{
@@ -234,8 +230,6 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as {
       planId?: string;
       reason?: string;
@@ -244,6 +238,7 @@ export async function PUT(request: Request) {
     };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     if (!body.reason?.trim()) throw new Error("El motivo de edición es obligatorio");
     if (!body.evidence?.trim()) throw new Error("La evidencia de edición es obligatoria");
     await prerequisites(planId, ownerId);
@@ -315,7 +310,7 @@ export async function PUT(request: Request) {
       },
       edit: {
         reason: body.reason.trim(), evidence: body.evidence.trim(),
-        editedBy: ownerId, editedAt: new Date().toISOString(),
+        editedBy: actor.email, editedAt: new Date().toISOString(),
       },
     };
     const now = new Date().toISOString();

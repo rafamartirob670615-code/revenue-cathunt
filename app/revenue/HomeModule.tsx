@@ -19,19 +19,22 @@ export default function HomeModule({
   onWork: (module: RevenueModule) => void;
 }) {
   const monitorable = plans.filter((plan) => ["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(plan.status));
+  const can = (capability: RevenueIdentity["capabilities"][number]) => identity.capabilities.includes(capability);
+  const canCreate = can("PLAN_CREATE") || can("PLAN_INTEGRATE");
   return (
     <div className="module-page home-module">
       <ModuleHead eyebrow="Mi trabajo" title={`Hola, ${identity.displayName.split(" ")[0]}`} description="REVENUE organiza lo que te corresponde aportar, integrar, validar o aprobar." />
       <section className="identity-band">
         <div><small>Función principal</small><b>{FUNCTION_LABELS[identity.functions[0]]}</b><span>{identity.authenticated ? identity.email : "Identidad piloto local"}</span></div>
-        <div><small>Capacidades habilitadas</small><b>{identity.capabilities.length}</b><span>El alcance definitivo se asignará por cuenta.</span></div>
+        <div><small>Capacidades habilitadas</small><b>{identity.capabilities.length}</b><span>Aplican únicamente a las cuentas asignadas.</span></div>
         <div><small>Trabajo pendiente</small><b>{plans[0]?.nextAction ?? "Crear el primer Plan"}</b><span>Las tareas de otras áreas permanecen visibles, con dueño.</span></div>
       </section>
       <section className="contribution-lanes" aria-label="Aportaciones por función">
-        <button onClick={() => onWork("plan-marketing")}><small>Marketing</small><b>Registrar mi Plan de Marketing</b><span>Importar un archivo o construir campañas, temporadas y lanzamientos.</span><strong>→</strong></button>
-        <button onClick={() => onWork("plan-trade")}><small>Trade Marketing</small><b>Entregar promociones y ejecución</b><span>Recibir la app de promociones o construir actividades de la cadena.</span><strong>→</strong></button>
-        <button onClick={onCreate}><small>Responsable del Plan</small><b>Integrar una cuenta</b><span>Conectar histórico, aportaciones y economía en una sola versión.</span><strong>→</strong></button>
-        <button onClick={() => onWork("revision")}><small>Aprobación comercial</small><b>Revisar una versión</b><span>La autoridad comercial revisa y decide; Finanzas únicamente puede consultar.</span><strong>→</strong></button>
+        {can("MARKETING_CONTRIBUTE") && <button onClick={() => onWork("plan-marketing")}><small>Bandeja del aportante · Marketing</small><b>Registrar mi aportación</b><span>Importar un archivo o construir campañas, temporadas y lanzamientos.</span><strong>→</strong></button>}
+        {can("TRADE_CONTRIBUTE") && <button onClick={() => onWork("plan-trade")}><small>Bandeja del aportante · Trade</small><b>Entregar promociones y ejecución</b><span>Recibir la app de promociones o construir actividades de la cadena.</span><strong>→</strong></button>}
+        {can("PLAN_INTEGRATE") && <button onClick={() => onWork("plan-marketing")}><small>Bandeja de integración · KAM</small><b>Integrar aportaciones</b><span>Revisar propietario, fuente, calidad y efecto antes de incorporar.</span><strong>→</strong></button>}
+        {(can("REVIEW") || can("APPROVE")) && <button onClick={() => onWork("revision")}><small>Revisión comercial</small><b>Revisar una versión</b><span>La autoridad comercial revisa y decide sobre la versión congelada.</span><strong>→</strong></button>}
+        {can("VIEW_FINANCIALS") && <button onClick={() => onWork("rentabilidad")}><small>Consulta financiera</small><b>Consultar rentabilidad</b><span>Vista autorizada sin captura, modificación ni botones de decisión.</span><strong>→</strong></button>}
       </section>
       <section className="answer-strip">
         <div><span>Planes activos</span><b>{plans.length}</b></div>
@@ -42,7 +45,7 @@ export default function HomeModule({
         <article>
           <small>Planeación</small><h2>Construir un Plan anual</h2>
           <p>Registra compañía, cuenta y año. Después comienza con un solo Excel de ventas.</p>
-          <button className="clay-primary" onClick={onCreate}>Crear un Plan <b>→</b></button>
+          <button className="clay-primary" disabled={!canCreate} onClick={onCreate}>{canCreate ? "Crear un Plan" : "Requiere asignación"} <b>→</b></button>
         </article>
         <article>
           <small>Seguimiento</small><h2>Revisar un Plan enviado</h2>

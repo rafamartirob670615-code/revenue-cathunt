@@ -5,6 +5,7 @@ import {
 } from "../../../domain/baseline-engine.ts";
 import type { CanonicalSalesRow } from "../../../domain/excel-intake.ts";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
+import { authorizePlan } from "../_access.ts";
 
 export const runtime = "edge";
 
@@ -14,10 +15,6 @@ interface StoredObject {
 
 interface R2BucketLike {
   get(key: string): Promise<StoredObject | null>;
-}
-
-function owner(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
 }
 
 function database(): D1DatabaseLike {
@@ -36,27 +33,11 @@ function responseError(error: unknown) {
   return Response.json({ ok: false, error: message }, { status });
 }
 
-async function planForOwner(planId: string, ownerId: string) {
-  const row = await database()
-    .prepare("SELECT aggregate_json FROM plan_aggregates WHERE plan_id = ?")
-    .bind(planId)
-    .first<{ aggregate_json: string }>();
-  if (!row) throw new Error("Plan no encontrado");
-  const plan = JSON.parse(row.aggregate_json) as {
-    year: number;
-    versions?: Array<{ createdBy?: string }>;
-  };
-  if (plan.versions?.[0]?.createdBy !== ownerId) throw new Error("Plan no autorizado");
-  return plan;
-}
-
 export async function GET(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    await planForOwner(planId, ownerId);
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId);
     const row = await database()
       .prepare(
         "SELECT result_json, data_classification, calculated_at FROM baseline_calculations WHERE plan_id = ? AND owner_id = ?",
@@ -83,12 +64,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    const plan = await planForOwner(planId, ownerId);
+    const { dataOwnerId: ownerId, plan } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const review = await database()
       .prepare("SELECT file_checksums_json FROM input_package_reviews WHERE plan_id = ? AND owner_id = ? AND status = 'ACCEPTED'")
       .bind(planId, ownerId)
@@ -169,8 +148,6 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as {
       planId?: string;
       adjustments?: Array<{
@@ -184,7 +161,7 @@ export async function PUT(request: Request) {
     };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    await planForOwner(planId, ownerId);
+    const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const calculation = await database()
       .prepare(
         "SELECT result_json, calculated_at FROM baseline_calculations WHERE plan_id = ? AND owner_id = ?",
@@ -238,7 +215,7 @@ export async function PUT(request: Request) {
       adjustedLines,
       reason: body.reason.trim(),
       evidence: body.evidence.trim(),
-      decidedBy: ownerId,
+      decidedBy: actor.email,
       decidedAt,
       frozenAt: null,
       methodId: result.methodId,
@@ -256,7 +233,7 @@ export async function PUT(request: Request) {
       )
       .bind(
         planId,
-        ownerId,
+        actor.email,
         calculation.calculated_at,
         review.status,
         review.decision,
@@ -273,15 +250,13 @@ export async function PUT(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = (await request.json()) as {
       planId?: string;
       decision?: "CALCULATED" | "ADJUSTED";
     };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    await planForOwner(planId, ownerId);
+    const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const calculation = await database()
       .prepare(
         "SELECT result_json, data_classification, calculated_at FROM baseline_calculations WHERE plan_id = ? AND owner_id = ?",
@@ -323,7 +298,7 @@ export async function PATCH(request: Request) {
         : result.lines.map((line) => ({ ...line, approvedUnits: line.calculatedUnits })),
       reason: adjusted ? proposed?.reason : "Cálculo aceptado sin ajuste",
       evidence: adjusted ? proposed?.evidence : "Paquete aceptado y resultado reproducible",
-      decidedBy: ownerId,
+      decidedBy: actor.email,
       decidedAt: frozenAt,
       frozenAt,
       methodId: result.methodId,
@@ -343,7 +318,7 @@ export async function PATCH(request: Request) {
       )
       .bind(
         planId,
-        ownerId,
+        actor.email,
         calculation.calculated_at,
         review.status,
         review.decision,

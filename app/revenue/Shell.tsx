@@ -28,6 +28,17 @@ export default function Shell({
 }) {
   const version = plan?.versions.at(-1);
   const groups = ["general", "build", "execute", "system"] as const;
+  const can = (capability: RevenueIdentity["capabilities"][number]) => identity.capabilities.includes(capability);
+  const visible = (slug: RevenueModule) => {
+    if (slug === "inicio" || slug === "contexto") return true;
+    if (slug === "plan-marketing") return can("MARKETING_CONTRIBUTE") || can("PLAN_INTEGRATE");
+    if (slug === "plan-trade") return can("TRADE_CONTRIBUTE") || can("PLAN_INTEGRATE");
+    if (slug === "rentabilidad") return can("VIEW_FINANCIALS") || can("PLAN_INTEGRATE") || can("REVIEW") || can("APPROVE");
+    if (slug === "revision") return can("REVIEW") || can("APPROVE") || can("PLAN_INTEGRATE");
+    if (slug === "monitoreo") return can("MONITOR") || can("PLAN_INTEGRATE");
+    if (slug === "administracion") return can("ADMINISTER_ACCESS");
+    return can("PLAN_INTEGRATE");
+  };
   return (
     <div className="revenue-platform">
       <aside className="revenue-sidebar">
@@ -37,7 +48,7 @@ export default function Shell({
         </div>
         <nav aria-label="Recorrido de REVENUE">
           {groups.map((group) => {
-            const modules = REVENUE_MODULES.filter((module) => module.group === group);
+            const modules = REVENUE_MODULES.filter((module) => module.group === group && visible(module.slug));
             return <section className="nav-group" key={group}>
               {groupLabels[group] && <p>{groupLabels[group]}</p>}
               {modules.map((module) => {

@@ -18,10 +18,12 @@ export type Contribution = {
   id: string;
   plan_id: string;
   owner_user_id: string;
+  owner_display_name?: string;
   business_function: "MARKETING" | "TRADE_MARKETING";
   lever: string;
   title: string;
   source_mode: "BUILT_IN_REVENUE" | "IMPORTED";
+  source_system?: string;
   assumption_quality: "COMMITMENT" | "ESTIMATE" | "PROXY" | "IDEA";
   status: "SUBMITTED" | "ACCEPTED" | "RETURNED";
   period_start: string;
@@ -89,6 +91,10 @@ export type GrowthResult = {
     grossUnits: number;
     netUnits: number;
     evidence: string;
+    contributionId?: string;
+    contributionOwnerId?: string;
+    sourceSystem?: string;
+    assumptionQuality?: "COMMITMENT" | "ESTIMATE" | "PROXY" | "IDEA";
   }>;
   grossUnits: number;
   netUnits: number;

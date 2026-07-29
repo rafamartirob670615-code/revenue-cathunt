@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
+import { authorizePlan } from "../_access.ts";
 
 export const runtime = "edge";
 type DataClassification = "USER_PROVIDED" | "SYNTHETIC_NON_COMMERCIAL";
@@ -13,9 +14,6 @@ function database(): D1DatabaseLike {
 function files(): R2BucketLike {
   if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
   return env.FILES as unknown as R2BucketLike;
-}
-function owner(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
 }
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos preparar el crecimiento";
@@ -44,6 +42,8 @@ interface EditableActivity {
   accountId?: string; skuId?: string; period?: string; grossUnits?: number;
   cannibalizationUnits?: number; haloUnits?: number; pullForwardUnits?: number;
   interactionUnits?: number; evidence?: string;
+  contributionId?: string; contributionOwnerId?: string; sourceSystem?: string;
+  assumptionQuality?: "COMMITMENT" | "ESTIMATE" | "PROXY" | "IDEA";
 }
 
 function reconcileActivities(input: EditableActivity[], ownerId: string, classification: DataClassification) {
@@ -72,6 +72,10 @@ function reconcileActivities(input: EditableActivity[], ownerId: string, classif
       haloUnits, pullForwardUnits, interactionUnits,
       netUnits: grossUnits - cannibalizationUnits + haloUnits - pullForwardUnits + interactionUnits,
       evidence: item.evidence.trim(),
+      contributionId: item.contributionId,
+      contributionOwnerId: item.contributionOwnerId,
+      sourceSystem: item.sourceSystem,
+      assumptionQuality: item.assumptionQuality,
       status: classification === "USER_PROVIDED" ? "IMPORTED_FROM_APPROVED_SOURCE" : "APPROVED_FOR_SYNTHETIC_PLAN",
       createdBy: ownerId,
     };
@@ -125,12 +129,14 @@ async function realActivities(
   }
   const contributionResult = await database().prepare(
     `SELECT id,business_function,title,period_start,period_end,product_scope_json,
-      gross_units,evidence_json FROM plan_contributions
+      owner_user_id,source_system,assumption_quality,gross_units,evidence_json FROM plan_contributions
      WHERE plan_id = ? AND status = 'ACCEPTED'
        AND business_function IN ('MARKETING','TRADE_MARKETING')`,
   ).bind(planId).run<{
     id:string; business_function:"MARKETING"|"TRADE_MARKETING"; title:string;
     period_start:string; period_end:string; product_scope_json:string;
+    owner_user_id:string; source_system:string|null;
+    assumption_quality:"COMMITMENT"|"ESTIMATE"|"PROXY"|"IDEA";
     gross_units:number|null; evidence_json:string;
   }>();
   const baselineSkus = [...new Set(baseline.lines.map((line) => line.skuId))];
@@ -158,6 +164,10 @@ async function realActivities(
         pullForwardUnits: 0,
         interactionUnits: 0,
         evidence: note || `Aportación aceptada ${contribution.id}`,
+        contributionId: contribution.id,
+        contributionOwnerId: contribution.owner_user_id,
+        sourceSystem: contribution.source_system || "REVENUE",
+        assumptionQuality: contribution.assumption_quality,
       });
     }
   }
@@ -195,10 +205,9 @@ async function persistGrowth(planId: string, ownerId: string, result: ReturnType
 
 export async function GET(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId } = await authorizePlan(request, planId);
     await approvedBaseline(planId, ownerId);
     const row = await database().prepare(
       "SELECT result_json, updated_at FROM growth_plans WHERE plan_id = ? AND owner_id = ?",
@@ -209,16 +218,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = await request.json() as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const baseline = await approvedBaseline(planId, ownerId);
     const activities = baseline.dataClassification === "USER_PROVIDED"
       ? await realActivities(planId, ownerId, baseline)
       : syntheticActivities(baseline);
-    const result = reconcileActivities(activities, ownerId, baseline.dataClassification);
+    const result = reconcileActivities(activities, actor.email, baseline.dataClassification);
     const updatedAt = await persistGrowth(planId, ownerId, result);
     return Response.json({ ok:true, result, updatedAt });
   } catch (error) { return responseError(error); }
@@ -226,13 +234,12 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const ownerId = owner(request);
-    if (!ownerId) throw new Error("Autenticación requerida");
     const body = await request.json() as { planId?: string; activities?: EditableActivity[] };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
+    const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const baseline = await approvedBaseline(planId, ownerId);
-    const result = reconcileActivities(body.activities ?? [], ownerId, baseline.dataClassification);
+    const result = reconcileActivities(body.activities ?? [], actor.email, baseline.dataClassification);
     const updatedAt = await persistGrowth(planId, ownerId, result);
     return Response.json({ ok:true, result, updatedAt });
   } catch (error) { return responseError(error); }

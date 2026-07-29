@@ -9,6 +9,7 @@ import {
   type CommandContext,
 } from "../../../application/plan-service.ts";
 import type { Approval, Plan } from "../../../domain/types.ts";
+import { authorizePlan } from "../_access.ts";
 
 export const runtime = "edge";
 
@@ -66,7 +67,9 @@ export async function GET(request: Request): Promise<Response> {
          JOIN access_assignments aa ON aa.scope_type = 'PLAN' AND aa.scope_id = pa.plan_id
          JOIN organization_memberships om ON om.id = aa.membership_id AND om.status = 'ACTIVE'
          JOIN users u ON u.id = om.user_id
-         WHERE u.email = ?`,
+         WHERE lower(u.email) = lower(?)
+           AND datetime(aa.valid_from) <= datetime('now')
+           AND (aa.valid_until IS NULL OR datetime(aa.valid_until) >= datetime('now'))`,
       ).bind(email).run<{ aggregate_json: string }>();
       const byId = new Map(owned.map((plan) => [plan.id, plan]));
       for (const row of assignedRows.results ?? []) {
@@ -75,6 +78,7 @@ export async function GET(request: Request): Promise<Response> {
       }
       return Response.json({ ok: true, plans: [...byId.values()] });
     }
+    await authorizePlan(request, planId);
     const plan = await service().getPlan(planId);
     return plan
       ? Response.json({ ok: true, plan })
@@ -127,12 +131,14 @@ export async function POST(request: Request): Promise<Response> {
     let result: unknown;
     switch (command.action) {
       case "create":
+        command.plan.versions[0].createdBy = authenticatedEmail(request) ?? command.plan.versions[0].createdBy;
         result = await plans.createPlan(
           command.plan,
           authorizedContext(request, command.context),
         );
         break;
       case "calculate":
+        await authorizePlan(request, command.planId, ["PLAN_INTEGRATE"]);
         result = await plans.calculate(
           command.planId,
           command.versionId,
@@ -141,6 +147,7 @@ export async function POST(request: Request): Promise<Response> {
         );
         break;
       case "freezeAndSubmit":
+        await authorizePlan(request, command.planId, ["PLAN_INTEGRATE"]);
         result = await plans.freezeAndSubmit(
           command.planId,
           command.versionId,
@@ -148,6 +155,7 @@ export async function POST(request: Request): Promise<Response> {
         );
         break;
       case "decide":
+        await authorizePlan(request, command.planId, command.approval.decision === "APPROVED" ? ["APPROVE"] : ["REVIEW","APPROVE"]);
         result = await plans.decide(
           command.planId,
           command.versionId,
@@ -159,6 +167,7 @@ export async function POST(request: Request): Promise<Response> {
         );
         break;
       case "revise":
+        await authorizePlan(request, command.planId, ["PLAN_INTEGRATE"]);
         result = await plans.revise(
           command.planId,
           command.sourceVersionId,
@@ -167,6 +176,7 @@ export async function POST(request: Request): Promise<Response> {
         );
         break;
       case "makeOfficial":
+        await authorizePlan(request, command.planId, ["APPROVE"]);
         {
           const synthetic = await database()
             .prepare(

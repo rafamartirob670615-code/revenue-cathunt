@@ -130,7 +130,9 @@ export async function GET(request: Request) {
              SELECT 1 FROM access_assignments aa
              JOIN organization_memberships om ON om.id = aa.membership_id AND om.status = 'ACTIVE'
              JOIN users u ON u.id = om.user_id
-             WHERE aa.scope_type = 'PLAN' AND aa.scope_id = pa.plan_id AND u.email = ?
+             WHERE aa.scope_type = 'PLAN' AND aa.scope_id = pa.plan_id AND lower(u.email) = lower(?)
+               AND datetime(aa.valid_from) <= datetime('now')
+               AND (aa.valid_until IS NULL OR datetime(aa.valid_until) >= datetime('now'))
            )
         ORDER BY pa.updated_at DESC`,
       )
