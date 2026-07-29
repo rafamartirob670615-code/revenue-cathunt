@@ -51,7 +51,10 @@ test("Marketing y Trade Marketing viven en pantallas independientes", async () =
   assert.match(platform, /active === "plan-marketing"/);
   assert.match(platform, /active === "plan-trade"/);
   assert.match(platform, /growthCanBuild/);
-  assert.match(platform, /syntheticPlan \|\| \(marketingReady && tradeReady\)/);
+  assert.match(platform, /marketingReady \|\| marketingContributionReady/);
+  assert.match(platform, /tradeReady \|\| tradeContributionReady/);
+  assert.match(source, /Registrar una aportación sin preparar otro Excel/);
+  assert.match(source, /Entregar aportación al KAM/);
   assert.match(platform, /state\.baseline\?\.dataClassification === "SYNTHETIC_NON_COMMERCIAL"/);
   assert.match(source, /Reconciliar Marketing y Trade/);
   assert.match(source, /Caso guiado sintético/);
@@ -61,7 +64,7 @@ test("las acciones no fallan después del clic cuando faltan dependencias", asyn
   const source = await readFile(modulesUrl, "utf8");
   const platform = await readFile(platformUrl, "utf8");
   assert.match(source, /action=\{ready \? <button className="clay-primary"/);
-  assert.match(source, /action=\{\(synthetic \|\| source\) && canBuild \? <button className="clay-primary"/);
+  assert.match(source, /action=\{\(synthetic \|\| source \|\| hasAcceptedContribution\) && canBuild \? <button className="clay-primary"/);
   assert.match(platform, /if \(accepted\) setActive\("volumen-base"\)/);
 });
 

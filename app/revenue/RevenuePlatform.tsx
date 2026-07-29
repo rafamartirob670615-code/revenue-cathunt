@@ -17,6 +17,7 @@ import {
 import type {
   BaselineResult,
   BaselineReview,
+  Contribution,
   DashboardPlan,
   GrowthResult,
   PlanResult,
@@ -37,6 +38,7 @@ const emptyPlanState = {
   growth: null as GrowthResult | null,
   result: null as PlanResult | null,
   profitability: null as ProfitabilityResult | null,
+  contributions: [] as Contribution[],
 };
 
 function friendly(message?: string) {
@@ -103,9 +105,14 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
         }
       }
       if (next.review?.status === "APPROVED_FROZEN") {
-        const response = await fetch(`/api/growth?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
-        const body = await response.json() as { ok: boolean; result?: GrowthResult | null };
-        if (response.ok && body.ok) next.growth = body.result ?? null;
+        const [growthResponse, contributionResponse] = await Promise.all([
+          fetch(`/api/growth?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" }),
+          fetch(`/api/contributions?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" }),
+        ]);
+        const body = await growthResponse.json() as { ok: boolean; result?: GrowthResult | null };
+        const contributionBody = await contributionResponse.json() as { ok: boolean; contributions?: Contribution[] };
+        if (growthResponse.ok && body.ok) next.growth = body.result ?? null;
+        if (contributionResponse.ok && contributionBody.ok) next.contributions = contributionBody.contributions ?? [];
       }
       if (next.growth?.controls.reconciled) {
         const response = await fetch(`/api/result?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
@@ -235,6 +242,55 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
   async function buildGrowth() {
     await run("Construyendo crecimiento…", "/api/growth", "POST", (result) => setState((current) => ({ ...current, growth: result as GrowthResult, result: null, profitability: null })));
   }
+  async function createContribution(event: React.FormEvent<HTMLFormElement>, businessFunction: "MARKETING" | "TRADE_MARKETING") {
+    if (!selected) return;
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setBusy("Guardando aportación…");
+    setError("");
+    try {
+      const response = await fetch("/api/contributions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          planId: selected.id,
+          businessFunction,
+          lever: form.get("lever"),
+          title: form.get("title"),
+          assumptionQuality: form.get("assumptionQuality"),
+          periodStart: form.get("periodStart"),
+          periodEnd: form.get("periodEnd"),
+          productScope: form.get("productScope"),
+          grossUnits: Number(form.get("grossUnits")),
+          investmentAmount: Number(form.get("investmentAmount")),
+          currency: selected.currency,
+          evidence: form.get("evidence"),
+        }),
+      });
+      const body = await response.json() as { ok: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error);
+      formElement.reset();
+      await loadPlan(selected, businessFunction === "MARKETING" ? "plan-marketing" : "plan-trade");
+    } catch (cause) {
+      setError(friendly(cause instanceof Error ? cause.message : ""));
+    } finally { setBusy(""); }
+  }
+  async function decideContribution(id: string, status: "ACCEPTED" | "RETURNED", destination: RevenueModule) {
+    if (!selected) return;
+    setBusy("Guardando decisión…");
+    try {
+      const response = await fetch("/api/contributions", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: selected.id, id, status }),
+      });
+      const body = await response.json() as { ok: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error);
+      await loadPlan(selected, destination);
+    } catch (cause) { setError(friendly(cause instanceof Error ? cause.message : "")); }
+    finally { setBusy(""); }
+  }
   async function buildResult() {
     await run("Consolidando Plan…", "/api/result", "POST", (result) => setState((current) => ({ ...current, result: result as PlanResult, profitability: null })));
   }
@@ -305,13 +361,17 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     (state.files.length > 0 && state.files.every((file) => file.synthetic));
   const marketingReady = state.files.some((file) => file.requirementId === "marketing-plan" && file.status === "READY");
   const tradeReady = state.files.some((file) => file.requirementId === "trade-marketing-plan" && file.status === "READY");
-  const growthCanBuild = state.review?.status === "APPROVED_FROZEN" && (syntheticPlan || (marketingReady && tradeReady));
+  const marketingContributionReady = state.contributions.some((item) => item.business_function === "MARKETING" && item.status === "ACCEPTED");
+  const tradeContributionReady = state.contributions.some((item) => item.business_function === "TRADE_MARKETING" && item.status === "ACCEPTED");
+  const growthCanBuild = state.review?.status === "APPROVED_FROZEN" && (
+    syntheticPlan || ((marketingReady || marketingContributionReady) && (tradeReady || tradeContributionReady))
+  );
   const growthWaitingFor = state.review?.status !== "APPROVED_FROZEN"
     ? "Primero aprueba el Volumen base."
-    : !marketingReady
-      ? "Falta el Plan de Marketing."
-      : !tradeReady
-        ? "Falta el Plan de Trade Marketing."
+    : !(marketingReady || marketingContributionReady)
+      ? "Falta una aportación o archivo de Marketing."
+      : !(tradeReady || tradeContributionReady)
+        ? "Falta una aportación o archivo de Trade Marketing."
         : "Las fuentes están listas.";
 
   return (
@@ -323,8 +383,8 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :

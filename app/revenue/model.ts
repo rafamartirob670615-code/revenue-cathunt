@@ -14,6 +14,25 @@ export type DashboardPlan = {
   updatedAt: string;
 };
 
+export type Contribution = {
+  id: string;
+  plan_id: string;
+  owner_user_id: string;
+  business_function: "MARKETING" | "TRADE_MARKETING";
+  lever: string;
+  title: string;
+  source_mode: "BUILT_IN_REVENUE" | "IMPORTED";
+  assumption_quality: "COMMITMENT" | "ESTIMATE" | "PROXY" | "IDEA";
+  status: "SUBMITTED" | "ACCEPTED" | "RETURNED";
+  period_start: string;
+  period_end: string;
+  product_scope_json: string;
+  gross_units: number | null;
+  investment_amount: number | null;
+  currency: string;
+  evidence_json: string;
+};
+
 export type ReceivedFile = {
   requirementId: string;
   originalName: string;

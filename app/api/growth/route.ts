@@ -93,24 +93,78 @@ function reconcileActivities(input: EditableActivity[], ownerId: string, classif
   };
 }
 
-async function realActivities(planId: string, ownerId: string) {
+function periodsBetween(start: string, end: string) {
+  const result: string[] = [];
+  let [year, month] = start.split("-").map(Number);
+  const [endYear, endMonth] = end.split("-").map(Number);
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    result.push(`${year}-${String(month).padStart(2,"0")}`);
+    month += 1;
+    if (month === 13) { month = 1; year += 1; }
+  }
+  return result;
+}
+
+async function realActivities(
+  planId: string,
+  ownerId: string,
+  baseline: { lines: Array<{ accountId: string; skuId: string }> },
+) {
   const result = await database().prepare(
     `SELECT requirement_id, canonical_object_key, status
      FROM canonical_datasets
      WHERE plan_id = ? AND owner_id = ? AND requirement_id IN ('marketing-plan','trade-marketing-plan')`,
   ).bind(planId, ownerId).run<{ requirement_id: string; canonical_object_key: string; status: string }>();
   const rows = result.results ?? [];
-  const required = ["marketing-plan", "trade-marketing-plan"];
-  const missing = required.filter((id) => !rows.some((row) => row.requirement_id === id && row.status === "READY"));
-  if (missing.length) {
-    throw new Error("Carga y valida primero los Excel del Plan de Marketing y del Plan de Trade Marketing");
-  }
   const activities: EditableActivity[] = [];
   for (const row of rows) {
     const object = await files().get(row.canonical_object_key);
     if (!object) throw new Error(`No encontramos el dataset canónico de ${row.requirement_id}`);
     const payload = JSON.parse(await object.text()) as { rows?: EditableActivity[] };
     activities.push(...(payload.rows ?? []));
+  }
+  const contributionResult = await database().prepare(
+    `SELECT id,business_function,title,period_start,period_end,product_scope_json,
+      gross_units,evidence_json FROM plan_contributions
+     WHERE plan_id = ? AND status = 'ACCEPTED'
+       AND business_function IN ('MARKETING','TRADE_MARKETING')`,
+  ).bind(planId).run<{
+    id:string; business_function:"MARKETING"|"TRADE_MARKETING"; title:string;
+    period_start:string; period_end:string; product_scope_json:string;
+    gross_units:number|null; evidence_json:string;
+  }>();
+  const baselineSkus = [...new Set(baseline.lines.map((line) => line.skuId))];
+  const accountId = baseline.lines[0]?.accountId;
+  for (const contribution of contributionResult.results ?? []) {
+    if (!contribution.gross_units || !accountId) continue;
+    const requested = JSON.parse(contribution.product_scope_json || "[]") as string[];
+    const skus = requested.filter((sku) => baselineSkus.includes(sku));
+    const allocatedSkus = skus.length ? skus : baselineSkus;
+    const periods = periodsBetween(contribution.period_start, contribution.period_end);
+    const grainCount = Math.max(1, allocatedSkus.length * periods.length);
+    const units = contribution.gross_units / grainCount;
+    const note = (JSON.parse(contribution.evidence_json || "{}") as { note?: string }).note;
+    for (const period of periods) for (const skuId of allocatedSkus) {
+      activities.push({
+        id: `${contribution.id}:${period}:${skuId}`,
+        family: contribution.business_function,
+        name: contribution.title,
+        accountId,
+        skuId,
+        period,
+        grossUnits: units,
+        cannibalizationUnits: 0,
+        haloUnits: 0,
+        pullForwardUnits: 0,
+        interactionUnits: 0,
+        evidence: note || `Aportación aceptada ${contribution.id}`,
+      });
+    }
+  }
+  const hasMarketing = activities.some((item) => item.family === "MARKETING");
+  const hasTrade = activities.some((item) => item.family === "TRADE_MARKETING");
+  if (!hasMarketing || !hasTrade) {
+    throw new Error("Marketing y Trade deben entregar al menos una fuente o aportación aceptada");
   }
   return activities;
 }
@@ -162,7 +216,7 @@ export async function POST(request: Request) {
     if (!planId) throw new Error("planId es obligatorio");
     const baseline = await approvedBaseline(planId, ownerId);
     const activities = baseline.dataClassification === "USER_PROVIDED"
-      ? await realActivities(planId, ownerId)
+      ? await realActivities(planId, ownerId, baseline)
       : syntheticActivities(baseline);
     const result = reconcileActivities(activities, ownerId, baseline.dataClassification);
     const updatedAt = await persistGrowth(planId, ownerId, result);

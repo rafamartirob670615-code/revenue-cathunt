@@ -2,7 +2,7 @@
 
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
-import type { BaselineResult, BaselineReview, GrowthResult, PlanResult, ProfitabilityResult, ReceivedFile } from "./model";
+import type { BaselineResult, BaselineReview, Contribution, GrowthResult, PlanResult, ProfitabilityResult, ReceivedFile } from "./model";
 import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
 export function ContextModule({ plan }: { plan: Plan }) {
@@ -66,15 +66,23 @@ export function BaselineModule({ baseline, review, ready, busy, onCalculate, onA
   </div>;
 }
 
-export function GrowthPlanModule({ family, growth, source, synthetic, canBuild, waitingFor, busy, onUpload, onBuild }: {
+export function GrowthPlanModule({ family, plan, contributions, growth, source, synthetic, canBuild, waitingFor, busy, onUpload, onBuild, onContribute, onDecide }: {
+  plan: Plan; contributions: Contribution[];
   family: "MARKETING" | "TRADE_MARKETING"; growth: GrowthResult | null; source?: ReceivedFile;
   synthetic: boolean; canBuild: boolean; waitingFor: string; busy: string; onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
+  onContribute: (event: React.FormEvent<HTMLFormElement>, family: "MARKETING" | "TRADE_MARKETING") => void;
+  onDecide: (id: string, status: "ACCEPTED" | "RETURNED") => void;
 }) {
   const isMarketing = family === "MARKETING";
   const activities = growth?.activities.filter((activity) => activity.family === family) ?? [];
   const gross = activities.reduce((sum, activity) => sum + activity.grossUnits, 0);
   const net = activities.reduce((sum, activity) => sum + activity.netUnits, 0);
   const requirementId = isMarketing ? "marketing-plan" : "trade-marketing-plan";
+  const areaContributions = contributions.filter((item) => item.business_function === family);
+  const hasAcceptedContribution = areaContributions.some((item) => item.status === "ACCEPTED");
+  const levers = isMarketing
+    ? [["BRAND_ACTIVITY","Publicidad y construcción de marca"],["SEASON","Temporada"],["LAUNCH","Lanzamiento o relanzamiento"]]
+    : [["DISTRIBUTION","Distribución y alcance"],["CHAIN_ACTIVITY","Actividad de la cadena"],["EXECUTION","Preparación y ejecución"]];
   synthetic = synthetic || growth?.dataClassification === "SYNTHETIC_NON_COMMERCIAL";
   return <div className="module-page">
     <ModuleHead eyebrow={`Paso ${isMarketing ? 4 : 5} de 8 · ${isMarketing ? "Marketing" : "Trade Marketing"}`} title={isMarketing ? "¿Qué demanda construirá Marketing?" : "¿Qué ejecutará Trade Marketing en el cliente?"} description={isMarketing ? "Campañas, lanzamientos y construcción de demanda con su impacto bruto y sus efectos netos." : "Promociones, exhibiciones y ejecución en punto de venta, separadas de Marketing para evitar doble conteo."} />
@@ -82,10 +90,34 @@ export function GrowthPlanModule({ family, growth, source, synthetic, canBuild, 
       <div><small>Fuente de esta sección</small><h2>{source ? source.originalName : synthetic ? "Caso guiado sintético" : `Excel del Plan de ${isMarketing ? "Marketing" : "Trade Marketing"}`}</h2><p>{source ? `${source.summary.rowCount} filas interpretadas y preservadas.` : synthetic ? "Fuente de demostración aislada y no comercial." : "Carga el archivo que ya utiliza el área responsable."}</p></div>
       {!synthetic && <label className="paper-button">{busy === requirementId ? "Leyendo…" : source ? "Reemplazar Excel" : "Seleccionar Excel"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirementId, event.target.files?.[0])} /></label>}
     </section>
+    {!synthetic && <section className="contribution-builder">
+      <div className="section-title"><small>Construir dentro de REVENUE</small><h2>Registrar una aportación sin preparar otro Excel</h2></div>
+      <form onSubmit={(event) => onContribute(event, family)}>
+        <label>Palanca<select name="lever" required defaultValue=""><option value="" disabled>Selecciona</option>{levers.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+        <label>Actividad<input name="title" required placeholder={isMarketing ? "Ej. Campaña Back to School" : "Ej. Promoción aniversario"} /></label>
+        <label>Calidad del supuesto<select name="assumptionQuality" defaultValue="PROXY"><option value="COMMITMENT">Compromiso</option><option value="ESTIMATE">Estimación</option><option value="PROXY">Proxy provisional</option><option value="IDEA">Idea sin cifra</option></select></label>
+        <label>Productos<input name="productScope" placeholder="SKU, familia o portafolio" /></label>
+        <label>Desde<input name="periodStart" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} required /></label>
+        <label>Hasta<input name="periodEnd" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} required /></label>
+        <label>Volumen incremental<input name="grossUnits" type="number" min="0" step="1" placeholder="Unidades" /></label>
+        <label>Inversión<input name="investmentAmount" type="number" min="0" step=".01" placeholder={plan.currency} /></label>
+        <label className="wide">Evidencia o explicación<textarea name="evidence" placeholder="Origen del supuesto, acuerdo o cálculo utilizado" /></label>
+        <button className="clay-primary wide" disabled={Boolean(busy)}>{busy === "Guardando aportación…" ? busy : "Entregar aportación al KAM"}</button>
+      </form>
+    </section>}
+    {!!areaContributions.length && <section className="contribution-register">
+      <div className="section-title"><small>Aportaciones del área</small><h2>Trabajo recibido para integrar</h2></div>
+      {areaContributions.map((item) => <article key={item.id}>
+        <div><small>{item.lever} · {item.period_start} a {item.period_end}</small><b>{item.title}</b><span>{item.assumption_quality === "PROXY" ? "Proxy provisional" : item.assumption_quality === "ESTIMATE" ? "Estimación" : item.assumption_quality === "COMMITMENT" ? "Compromiso" : "Idea"} · {item.source_mode === "IMPORTED" ? "Importada" : "Construida en REVENUE"}</span></div>
+        <div><strong>{item.gross_units ? `+${item.gross_units.toLocaleString("es-MX")} unidades` : "Sin cifra"}</strong><span>{item.investment_amount ? formatMoney(item.investment_amount,item.currency) : "Inversión pendiente"}</span></div>
+        <div className={`contribution-status ${item.status.toLowerCase()}`}>{item.status === "SUBMITTED" ? "Pendiente del KAM" : item.status === "ACCEPTED" ? "Aceptada" : "Devuelta"}</div>
+        {item.status === "SUBMITTED" && <div className="contribution-actions"><button className="paper-button" onClick={() => onDecide(item.id,"RETURNED")}>Devolver</button><button className="clay-primary" onClick={() => onDecide(item.id,"ACCEPTED")}>Aceptar para integrar</button></div>}
+      </article>)}
+    </section>}
     {activities.length ? <>
       <section className="paper-metrics"><Metric label="Actividades" value={String(activities.length)} note={isMarketing ? "Marketing" : "Trade Marketing"} /><Metric label="Incremental bruto" value={`+${gross.toLocaleString("es-MX")}`} note="antes de efectos" /><Metric label="Incremental neto" value={`+${net.toLocaleString("es-MX")}`} note="aporte al Plan" tone="good" /></section>
       <section className="activity-sheet">{activities.map((activity) => <article key={activity.id}><div><small>{activity.period} · {activity.skuId}</small><b>{activity.name}</b><span>{activity.evidence}</span></div><div><span>Bruto {activity.grossUnits.toLocaleString("es-MX")}</span><strong>Neto +{activity.netUnits.toLocaleString("es-MX")}</strong></div></article>)}</section>
-    </> : <EmptyAnswer title={`Todavía no hay actividades de ${isMarketing ? "Marketing" : "Trade Marketing"}`} copy={synthetic && canBuild ? "La prueba guiada ya preparó las dos disciplinas. Reconcílialas para ver el aporte de cada una." : source ? canBuild ? "Las dos áreas entregaron sus fuentes. Ya puedes reconciliar el crecimiento sin doble conteo." : waitingFor : "Carga el Excel de esta área. Esta pantalla no mezclará sus actividades con la otra disciplina."} action={(synthetic || source) && canBuild ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Construyendo…" : "Reconciliar Marketing y Trade"}</button> : undefined} />}
+    </> : <EmptyAnswer title={`Todavía no hay actividades reconciliadas de ${isMarketing ? "Marketing" : "Trade Marketing"}`} copy={synthetic && canBuild ? "La prueba guiada ya preparó las dos disciplinas. Reconcílialas para ver el aporte de cada una." : (source || hasAcceptedContribution) ? canBuild ? "Las dos áreas ya entregaron fuentes aceptadas. Puedes reconciliar el crecimiento sin doble conteo." : waitingFor : "Importa el Plan del área o construye una aportación aquí. Ambas rutas conservan dueño y fuente."} action={(synthetic || source || hasAcceptedContribution) && canBuild ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Construyendo…" : "Reconciliar Marketing y Trade"}</button> : undefined} />}
   </div>;
 }
 
