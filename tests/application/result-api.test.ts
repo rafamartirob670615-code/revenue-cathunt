@@ -18,6 +18,8 @@ test("el resultado usa conversiones y precios aceptados del paquete", async () =
   assert.match(source, /conversion_factor/);
   assert.match(source, /valid_from/);
   assert.match(source, /price_type/);
+  assert.match(source, /row\.account_id === line\.accountId/);
+  assert.match(source, /row\.valid_from\.slice\(0, 7\) <= line\.period/);
   assert.match(source, /planUnits \* unitPrice/);
 });
 
@@ -27,5 +29,6 @@ test("el resultado reconcilia unidades, valor y persiste por Plan", async () => 
   assert.match(source, /unitsReconciled/);
   assert.match(source, /valueReconciled/);
   assert.match(source, /INSERT INTO plan_results/);
-  assert.match(source, /SYNTHETIC_NON_COMMERCIAL/);
+  assert.match(source, /source\.data_classification/);
+  assert.match(source, /growthFullyApplied/);
 });

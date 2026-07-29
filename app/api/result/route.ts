@@ -44,7 +44,8 @@ async function prerequisites(planId: string, ownerId: string) {
   const row = await database()
     .prepare(
       `SELECT bc.result_json AS baseline_json, bc.data_classification,
-       br.review_json, gp.result_json AS growth_json
+       br.review_json, gp.result_json AS growth_json,
+       gp.data_classification AS growth_classification
        FROM baseline_calculations bc
        JOIN baseline_reviews br ON br.plan_id = bc.plan_id AND br.owner_id = bc.owner_id
        JOIN growth_plans gp ON gp.plan_id = bc.plan_id AND gp.owner_id = bc.owner_id
@@ -57,10 +58,11 @@ async function prerequisites(planId: string, ownerId: string) {
       data_classification: string;
       review_json: string;
       growth_json: string;
+      growth_classification: string;
     }>();
   if (!row) throw new Error("Completa primero baseline y crecimiento");
-  if (row.data_classification !== "SYNTHETIC_NON_COMMERCIAL") {
-    throw new Error("Esta compuerta sólo está habilitada para el Plan sintético aislado");
+  if (row.data_classification !== row.growth_classification) {
+    throw new Error("Baseline y crecimiento deben provenir del mismo tipo de información");
   }
   return row;
 }
@@ -112,7 +114,7 @@ export async function POST(request: Request) {
       }> | null;
     };
     const growth = JSON.parse(source.growth_json) as {
-      activities: Array<{ skuId: string; period: string; netUnits: number }>;
+      activities: Array<{ accountId: string; skuId: string; period: string; netUnits: number }>;
       netUnits: number;
       controls: { reconciled: boolean };
     };
@@ -136,20 +138,26 @@ export async function POST(request: Request) {
     const conversions = records(await conversionObject.text());
     const prices = records(await priceObject.text());
     const conversionBySku = new Map(conversions.map((row) => [row.sku_id, row]));
-    const priceBySku = new Map(prices.map((row) => [row.sku_id, row]));
     const adjustedByKey = new Map(
-      (review.adjustedLines ?? []).map((line) => [`${line.skuId}|${line.period}`, line.adjustedUnits]),
+      (review.adjustedLines ?? []).map((line) => [`${line.accountId}|${line.skuId}|${line.period}`, line.adjustedUnits]),
     );
     const growthByKey = new Map<string, number>();
     for (const activity of growth.activities) {
-      const key = `${activity.skuId}|${activity.period}`;
+      const key = `${activity.accountId}|${activity.skuId}|${activity.period}`;
       growthByKey.set(key, (growthByKey.get(key) ?? 0) + activity.netUnits);
     }
 
     const lines = baseline.lines.map((line) => {
-      const key = `${line.skuId}|${line.period}`;
+      const key = `${line.accountId}|${line.skuId}|${line.period}`;
       const conversion = conversionBySku.get(line.skuId);
-      const price = priceBySku.get(line.skuId);
+      const applicablePrices = prices
+        .filter((row) =>
+          row.account_id === line.accountId
+          && row.sku_id === line.skuId
+          && row.valid_from.slice(0, 7) <= line.period,
+        )
+        .sort((a, b) => b.valid_from.localeCompare(a.valid_from));
+      const price = applicablePrices[0];
       const factor = Number(conversion?.conversion_factor);
       const unitPrice = Number(price?.price);
       if (!Number.isFinite(factor) || factor <= 0) throw new Error(`Conversión inválida para ${line.skuId}`);
@@ -177,12 +185,16 @@ export async function POST(request: Request) {
         planValue: Number((planUnits * unitPrice).toFixed(2)),
       };
     });
+    const appliedGrowthUnits = lines.reduce((sum, line) => sum + line.incrementalNetUnits, 0);
+    if (Number(appliedGrowthUnits.toFixed(6)) !== Number(growth.netUnits.toFixed(6))) {
+      throw new Error("Las cuentas, SKU y periodos de Crecimiento no coinciden completamente con el Baseline");
+    }
     const annualUnits = lines.reduce((sum, line) => sum + line.planUnits, 0);
     const annualValue = Number(lines.reduce((sum, line) => sum + line.planValue, 0).toFixed(2));
     const result = {
-      dataClassification: "SYNTHETIC_NON_COMMERCIAL",
+      dataClassification: source.data_classification,
       methodId: "APPROVED_BASELINE_PLUS_NET_INCREMENT",
-      methodVersion: "1.0.0",
+      methodVersion: "2.0.0",
       lines,
       annualUnits,
       annualValue,
@@ -198,6 +210,7 @@ export async function POST(request: Request) {
         ).toFixed(2)),
         missingConversions: 0,
         missingPrices: 0,
+        growthFullyApplied: true,
       },
     };
     const now = new Date().toISOString();
@@ -206,12 +219,12 @@ export async function POST(request: Request) {
       .prepare(
         `INSERT INTO plan_results
         (plan_id, owner_id, result_json, data_classification, created_at, updated_at)
-        VALUES (?, ?, ?, 'SYNTHETIC_NON_COMMERCIAL', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(plan_id) DO UPDATE SET owner_id=excluded.owner_id,
         result_json=excluded.result_json, data_classification=excluded.data_classification,
         updated_at=excluded.updated_at`,
       )
-      .bind(planId, ownerId, JSON.stringify(result), now, now)
+      .bind(planId, ownerId, JSON.stringify(result), source.data_classification, now, now)
       .run();
     return Response.json({ ok: true, result, updatedAt: now });
   } catch (error) {
@@ -227,7 +240,7 @@ export async function PUT(request: Request) {
       planId?: string;
       reason?: string;
       evidence?: string;
-      lines?: Array<{ skuId?: string; period?: string; authorizedAdjustmentUnits?: number; unitPrice?: number }>;
+      lines?: Array<{ accountId?: string; skuId?: string; period?: string; authorizedAdjustmentUnits?: number; unitPrice?: number }>;
     };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
@@ -256,10 +269,10 @@ export async function PUT(request: Request) {
     }
     const byKey = new Map<string, { authorizedAdjustmentUnits: number; unitPrice: number }>();
     for (const edit of edits) {
-      const key = `${edit.skuId?.trim()}|${edit.period?.trim()}`;
+      const key = `${edit.accountId?.trim()}|${edit.skuId?.trim()}|${edit.period?.trim()}`;
       const authorizedAdjustmentUnits = Number(edit.authorizedAdjustmentUnits ?? 0);
       const unitPrice = Number(edit.unitPrice);
-      if (!edit.skuId?.trim() || !/^\d{4}-\d{2}$/.test(edit.period ?? "")) {
+      if (!edit.accountId?.trim() || !edit.skuId?.trim() || !/^\d{4}-\d{2}$/.test(edit.period ?? "")) {
         throw new Error(`Llave inválida: ${key}`);
       }
       if (byKey.has(key)) throw new Error(`Línea duplicada: ${key}`);
@@ -269,8 +282,8 @@ export async function PUT(request: Request) {
       byKey.set(key, { authorizedAdjustmentUnits, unitPrice });
     }
     const lines = current.lines.map((line) => {
-      const edit = byKey.get(`${line.skuId}|${line.period}`);
-      if (!edit) throw new Error(`Falta la línea ${line.skuId}|${line.period}`);
+      const edit = byKey.get(`${line.accountId}|${line.skuId}|${line.period}`);
+      if (!edit) throw new Error(`Falta la línea ${line.accountId}|${line.skuId}|${line.period}`);
       const planUnits = line.baselineUnits + line.incrementalNetUnits + edit.authorizedAdjustmentUnits;
       if (planUnits < 0) throw new Error(`Las unidades Plan no pueden ser negativas para ${line.skuId}|${line.period}`);
       return {

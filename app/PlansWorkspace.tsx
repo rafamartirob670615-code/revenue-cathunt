@@ -107,7 +107,7 @@ type GrowthResult = {
   };
 };
 type PlanResult = {
-  dataClassification: "SYNTHETIC_NON_COMMERCIAL";
+  dataClassification: "SYNTHETIC_NON_COMMERCIAL" | "USER_PROVIDED";
   methodId: string;
   methodVersion: string;
   lines: Array<{
@@ -582,7 +582,7 @@ export default function PlansWorkspace({
       setCalculatingResult(false);
     }
   }
-  async function savePlanResult(event:React.FormEvent){event.preventDefault();if(!selected)return;setCalculatingResult(true);setError("");try{const response=await fetch("/api/result",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({planId:selected.id,reason:resultEditReason,evidence:resultEditEvidence,lines:resultDraft.map(line=>({skuId:line.skuId,period:line.period,authorizedAdjustmentUnits:line.authorizedAdjustmentUnits??0,unitPrice:line.unitPrice}))})});const body=await response.json() as {ok:boolean;result?:PlanResult;error?:string};if(!response.ok||!body.ok||!body.result)throw new Error(body.error);setPlanResult(body.result);setProfitability(null);setEditingResult(false);}catch(cause){setError(friendlyError(cause instanceof Error?cause.message:""));}finally{setCalculatingResult(false);}}
+  async function savePlanResult(event:React.FormEvent){event.preventDefault();if(!selected)return;setCalculatingResult(true);setError("");try{const response=await fetch("/api/result",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({planId:selected.id,reason:resultEditReason,evidence:resultEditEvidence,lines:resultDraft.map(line=>({accountId:line.accountId,skuId:line.skuId,period:line.period,authorizedAdjustmentUnits:line.authorizedAdjustmentUnits??0,unitPrice:line.unitPrice}))})});const body=await response.json() as {ok:boolean;result?:PlanResult;error?:string};if(!response.ok||!body.ok||!body.result)throw new Error(body.error);setPlanResult(body.result);setProfitability(null);setEditingResult(false);}catch(cause){setError(friendlyError(cause instanceof Error?cause.message:""));}finally{setCalculatingResult(false);}}
 
   async function buildGrowth() {
     if (!selected) return;
@@ -1078,8 +1078,10 @@ export default function PlansWorkspace({
                 </span>
               </div>
               <div className="synthetic-banner" role="status">
-                <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
-                <span>Unidades, precios y valores son artificiales y no representan venta, cuota ni compromiso comercial.</span>
+                <b>{growth?.dataClassification === "USER_PROVIDED" ? "RESULTADO EMPRESARIAL — TRAZABLE" : "DATOS SINTÉTICOS — NO COMERCIALES"}</b>
+                <span>{growth?.dataClassification === "USER_PROVIDED"
+                  ? "Las unidades conservan la cuenta y el SKU; el valor utiliza el precio oficial vigente de esa misma cuenta."
+                  : "Unidades, precios y valores son artificiales y no representan venta, cuota ni compromiso comercial."}</span>
               </div>
               {planResult ? (
                 <>
