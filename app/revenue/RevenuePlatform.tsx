@@ -378,7 +378,10 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
       active === "inicio" ? <HomeModule identity={identity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onWork={(module) => {
-        const candidate = dashboardPlans.find((plan) => !/simulaci|revenue lab/i.test(`${plan.company} ${plan.account}`)) ?? dashboardPlans[0];
+        const candidate = dashboardPlans.find((plan) =>
+          plans.some((stored) => stored.id === plan.id)
+          && !/simulaci|revenue lab/i.test(`${plan.company} ${plan.account}`),
+        ) ?? dashboardPlans.find((plan) => plans.some((stored) => stored.id === plan.id));
         if (candidate) openDashboardPlan(candidate.id, module);
         else navigate(module);
       }} /> :

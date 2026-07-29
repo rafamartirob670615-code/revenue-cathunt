@@ -59,8 +59,21 @@ export async function GET(request: Request): Promise<Response> {
     if (!email) throw new Error("AUTH_REQUIRED");
     const planId = new URL(request.url).searchParams.get("planId");
     if (!planId) {
-      const plans = await service().listPlans(email);
-      return Response.json({ ok: true, plans });
+      const owned = await service().listPlans(email);
+      const assignedRows = await database().prepare(
+        `SELECT DISTINCT pa.aggregate_json
+         FROM plan_aggregates pa
+         JOIN access_assignments aa ON aa.scope_type = 'PLAN' AND aa.scope_id = pa.plan_id
+         JOIN organization_memberships om ON om.id = aa.membership_id AND om.status = 'ACTIVE'
+         JOIN users u ON u.id = om.user_id
+         WHERE u.email = ?`,
+      ).bind(email).run<{ aggregate_json: string }>();
+      const byId = new Map(owned.map((plan) => [plan.id, plan]));
+      for (const row of assignedRows.results ?? []) {
+        const plan = JSON.parse(row.aggregate_json) as Plan;
+        byId.set(plan.id, plan);
+      }
+      return Response.json({ ok: true, plans: [...byId.values()] });
     }
     const plan = await service().getPlan(planId);
     return plan

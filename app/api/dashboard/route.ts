@@ -91,51 +91,50 @@ export async function GET(request: Request) {
             SELECT COUNT(*)
             FROM input_package_files ipf
             WHERE ipf.plan_id = pa.plan_id
-              AND ipf.owner_id = ?
               AND ipf.status = 'READY'
           ), 0) AS ready_files,
           COALESCE((
             SELECT status
             FROM input_package_reviews ipr
             WHERE ipr.plan_id = pa.plan_id
-              AND ipr.owner_id = ?
           ), '') AS package_status
           ,COALESCE((
             SELECT COUNT(*)
             FROM baseline_calculations bc
             WHERE bc.plan_id = pa.plan_id
-              AND bc.owner_id = ?
           ), 0) AS baseline_count
           ,COALESCE((
             SELECT COUNT(*)
             FROM baseline_reviews br
             WHERE br.plan_id = pa.plan_id
-              AND br.owner_id = ?
               AND br.status = 'APPROVED_FROZEN'
           ), 0) AS baseline_approved_count
           ,COALESCE((
             SELECT COUNT(*)
             FROM growth_plans gp
             WHERE gp.plan_id = pa.plan_id
-              AND gp.owner_id = ?
           ), 0) AS growth_count
           ,COALESCE((
             SELECT COUNT(*)
             FROM plan_results pr
             WHERE pr.plan_id = pa.plan_id
-              AND pr.owner_id = ?
           ), 0) AS result_count
           ,COALESCE((
             SELECT COUNT(*)
             FROM financial_results fr
             WHERE fr.plan_id = pa.plan_id
-              AND fr.owner_id = ?
           ), 0) AS profitability_count
         FROM plan_aggregates pa
         WHERE json_extract(pa.aggregate_json, '$.versions[0].createdBy') = ?
+           OR EXISTS (
+             SELECT 1 FROM access_assignments aa
+             JOIN organization_memberships om ON om.id = aa.membership_id AND om.status = 'ACTIVE'
+             JOIN users u ON u.id = om.user_id
+             WHERE aa.scope_type = 'PLAN' AND aa.scope_id = pa.plan_id AND u.email = ?
+           )
         ORDER BY pa.updated_at DESC`,
       )
-      .bind(ownerId, ownerId, ownerId, ownerId, ownerId, ownerId, ownerId, ownerId)
+      .bind(ownerId, ownerId)
       .run<{
         aggregate_json: string;
         updated_at: string;
