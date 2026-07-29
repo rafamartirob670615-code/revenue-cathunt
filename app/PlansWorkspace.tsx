@@ -1435,12 +1435,12 @@ export default function PlansWorkspace({
                         <label className="secondary file-button">
                           {uploadingRequirement === requirement.id
                             ? "Leyendo archivo…"
-                            : requirement.id === "sales-history"
+                            : ["sales-history","marketing-plan","trade-marketing-plan"].includes(requirement.id)
                               ? received ? "Reemplazar Excel o CSV" : "Seleccionar Excel o CSV"
                               : received ? "Reemplazar CSV" : "Seleccionar CSV"}
                           <input
                             type="file"
-                            accept={requirement.id === "sales-history"
+                            accept={["sales-history","marketing-plan","trade-marketing-plan"].includes(requirement.id)
                               ? ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
                               : ".csv,text/csv"}
                             disabled={uploadingRequirement === requirement.id}
