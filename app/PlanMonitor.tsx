@@ -141,9 +141,14 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
     }
   }
 
-  const activities = useMemo(() =>
-    (data?.growth?.activities ?? []).filter((item) => family === "TODOS" || item.family === family),
-  [data, family]);
+  const activities = useMemo(() => {
+    const unique = new Map<string, Activity>();
+    for (const item of data?.growth?.activities ?? []) {
+      const key = `${item.family}|${item.name}|${item.period}|${item.skuId}`;
+      if (!unique.has(key)) unique.set(key, item);
+    }
+    return [...unique.values()].filter((item) => family === "TODOS" || item.family === family);
+  }, [data, family]);
   const planValues = useMemo(() => {
     const monthly = Object.fromEntries(Array.from({ length: 12 }, (_, index) => {
       const month = String(index + 1).padStart(2, "0");
@@ -199,32 +204,32 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
         <button className="secondary" onClick={onExit}>← Volver al lobby</button>
       </header>
       <nav className="monitor-tabs" aria-label="Vistas de Monitoreo">
-        <button className={view === "blocks" ? "active" : ""} onClick={() => setView("blocks")}>Building blocks</button>
-        <button className={view === "billing" ? "active" : ""} onClick={() => setView("billing")}>Vista integral Billing</button>
+        <button className={view === "blocks" ? "active" : ""} onClick={() => setView("blocks")}>Actividades del Plan</button>
+        <button className={view === "billing" ? "active" : ""} onClick={() => setView("billing")}>Desempeño</button>
         <button className={view === "actions" ? "active" : ""} onClick={() => setView("actions")}>Acciones · {actions.filter((item) => item.status !== "CLOSED").length}</button>
       </nav>
 
       {view === "blocks" ? (
         <section className="monitor-panel">
-          <div className="monitor-title"><div><p className="eyebrow">Entrada de Monitoreo</p><h2>Building blocks del Plan</h2></div><button className="primary" onClick={() => setView("billing")}>Abrir vista integral →</button></div>
+          <div className="monitor-title"><div><p className="eyebrow">Qué construyó el Plan</p><h2>Actividades de Marketing y Trade Marketing</h2><p>Revisa el aporte comercial antes de compararlo contra los resultados reales.</p></div><button className="primary" onClick={() => setView("billing")}>Ver desempeño →</button></div>
           <div className="monitor-kpis">
             <article><span>Incremental bruto</span><b>{data.growth ? data.growth.grossUnits.toLocaleString("es-MX") : "Sin resultado"}</b><small>unidades</small></article>
             <article><span>Incremental neto</span><b>{data.growth ? data.growth.netUnits.toLocaleString("es-MX") : "Sin resultado"}</b><small>unidades reconciliadas</small></article>
-            <article><span>Building blocks</span><b>{data.growth?.activities.length ?? 0}</b><small>Marketing + Trade Marketing</small></article>
+            <article><span>Actividades</span><b>{activities.length}</b><small>Marketing + Trade Marketing</small></article>
             <article><span>Reconciliación</span><b>{data.growth?.controls.reconciled ? "Lista" : "Pendiente"}</b><small>versión guardada</small></article>
           </div>
           <div className="monitor-filters">
             {(["TODOS", "MARKETING", "TRADE_MARKETING"] as const).map((item) => <button key={item} className={family === item ? "active" : ""} onClick={() => setFamily(item)}>{item === "TODOS" ? "Todos" : item === "MARKETING" ? "Marketing" : "Trade Marketing"}</button>)}
           </div>
           <div className="blocks-table">
-            <div className="blocks-row head"><span>Building block</span><span>Familia</span><span>Periodo</span><span>SKU</span><span>Bruto</span><span>Neto</span><span>Estado</span></div>
+            <div className="blocks-row head"><span>Actividad</span><span>Área</span><span>Periodo</span><span>Producto</span><span>Bruto</span><span>Neto</span><span>Estado</span></div>
             {activities.map((item) => <div className="blocks-row" key={item.id}><b>{item.name}</b><span>{item.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</span><span>{item.period}</span><span>{item.skuId}</span><span>{item.grossUnits.toLocaleString("es-MX")}</span><strong>{item.netUnits.toLocaleString("es-MX")}</strong><small>{item.status}</small></div>)}
-            {!activities.length && <div className="monitor-empty">Esta versión no tiene building blocks guardados.</div>}
+            {!activities.length && <div className="monitor-empty">Esta versión no tiene actividades comerciales guardadas.</div>}
           </div>
         </section>
       ) : view === "billing" ? (
         <section className="monitor-panel billing-panel">
-          <div className="monitor-title"><div><p className="eyebrow">Billing File Customer</p><h2>Vista integral del Plan</h2><p>Meses, trimestres, FY y YTD · valores en {data.result?.currency ?? data.plan.currency}</p></div></div>
+          <div className="monitor-title"><div><p className="eyebrow">Desempeño comercial</p><h2>Plan contra resultados</h2><p>Compara Plan, cuota, venta real y año anterior · valores en {data.result?.currency ?? data.plan.currency}</p></div></div>
           <div className="dataset-health">
             <span className="ready">Plan guardado</span>
             <label className={quotaReady ? "ready monitor-upload" : "missing monitor-upload"}>

@@ -809,7 +809,7 @@ export default function PlansWorkspace({
         <div className="page-head">
           <div>
             <p className="eyebrow">Crear Plan anual</p>
-            <h1>Crea un Plan por cuenta</h1><p>Identifica el Plan. Al guardarlo pasarás directamente a cargar y validar los datasets imprescindibles.</p>
+            <h1>Crea un Plan por cuenta</h1><p>Registra la cuenta. Después puedes probar el recorrido o comenzar con un solo Excel de ventas.</p>
           </div>
           <button className="secondary" onClick={() => onExit ? onExit() : setView("portfolio")}>← Volver al lobby</button>
         </div>
@@ -832,7 +832,7 @@ export default function PlansWorkspace({
           {error && <div className="recoverable-error" role="alert">{error}</div>}
           <div className="create-plan-actions">
             <button type="button" className="secondary" onClick={() => onExit ? onExit() : setView("portfolio")}>Cancelar</button>
-            <button className="primary" disabled={saving}>{saving ? "Guardando…" : "Guardar y cargar datasets"}</button>
+            <button className="primary" disabled={saving}>{saving ? "Guardando…" : "Guardar y continuar"}</button>
           </div>
         </form>
       </div>
@@ -1400,22 +1400,22 @@ export default function PlansWorkspace({
             <div className="input-package">
               <div className="input-package-head">
                 <div>
-                  <p className="eyebrow">Centro de datos · versión 1</p>
-                  <h2>Convierte tus archivos en información utilizable</h2>
+                  <p className="eyebrow">Información del Plan</p>
+                  <h2>Comienza sin reunir todo</h2>
                   <p>{receivedFiles.length
                     ? "REVENUE conserva cada original, explica cómo lo interpretó y te permite continuar después."
                     : "No necesitas tener todos los archivos. Empieza con la historia de ventas o con cualquier información disponible."}</p>
                 </div>
-                <span className={essentialReady === 4 && packageIssues.length === 0 ? "pill good" : "pill danger"}>{essentialReady} de 4 esenciales listos</span>
+                {receivedFiles.length > 0 && <span className={essentialReady === 4 && packageIssues.length === 0 ? "pill good" : "pill danger"}>{essentialReady} de 4 grupos básicos reconocidos</span>}
               </div>
               <div className="data-center-principle">
                 <span>01</span>
                 <div>
-                  <b>Sube los archivos tal como los produce tu empresa</b>
-                  <p>Pueden tener varias hojas y nombres propios. REVENUE localizará las tablas, propondrá equivalencias y sólo te pedirá ayuda cuando exista una duda real.</p>
+                  <b>Para empezar sólo necesitas un Excel con historia de ventas</b>
+                  <p>Súbelo tal como lo produce tu empresa. Puede tener varias hojas. La demás información se incorpora después, cuando corresponda.</p>
                 </div>
               </div>
-              <div className="pilot-input-path" aria-label="Etapas de información del Plan">
+              {showFileDetails && <div className="pilot-input-path" aria-label="Etapas de información del Plan">
                 <article className="current">
                   <span>Para comenzar</span>
                   <b>Base del Plan</b>
@@ -1431,8 +1431,8 @@ export default function PlansWorkspace({
                   <b>Seguimiento</b>
                   <small>Cuota comercial y ventas actuales.</small>
                 </article>
-              </div>
-              <p className="pilot-input-note"><b>No son doce archivos obligatorios.</b> Un mismo libro puede contener varias fuentes y puedes completar la información en diferentes momentos.</p>
+              </div>}
+              <p className="pilot-input-note"><b>No se requieren diez ni doce archivos para comenzar.</b> Empieza con ventas. REVENUE pedirá los demás datos únicamente al llegar al cálculo que los utiliza.</p>
               <div className="synthetic-package-card">
                 <div>
                   <b>Prueba guiada sin cargar archivos</b>
@@ -1451,11 +1451,11 @@ export default function PlansWorkspace({
               {!syntheticPackage && (
                 <div className="pilot-simple-choice">
                   <div>
-                    <b>Elige una forma de comenzar</b>
-                    <p>Usa la prueba guiada para conocer el recorrido, o abre el detalle cuando tengas archivos empresariales.</p>
+                    <b>Si tienes información empresarial</b>
+                    <p>Comienza con el Excel de ventas. El catálogo completo queda disponible sólo para consulta.</p>
                   </div>
                   <button className="secondary" type="button" onClick={() => setShowFileDetails((current) => !current)}>
-                    {showFileDetails ? "Ocultar detalle de archivos" : "Tengo archivos empresariales"}
+                    {showFileDetails ? "Ocultar catálogo" : "Cargar mi Excel de ventas"}
                   </button>
                 </div>
               )}

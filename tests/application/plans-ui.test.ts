@@ -7,7 +7,7 @@ const componentUrl = new URL("../../app/PlansWorkspace.tsx", import.meta.url);
 test("Crear Plan real comienza vacío y permite volver al lobby", async () => {
   const source = await readFile(componentUrl, "utf8");
   assert.match(source, /Siguiente: cargar lo que ya tengas/);
-  assert.match(source, /Guardar y cargar datasets/);
+  assert.match(source, /Guardar y continuar/);
   assert.match(source, /Volver al lobby/);
   assert.match(source, /lines:\s*\[\]/);
 });
@@ -18,17 +18,17 @@ test("el recorrido vacío no presenta cifras demostrativas como resultados", asy
   assert.match(source, /cargar los datasets necesarios|cargar lo que ya tengas/);
 });
 
-test("el checklist muestra requisitos pendientes y conserva bloqueado el baseline", async () => {
+test("la información del Plan conserva requisitos y mantiene bloqueado el baseline", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Tengo archivos empresariales/);
-  assert.match(source, /essentialReady.*4 esenciales listos/s);
+  assert.match(source, /Cargar mi Excel de ventas/);
+  assert.match(source, /essentialReady.*4 grupos básicos reconocidos/s);
   assert.match(source, /No recibido/);
   assert.match(source, /no completa este paquete/);
   assert.match(source, />Baseline<\/button>/);
   assert.match(source, /Seleccionar Excel o CSV/);
   assert.match(source, /"sales-quota"/);
   assert.match(source, /"actual-sales"/);
-  assert.match(source, /Centro de datos/);
+  assert.match(source, /Información del Plan/);
   assert.match(source, /Hoja elegida/);
   assert.match(source, /Vista del dataset canónico/);
   assert.match(source, /received\.issues/);

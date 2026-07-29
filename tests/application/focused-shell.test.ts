@@ -10,7 +10,7 @@ test("Inicio tiene dos puertas y continuar se presenta como trabajo reciente", a
   assert.doesNotMatch(source, />Monitoreo<\/button>/);
   assert.match(lobby, /Continuar un Plan/);
   assert.match(lobby, /Crear un Plan/);
-  assert.match(lobby, /Monitorear un Plan/);
+  assert.match(lobby, /Revisar desempeño/);
   assert.match(lobby, /Trabajo guardado/);
   assert.doesNotMatch(lobby, /Explorar el Plan piloto|openSynthetic|Sitio privado/);
   assert.doesNotMatch(source, /Mercado Central|\$131\.4 M|Sistema confiable|Confianza del dato/);
