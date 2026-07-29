@@ -299,7 +299,9 @@ export default function RevenuePlatform() {
     else setActive(module);
   }
 
-  const syntheticPlan = state.files.length > 0 && state.files.every((file) => file.synthetic);
+  const syntheticPlan =
+    state.baseline?.dataClassification === "SYNTHETIC_NON_COMMERCIAL" ||
+    (state.files.length > 0 && state.files.every((file) => file.synthetic));
   const marketingReady = state.files.some((file) => file.requirementId === "marketing-plan" && file.status === "READY");
   const tradeReady = state.files.some((file) => file.requirementId === "trade-marketing-plan" && file.status === "READY");
   const growthCanBuild = state.review?.status === "APPROVED_FROZEN" && (syntheticPlan || (marketingReady && tradeReady));

@@ -52,6 +52,7 @@ test("Marketing y Trade Marketing viven en pantallas independientes", async () =
   assert.match(platform, /active === "plan-trade"/);
   assert.match(platform, /growthCanBuild/);
   assert.match(platform, /syntheticPlan \|\| \(marketingReady && tradeReady\)/);
+  assert.match(platform, /state\.baseline\?\.dataClassification === "SYNTHETIC_NON_COMMERCIAL"/);
   assert.match(source, /Reconciliar Marketing y Trade/);
   assert.match(source, /Caso guiado sintético/);
 });
