@@ -868,12 +868,12 @@ export default function PlansWorkspace({
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
         </div>
         <div className="plan-tabs">
-          <button className={showInformation?"active":""} onClick={()=>{setShowInformation(true);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Datasets</button>
-          <button className={!showInformation&&!showBaselineGate&&!showGrowthGate&&!showResultGate&&!showVersionGate?"active":""} onClick={()=>{setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Vista integral</button>
-          <button className={showBaselineGate ? "active" : ""} onClick={() => packageAccepted ? (setShowBaselineGate(true),setShowInformation(false),setShowGrowthGate(false),setShowResultGate(false),setShowVersionGate(false)) : (setShowInformation(true),setShowBaselineGate(false))}>Baseline</button>
-          <button className={showGrowthGate ? "active" : ""} onClick={() => baselineReview?.status === "APPROVED_FROZEN" ? (setShowInformation(false),setShowBaselineGate(false),setShowGrowthGate(true),setShowResultGate(false),setShowVersionGate(false)) : (setShowInformation(packageAccepted),setShowBaselineGate(packageAccepted),setShowGrowthGate(false))}>Crecimiento</button>
-          <button className={showResultGate ? "active" : ""} onClick={() => growth?.controls.reconciled ? (setShowInformation(false),setShowBaselineGate(false),setShowGrowthGate(false),setShowResultGate(true),setShowVersionGate(false)) : (setShowInformation(!packageAccepted),setShowBaselineGate(packageAccepted&&baselineReview?.status!=="APPROVED_FROZEN"),setShowGrowthGate(baselineReview?.status==="APPROVED_FROZEN"),setShowResultGate(false))}>Resultado y rentabilidad</button>
-          <button className={showVersionGate ? "active" : ""} onClick={() => profitability ? (setShowInformation(false),setShowBaselineGate(false),setShowGrowthGate(false),setShowResultGate(false),setShowVersionGate(true)) : (setShowInformation(!packageAccepted),setShowBaselineGate(packageAccepted&&baselineReview?.status!=="APPROVED_FROZEN"),setShowGrowthGate(baselineReview?.status==="APPROVED_FROZEN"&&!growth?.controls.reconciled),setShowResultGate(Boolean(growth?.controls.reconciled)))}>Versión final</button>
+          <button className={showInformation?"active":""} onClick={()=>{setShowInformation(true);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Información</button>
+          <button className={!showInformation&&!showBaselineGate&&!showGrowthGate&&!showResultGate&&!showVersionGate?"active":""} onClick={()=>{setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Resumen</button>
+          {packageAccepted && <button className={showBaselineGate ? "active" : ""} onClick={() => {setShowBaselineGate(true);setShowInformation(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Volumen base</button>}
+          {baselineReview?.status === "APPROVED_FROZEN" && <button className={showGrowthGate ? "active" : ""} onClick={() => {setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(true);setShowResultGate(false);setShowVersionGate(false);}}>Crecimiento</button>}
+          {growth?.controls.reconciled && <button className={showResultGate ? "active" : ""} onClick={() => {setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(true);setShowVersionGate(false);}}>Resultado y rentabilidad</button>}
+          {profitability && <button className={showVersionGate ? "active" : ""} onClick={() => {setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(true);}}>Versión para revisión</button>}
         </div>
         <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate || showResultGate ? "baseline-mode" : ""}`}>
           {showBaselineGate && packageAccepted && (
@@ -1452,11 +1452,22 @@ export default function PlansWorkspace({
                 <div className="pilot-simple-choice">
                   <div>
                     <b>Si tienes información empresarial</b>
-                    <p>Comienza con el Excel de ventas. El catálogo completo queda disponible sólo para consulta.</p>
+                    <p>Selecciona el Excel de ventas y REVENUE revisará hojas, encabezados y contenido.</p>
                   </div>
-                  <button className="secondary" type="button" onClick={() => setShowFileDetails((current) => !current)}>
-                    {showFileDetails ? "Ocultar catálogo" : "Cargar mi Excel de ventas"}
-                  </button>
+                  <div className="pilot-file-actions">
+                    <label className="primary file-button">
+                      {uploadingRequirement === "sales-history" ? "Revisando Excel…" : "Seleccionar Excel de ventas"}
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                        disabled={Boolean(uploadingRequirement)}
+                        onChange={(event) => void uploadInput("sales-history", event.target.files?.[0])}
+                      />
+                    </label>
+                    <button className="text-link" type="button" onClick={() => setShowFileDetails((current) => !current)}>
+                      {showFileDetails ? "Ocultar otros datos" : "Ver otros datos que se pedirán después"}
+                    </button>
+                  </div>
                 </div>
               )}
               {(showFileDetails || receivedFiles.length > 0) && <div className="input-requirements">
@@ -1589,12 +1600,6 @@ export default function PlansWorkspace({
               {packageAccepted && (
                 <div className="accepted-package-card">
                   <span>✓</span><div><b>Paquete aceptado</b><p>Cualquier archivo reemplazado volverá a abrir esta revisión.</p></div>
-                </div>
-              )}
-              {!syntheticPackage && (
-                <div className="input-package-warning">
-                  <span>!</span>
-                  <div><b>El archivo histórico disponible no completa este paquete</b><p>Está agregado por unidad de negocio y corresponde a 2010–2011; no incluye el detalle cuenta × SKU requerido para el piloto.</p></div>
                 </div>
               )}
             </div>
