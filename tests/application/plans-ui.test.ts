@@ -36,9 +36,13 @@ test("el checklist muestra requisitos pendientes y conserva bloqueado el baselin
   assert.match(source, /Descargar plantilla/);
   assert.match(source, /requiredFields\.join/);
   assert.match(source, /Confirmar paquete listo/);
+  assert.match(source, /Iniciar prueba guiada/);
+  assert.match(source, /Volumen base anual propuesto/);
+  assert.match(source, /Aceptar volumen base y continuar/);
   assert.match(source, /¿Qué venderíamos sin volver a contar las actividades\?/);
   assert.match(source, /Base desimpactada/);
   assert.match(source, /Trade Marketing/);
+  assert.match(source, /Continuar al resultado/);
   assert.match(source, /Resumen integral del Plan/);
   assert.match(source, /Este es tu Plan anual/);
   assert.match(source, /Base aprobada/);

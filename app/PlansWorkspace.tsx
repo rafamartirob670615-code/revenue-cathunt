@@ -261,6 +261,7 @@ export default function PlansWorkspace({
   const [packageAccepted, setPackageAccepted] = useState(false);
   const [acceptingPackage, setAcceptingPackage] = useState(false);
   const [loadingSynthetic, setLoadingSynthetic] = useState(false);
+  const [showFileDetails, setShowFileDetails] = useState(false);
   const [showBaselineGate, setShowBaselineGate] = useState(false);
   const [showGrowthGate, setShowGrowthGate] = useState(false);
   const [showResultGate, setShowResultGate] = useState(false);
@@ -621,16 +622,39 @@ export default function PlansWorkspace({
     setLoadingSynthetic(true);
     setError("");
     try {
-      const response = await fetch("/api/inputs", {
+      const packageResponse = await fetch("/api/inputs", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ planId: selected.id }),
       });
-      const body = (await response.json()) as { ok: boolean; error?: string };
-      if (!response.ok || !body.ok) throw new Error(body.error);
-      setBaseline(null);
+      const packageBody = (await packageResponse.json()) as { ok: boolean; error?: string };
+      if (!packageResponse.ok || !packageBody.ok) throw new Error(packageBody.error);
+
+      const acceptResponse = await fetch("/api/inputs", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: selected.id }),
+      });
+      const acceptBody = (await acceptResponse.json()) as { ok: boolean; error?: string };
+      if (!acceptResponse.ok || !acceptBody.ok) throw new Error(acceptBody.error);
+
+      const baselineResponse = await fetch("/api/baseline", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: selected.id }),
+      });
+      const baselineBody = (await baselineResponse.json()) as { ok: boolean; result?: BaselineResult; error?: string };
+      if (!baselineResponse.ok || !baselineBody.ok || !baselineBody.result) throw new Error(baselineBody.error);
+
       await loadInputFiles(selected.id);
-      setShowInformation(true);
+      setPackageAccepted(true);
+      setBaseline(baselineBody.result);
+      setBaselineReview(null);
+      setShowInformation(false);
+      setShowBaselineGate(true);
+      setShowGrowthGate(false);
+      setShowResultGate(false);
+      setShowVersionGate(false);
     } catch (cause) {
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -700,6 +724,9 @@ export default function PlansWorkspace({
       const body = (await response.json()) as { ok: boolean; review?: BaselineReview; error?: string };
       if (!response.ok || !body.ok || !body.review) throw new Error(body.error);
       setBaselineReview(body.review);
+      setShowBaselineGate(false);
+      setShowGrowthGate(true);
+      setShowInformation(false);
     } catch (cause) {
       setError(friendlyError(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -866,6 +893,26 @@ export default function PlansWorkspace({
                   <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
                   <span>Este resultado sirve para probar el motor y el recorrido. No representa ventas, metas ni resultados reales.</span>
                 </div>
+              )}
+              {baseline && (
+                <section className="baseline-primary-result" aria-label="Resultado principal del volumen base">
+                  <div>
+                    <span>Volumen base anual propuesto</span>
+                    <strong>{baseline.annualUnits.toLocaleString("es-MX")}</strong>
+                    <small>unidades para {baseline.targetYear}</small>
+                  </div>
+                  <div>
+                    <b>¿Qué significa?</b>
+                    <p>Es el volumen recurrente antes de sumar las actividades de Marketing y Trade Marketing.</p>
+                  </div>
+                  {baselineReview?.status === "APPROVED_FROZEN" ? (
+                    <div className="baseline-primary-done"><span>✓</span><b>Base aceptada</b><small>Ya puede alimentar Crecimiento.</small></div>
+                  ) : (
+                    <button className="primary" disabled={savingReview} onClick={() => void approveBaseline("CALCULATED")}>
+                      {savingReview ? "Guardando…" : "Aceptar volumen base y continuar"}
+                    </button>
+                  )}
+                </section>
               )}
 
               <div className="baseline-toolbar" aria-label="Periodo del baseline">
@@ -1046,6 +1093,19 @@ export default function PlansWorkspace({
                     <article><span>Identidades duplicadas</span><b>{growth.controls.duplicateEconomicIdentities}</b></article>
                     <article><span>Solapamientos pendientes</span><b>{growth.controls.unresolvedOverlaps}</b></article>
                   </div>
+                  <div className="role-growth-summary">
+                    {(["MARKETING", "TRADE_MARKETING"] as const).map((family) => {
+                      const activities = growth.activities.filter((activity) => activity.family === family);
+                      const netUnits = activities.reduce((total, activity) => total + activity.netUnits, 0);
+                      return (
+                        <article key={family}>
+                          <span>{family === "MARKETING" ? "Marketing" : "Trade Marketing"}</span>
+                          <strong>{netUnits >= 0 ? "+" : ""}{netUnits.toLocaleString("es-MX")}</strong>
+                          <small>{activities.length} {activities.length === 1 ? "actividad" : "actividades"} · aporte neto</small>
+                        </article>
+                      );
+                    })}
+                  </div>
                   <div className="growth-table">
                     <div className="growth-table-head"><span>Familia y actividad</span><span>Periodo / SKU</span><span>Bruto</span><span>Ajustes</span><span>Neto</span><span>Evidencia</span></div>
                     {(editingGrowth?growthDraft:growth.activities).map((activity,index) => (
@@ -1065,6 +1125,10 @@ export default function PlansWorkspace({
                   <div className="growth-reconciliation">
                     <b>Incremental bruto − canibalización + halo − compra anticipada ± interacción = incremental neto</b>
                     <span>{growth.methodId} v{growth.methodVersion} · resultado persistido</span>
+                  </div>
+                  <div className="guided-next-step">
+                    <div><b>Crecimiento listo</b><p>Marketing y Trade Marketing ya están reconciliados. Continúa para ver el Plan anual.</p></div>
+                    <button className="primary" onClick={() => {setShowGrowthGate(false);setShowResultGate(true);}}>Continuar al resultado</button>
                   </div>
                 </>
               ) : (
@@ -1356,11 +1420,11 @@ export default function PlansWorkspace({
               <p className="pilot-input-note"><b>No son doce archivos obligatorios.</b> Un mismo libro puede contener varias fuentes y puedes completar la información en diferentes momentos.</p>
               <div className="synthetic-package-card">
                 <div>
-                  <b>¿Todavía no tienes información empresarial?</b>
-                  <p>Puedes recorrer el piloto con información de prueba claramente identificada. No se confundirá con un Plan real.</p>
+                  <b>Prueba guiada sin cargar archivos</b>
+                  <p>REVENUE preparará la información de prueba, calculará el volumen base y te llevará directamente al primer resultado.</p>
                 </div>
                 <button className="secondary" onClick={() => void loadSyntheticPackage()} disabled={loadingSynthetic}>
-                  {loadingSynthetic ? "Preparando…" : "Usar paquete sintético"}
+                  {loadingSynthetic ? "Preparando información y calculando…" : "Iniciar prueba guiada"}
                 </button>
               </div>
               {syntheticPackage && (
@@ -1369,7 +1433,18 @@ export default function PlansWorkspace({
                   <span>Los cinco archivos de este paquete son artificiales y sólo pueden usarse para prueba.</span>
                 </div>
               )}
-              <div className="input-requirements">
+              {!syntheticPackage && (
+                <div className="pilot-simple-choice">
+                  <div>
+                    <b>Elige una forma de comenzar</b>
+                    <p>Usa la prueba guiada para conocer el recorrido, o abre el detalle cuando tengas archivos empresariales.</p>
+                  </div>
+                  <button className="secondary" type="button" onClick={() => setShowFileDetails((current) => !current)}>
+                    {showFileDetails ? "Ocultar detalle de archivos" : "Tengo archivos empresariales"}
+                  </button>
+                </div>
+              )}
+              {(showFileDetails || receivedFiles.length > 0) && <div className="input-requirements">
                 {PILOT_INPUT_REQUIREMENTS.map((requirement) => {
                   const item = inputPackage.items.find((candidate) => candidate.requirementId === requirement.id);
                   const received = receivedFiles.find((file) => file.requirementId === requirement.id);
@@ -1481,7 +1556,7 @@ export default function PlansWorkspace({
                     </article>
                   );
                 })}
-              </div>
+              </div>}
               {packageIssues.length > 0 && (
                 <div className="package-issues">
                   <b>Hay correspondencias pendientes entre archivos</b>
