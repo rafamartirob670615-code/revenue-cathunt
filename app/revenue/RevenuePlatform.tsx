@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Plan } from "../../domain/types";
-import PlanMonitor from "../PlanMonitor";
+import MonitoringModule from "./MonitoringModule";
 import Shell from "./Shell";
 import HomeModule from "./HomeModule";
 import {
   BaselineModule,
-  GrowthModule,
+  ContextModule,
+  GrowthPlanModule,
   InformationModule,
   ProfitabilityModule,
   ResultModule,
@@ -116,7 +117,14 @@ export default function RevenuePlatform() {
         if (response.ok && body.ok) next.profitability = body.result ?? null;
       }
       setState(next);
-      setActive(destination ?? (next.accepted ? "volumen-base" : "informacion"));
+      const nextModule: RevenueModule =
+        next.profitability ? "revision" :
+        next.result ? "rentabilidad" :
+        next.growth?.controls.reconciled ? "plan-anual" :
+        next.review?.status === "APPROVED_FROZEN" ? "plan-marketing" :
+        next.accepted ? "volumen-base" :
+        "informacion";
+      setActive(destination ?? nextModule);
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
       setActive("informacion");
@@ -130,13 +138,15 @@ export default function RevenuePlatform() {
     if (plan) void loadPlan(plan, destination);
   }
 
-  const available = useMemo(() => {
-    const modules = new Set<RevenueModule>(["inicio", "informacion", "administracion"]);
-    if (selected) modules.add("informacion");
-    if (state.accepted) modules.add("volumen-base");
-    if (state.review?.status === "APPROVED_FROZEN") modules.add("crecimiento");
-    if (state.growth?.controls.reconciled) modules.add("plan-anual");
-    if (state.result) modules.add("rentabilidad");
+  const completed = useMemo(() => {
+    const modules = new Set<RevenueModule>();
+    if (selected) modules.add("contexto");
+    if (state.accepted) modules.add("informacion");
+    if (state.review?.status === "APPROVED_FROZEN") modules.add("volumen-base");
+    if (state.growth?.activities.some((activity) => activity.family === "MARKETING")) modules.add("plan-marketing");
+    if (state.growth?.activities.some((activity) => activity.family === "TRADE_MARKETING")) modules.add("plan-trade");
+    if (state.result?.controls.unitsReconciled) modules.add("plan-anual");
+    if (state.profitability?.controls.planReconciled) modules.add("rentabilidad");
     if (state.profitability) modules.add("revision");
     if (selected && ["SUBMITTED","COMMERCIAL_APPROVED","FINANCE_VALIDATED","OFFICIAL"].includes(selected.versions.at(-1)?.status ?? "")) modules.add("monitoreo");
     return modules;
@@ -215,7 +225,7 @@ export default function RevenuePlatform() {
       const body = await response.json() as { ok: boolean; review?: BaselineReview; error?: string };
       if (!response.ok || !body.ok || !body.review) throw new Error(body.error);
       setState((current) => ({ ...current, review: body.review ?? null }));
-      setActive("crecimiento");
+      setActive("plan-marketing");
     } catch (cause) { setError(friendly(cause instanceof Error ? cause.message : "")); }
     finally { setBusy(""); }
   }
@@ -277,24 +287,26 @@ export default function RevenuePlatform() {
 
   function navigate(module: RevenueModule) {
     if (module === "inicio") { setActive("inicio"); setCreating(false); }
-    else if (available.has(module)) setActive(module);
+    else setActive(module);
   }
 
   const syntheticPlan = state.files.length > 0 && state.files.every((file) => file.synthetic);
 
   return (
-    <Shell active={active} plan={selected} available={available} onNavigate={navigate}>
+    <Shell active={active} plan={selected} completed={completed} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => setCreating(false)} /> :
       active === "inicio" ? <HomeModule plans={dashboardPlans} onCreate={() => setCreating(true)} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} /> :
+      active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={() => setCreating(true)} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "volumen-base" ? <BaselineModule baseline={state.baseline} review={state.review} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> :
-      active === "crecimiento" ? <GrowthModule growth={state.growth} busy={busy} onBuild={buildGrowth} /> :
-      active === "plan-anual" ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} busy={busy} onBuild={buildResult} /> :
-      active === "rentabilidad" ? <ProfitabilityModule profitability={state.profitability} busy={busy} onBuild={buildProfitability} /> :
-      active === "revision" ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> :
-      active === "monitoreo" && selected ? <PlanMonitor planId={selected.id} onExit={() => setActive("inicio")} /> :
+      active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <NoPlan onCreate={() => setCreating(true)} /> :
       <AdministrationModule />}
     </Shell>
   );

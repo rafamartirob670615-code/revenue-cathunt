@@ -7,18 +7,20 @@ test("Inicio y los módulos viven en una sola maquinaria", async () => {
   const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   const home = await readFile(new URL("../../app/revenue/HomeModule.tsx", import.meta.url), "utf8");
   assert.match(page, /RevenuePlatform/);
-  assert.match(shell, /REVENUE_MODULES\.map/);
+  assert.match(shell, /REVENUE_MODULES\.filter/);
+  assert.match(shell, /Construir el Plan/);
   assert.match(home, /Construir un Plan anual/);
   assert.match(home, /Revisar un Plan enviado/);
   assert.match(home, /Continuar exactamente donde quedó/);
   assert.doesNotMatch(page, /RevenueLobby|PlansWorkspace/);
 });
 
-test("el armazón conserva contexto y permisos de avance", async () => {
+test("el armazón conserva contexto y muestra el recorrido completo", async () => {
   const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   for (const label of ["Compañía", "Cuenta", "Año", "Versión", "Estado"]) assert.match(shell, new RegExp(label));
-  assert.match(platform, /available\.has/);
+  assert.match(platform, /completed\.has|completed=/);
+  assert.doesNotMatch(shell, /disabled={!available/);
   assert.match(platform, /APPROVED_FROZEN/);
   assert.match(platform, /unitsReconciled/);
 });
@@ -28,7 +30,7 @@ test("la información identifica responsables y la versión conserva gobierno", 
   const modules = await readFile(new URL("../../app/revenue/PlanModules.tsx", import.meta.url), "utf8");
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   assert.match(requirements, /suggestedOwner/);
-  assert.match(modules, /Oficialización bloqueada por ser sintético/);
+  assert.match(modules, /Prueba no comercial/);
   assert.match(platform, /action: "freezeAndSubmit"/);
   assert.match(platform, /setActive\("monitoreo"\)/);
 });

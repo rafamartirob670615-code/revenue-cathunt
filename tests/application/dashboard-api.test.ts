@@ -18,10 +18,10 @@ test("cada etapa del dashboard conduce a una acción comercial", async () => {
   for (const action of [
     "Preparar información",
     "Completar información",
-    "Confirmar paquete",
-    "Revisar base desimpactada",
+    "Confirmar información",
+    "Calcular Volumen base",
     "Continuar construcción",
-    "Construir crecimiento",
+    "Preparar Marketing y Trade",
     "Consolidar unidades y valor",
     "Revisar rentabilidad",
     "Preparar versión",

@@ -68,10 +68,10 @@ function deriveStage(
   if (profitabilityReady) return { stage: "BUILD_PLAN", nextAction: "Preparar versión" };
   if (resultReady) return { stage: "BUILD_PLAN", nextAction: "Revisar rentabilidad" };
   if (growthReady) return { stage: "BUILD_PLAN", nextAction: "Consolidar unidades y valor" };
-  if (baselineApproved) return { stage: "BUILD_PLAN", nextAction: "Construir crecimiento" };
+  if (baselineApproved) return { stage: "BUILD_PLAN", nextAction: "Preparar Marketing y Trade" };
   if (baselineCalculated) return { stage: "BUILD_PLAN", nextAction: "Revisar cálculo técnico" };
-  if (packageAccepted) return { stage: "BUILD_BASELINE", nextAction: "Revisar base desimpactada" };
-  if (readyFiles >= 4) return { stage: "REVIEW_PACKAGE", nextAction: "Confirmar paquete" };
+  if (packageAccepted) return { stage: "BUILD_BASELINE", nextAction: "Calcular Volumen base" };
+  if (readyFiles >= 4) return { stage: "REVIEW_PACKAGE", nextAction: "Confirmar información" };
   if (readyFiles > 0) return { stage: "COMPLETE_INFORMATION", nextAction: "Completar información" };
   return { stage: "PREPARE_INFORMATION", nextAction: "Preparar información" };
 }

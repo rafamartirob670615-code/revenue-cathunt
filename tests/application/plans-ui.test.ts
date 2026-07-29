@@ -22,57 +22,60 @@ test("el recorrido vacío no presenta cifras demostrativas como resultados", asy
 
 test("la información comienza con un Excel y revela lo demás después", async () => {
   const source = await readFile(modulesUrl, "utf8");
-  assert.match(source, /Seleccionar Excel de ventas/);
-  assert.match(source, /Ver información que se solicitará después/);
-  assert.match(source, /Hoja elegida/);
+  assert.match(source, /Seleccionar archivo/);
+  assert.match(source, /Fuentes complementarias/);
+  assert.match(source, /conserva el original/);
   assert.match(source, /Confirmar información/);
-  assert.match(source, /Iniciar prueba guiada/);
+  assert.match(source, /Usar prueba guiada/);
 });
 
 test("el volumen base abre con una respuesta y mantiene detalle progresivo", async () => {
   const source = await readFile(modulesUrl, "utf8");
-  assert.match(source, /Volumen base anual propuesto/);
-  assert.match(source, /Ver resultado mensual por producto/);
-  assert.match(source, /Aceptar volumen base/);
-  assert.match(source, /Todavía no existe una base calculada/);
+  assert.match(source, /Volumen base anual/);
+  assert.match(source, /Resultado mensual por producto/);
+  assert.match(source, /Aprobar y congelar Volumen base/);
+  assert.match(source, /Falta calcular esta respuesta/);
 });
 
-test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async () => {
+test("Marketing y Trade Marketing viven en pantallas independientes", async () => {
   const source = await readFile(modulesUrl, "utf8");
+  const platform = await readFile(platformUrl, "utf8");
   assert.match(source, /Incremental bruto/);
   assert.match(source, /Incremental neto/);
-  assert.match(source, /Marketing/);
-  assert.match(source, /Trade Marketing/);
-  assert.match(source, /Construir crecimiento/);
+  assert.match(source, /GrowthPlanModule/);
+  assert.match(platform, /family="MARKETING"/);
+  assert.match(platform, /family="TRADE_MARKETING"/);
+  assert.match(platform, /active === "plan-marketing"/);
+  assert.match(platform, /active === "plan-trade"/);
 });
 
 test("Plan anual muestra unidades, valor y reconciliación", async () => {
   const source = await readFile(modulesUrl, "utf8");
   assert.match(source, /Unidades del Plan/);
   assert.match(source, /Revenue del Plan/);
-  assert.match(source, /Base aprobada/);
-  assert.match(source, /Ver detalle mensual por producto/);
-  assert.match(source, /Calcular Plan anual/);
+  assert.match(source, /Volumen base/);
+  assert.match(source, /Detalle mensual por producto/);
+  assert.match(source, /Consolidar Plan anual/);
 });
 
 test("rentabilidad separa el estado de resultados", async () => {
   const source = await readFile(modulesUrl, "utf8");
-  for (const label of ["Gross sales", "Deducciones", "Net sales", "COGS", "Gross margin", "Inversión", "Contribution"]) {
+  for (const label of ["Gross sales", "Condiciones comerciales", "Net sales", "Costo", "Margen bruto", "Inversión", "Contribución"]) {
     assert.match(source, new RegExp(label));
   }
-  assert.match(source, /Calcular rentabilidad/);
+  assert.match(source, /Calcular Rentabilidad/);
 });
 
 test("Revisión concentra validaciones y bloquea el caso sintético", async () => {
   const source = await readFile(modulesUrl, "utf8");
-  assert.match(source, /Oficialización bloqueada por ser sintético/);
-  assert.match(source, /Congelar y enviar a revisión/);
-  assert.match(source, /Volumen base aprobado/);
+  assert.match(source, /Prueba no comercial/);
+  assert.match(source, /Congelar y enviar/);
+  assert.match(source, /Información y base/);
 });
 
 test("la nueva maquinaria usa un registro único de módulos", async () => {
   const source = await readFile(registryUrl, "utf8");
-  for (const module of ["inicio", "informacion", "volumen-base", "crecimiento", "plan-anual", "rentabilidad", "revision", "monitoreo", "administracion"]) {
+  for (const module of ["inicio", "contexto", "informacion", "volumen-base", "plan-marketing", "plan-trade", "plan-anual", "rentabilidad", "revision", "monitoreo", "administracion"]) {
     assert.match(source, new RegExp(`\"${module}\"`));
   }
 });
