@@ -277,7 +277,7 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
             <label>Evidencia<textarea required value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="Reporte, correo, acuerdo o dato que la sustenta" /></label>
             <label>Acción correctiva<textarea required value={actionText} onChange={(event) => setActionText(event.target.value)} placeholder="¿Qué se hará para corregir o capturar la oportunidad?" /></label>
             <label>Responsable<input required value={responsible} onChange={(event) => setResponsible(event.target.value)} placeholder="Nombre o rol" /></label>
-            <label>Fecha compromiso<input required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+            <label>Fecha compromiso<input required type="text" inputMode="numeric" pattern="\d{4}-\d{2}-\d{2}" value={dueDate} onChange={(event) => setDueDate(event.target.value)} placeholder="AAAA-MM-DD" title="Usa el formato AAAA-MM-DD, por ejemplo 2027-07-15" /></label>
             <div className="action-form-submit"><button className="primary" disabled={savingAction}>{savingAction ? "Guardando…" : "Guardar acción trazable"}</button></div>
           </form>}
           <div className="action-register">
