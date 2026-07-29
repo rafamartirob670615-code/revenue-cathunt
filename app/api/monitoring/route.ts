@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     };
     if (plan.versions[0]?.createdBy !== ownerId) throw new Error("Plan no autorizado");
     const active = plan.versions.at(-1);
-    if (!active || !["SUBMITTED", "COMMERCIAL_APPROVED", "FINANCE_VALIDATED", "OFFICIAL"].includes(active.status)) {
+    if (!active || !["SUBMITTED", "COMMERCIAL_APPROVED", "OFFICIAL"].includes(active.status)) {
       throw new Error("Monitoreo requiere una versión enviada o aprobada");
     }
     const growth = await database().prepare(

@@ -12,7 +12,7 @@ export type Capability =
   | "BASELINE_REVIEW"
   | "MARKETING_CONTRIBUTE"
   | "TRADE_CONTRIBUTE"
-  | "FINANCIAL_VALIDATE"
+  | "VIEW_FINANCIALS"
   | "REVIEW"
   | "APPROVE"
   | "OFFICIALIZE"
@@ -31,7 +31,7 @@ export const FUNCTION_LABELS: Record<BusinessFunction, string> = {
   PLAN_OWNER: "Responsable del Plan",
   MARKETING: "Marketing",
   TRADE_MARKETING: "Trade Marketing",
-  FINANCE: "Finanzas / RGM",
+  FINANCE: "Finanzas · sólo consulta",
   APPROVER: "Revisión y aprobación",
   ADMINISTRATOR: "Administración",
 };
@@ -42,11 +42,10 @@ export const PILOT_CAPABILITIES: Capability[] = [
   "BASELINE_REVIEW",
   "MARKETING_CONTRIBUTE",
   "TRADE_CONTRIBUTE",
-  "FINANCIAL_VALIDATE",
+  "VIEW_FINANCIALS",
   "REVIEW",
   "APPROVE",
   "OFFICIALIZE",
   "MONITOR",
   "ADMINISTER_ACCESS",
 ];
-

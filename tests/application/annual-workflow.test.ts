@@ -91,22 +91,10 @@ test("recorrido anual es idempotente, reconciliable y reproducible", async () =>
     },
     context("approve-commercial", "director-1", 18),
   );
-  await service.decide(
-    annualPlanFixture.id,
-    "version-2",
-    {
-      id: "approval-finance",
-      stage: "FINANCE",
-      decision: "APPROVED",
-      actorId: "finance-1",
-      decidedAt: "2026-07-26T19:00:00Z",
-    },
-    context("approve-finance", "finance-1", 19),
-  );
   const official = await service.makeOfficial(
     annualPlanFixture.id,
     "version-2",
-    context("official-1", "revenue-1", 20),
+    context("official-1", "revenue-1", 19),
   );
   assert.equal(official.officialVersionId, "version-2");
 

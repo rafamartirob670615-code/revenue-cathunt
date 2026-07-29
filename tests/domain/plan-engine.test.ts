@@ -85,7 +85,7 @@ test("una versión congelada es inmutable", () => {
   assert.throws(() => calculatePlanLines(frozen, [ledgerEntry], []), /inmutable/);
 });
 
-test("exige aprobación comercial antes de validación financiera", () => {
+test("la aprobación comercial habilita la oficialización sin intervención de Finanzas", () => {
   const submitted = submitVersion(
     freezeVersion(
       calculatePlanLines(version, [ledgerEntry], []),
@@ -99,13 +99,6 @@ test("exige aprobación comercial antes de validación financiera", () => {
     actorId: "director-1",
     decidedAt: "2026-07-26T14:00:00Z",
   });
-  const finance = decideVersion(commercial, {
-    id: "approval-2",
-    stage: "FINANCE",
-    decision: "APPROVED",
-    actorId: "finance-1",
-    decidedAt: "2026-07-26T15:00:00Z",
-  });
-  assert.equal(finance.status, "FINANCE_VALIDATED");
-  assert.equal(finance.approvals.length, 2);
+  assert.equal(commercial.status, "COMMERCIAL_APPROVED");
+  assert.equal(commercial.approvals.length, 1);
 });

@@ -5,7 +5,6 @@ export type PlanStatus =
   | "FROZEN"
   | "SUBMITTED"
   | "COMMERCIAL_APPROVED"
-  | "FINANCE_VALIDATED"
   | "OFFICIAL"
   | "RETURNED";
 
@@ -70,7 +69,7 @@ export interface Validation {
 
 export interface Approval {
   id: string;
-  stage: "COMMERCIAL" | "FINANCE";
+  stage: "COMMERCIAL";
   decision: "APPROVED" | "RETURNED";
   actorId: string;
   decidedAt: ISODateTime;

@@ -149,7 +149,7 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     if (state.result?.controls.unitsReconciled) modules.add("plan-anual");
     if (state.profitability?.controls.planReconciled) modules.add("rentabilidad");
     if (state.profitability) modules.add("revision");
-    if (selected && ["SUBMITTED","COMMERCIAL_APPROVED","FINANCE_VALIDATED","OFFICIAL"].includes(selected.versions.at(-1)?.status ?? "")) modules.add("monitoreo");
+    if (selected && ["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(selected.versions.at(-1)?.status ?? "")) modules.add("monitoreo");
     return modules;
   }, [selected, state]);
 

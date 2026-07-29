@@ -18,7 +18,7 @@ export default function HomeModule({
   onMonitor: (id: string) => void;
   onNavigate: (module: RevenueModule) => void;
 }) {
-  const monitorable = plans.filter((plan) => ["SUBMITTED","COMMERCIAL_APPROVED","FINANCE_VALIDATED","OFFICIAL"].includes(plan.status));
+  const monitorable = plans.filter((plan) => ["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(plan.status));
   return (
     <div className="module-page home-module">
       <ModuleHead eyebrow="Mi trabajo" title={`Hola, ${identity.displayName.split(" ")[0]}`} description="REVENUE organiza lo que te corresponde aportar, integrar, validar o aprobar." />
@@ -31,7 +31,7 @@ export default function HomeModule({
         <button onClick={() => onNavigate("plan-marketing")}><small>Marketing</small><b>Registrar mi Plan de Marketing</b><span>Importar un archivo o construir campañas, temporadas y lanzamientos.</span><strong>→</strong></button>
         <button onClick={() => onNavigate("plan-trade")}><small>Trade Marketing</small><b>Entregar promociones y ejecución</b><span>Recibir la app de promociones o construir actividades de la cadena.</span><strong>→</strong></button>
         <button onClick={onCreate}><small>Responsable del Plan</small><b>Integrar una cuenta</b><span>Conectar histórico, aportaciones y economía en una sola versión.</span><strong>→</strong></button>
-        <button onClick={() => onNavigate("revision")}><small>Finanzas y aprobación</small><b>Validar una versión</b><span>Revisar calidad de supuestos, valor, margen y contribución.</span><strong>→</strong></button>
+        <button onClick={() => onNavigate("revision")}><small>Aprobación comercial</small><b>Revisar una versión</b><span>La autoridad comercial revisa y decide; Finanzas únicamente puede consultar.</span><strong>→</strong></button>
       </section>
       <section className="answer-strip">
         <div><span>Planes activos</span><b>{plans.length}</b></div>

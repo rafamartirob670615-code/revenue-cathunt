@@ -61,7 +61,7 @@ function deriveStage(
   const version = plan.versions.at(-1);
   const status = version?.status ?? "DRAFT";
   if (status === "OFFICIAL") return { stage: "OFFICIAL", nextAction: "Abrir Plan oficial" };
-  if (["SUBMITTED", "COMMERCIAL_APPROVED", "FINANCE_VALIDATED", "RETURNED"].includes(status)) {
+  if (["SUBMITTED", "COMMERCIAL_APPROVED", "RETURNED"].includes(status)) {
     return { stage: "REVIEW_APPROVAL", nextAction: status === "RETURNED" ? "Revisar devolución" : "Revisar aprobación" };
   }
   if (version?.lines?.length) return { stage: "BUILD_PLAN", nextAction: "Continuar construcción" };

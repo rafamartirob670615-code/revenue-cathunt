@@ -83,7 +83,7 @@ export function createRevision(
   createdBy: string,
   createdAt: string,
 ): PlanVersion {
-  if (!["SUBMITTED", "RETURNED", "COMMERCIAL_APPROVED", "FINANCE_VALIDATED"].includes(version.status)) {
+  if (!["SUBMITTED", "RETURNED", "COMMERCIAL_APPROVED"].includes(version.status)) {
     throw new Error("La revisión requiere una versión enviada o devuelta");
   }
   return {
@@ -107,12 +107,6 @@ export function decideVersion(
   if (approval.stage === "COMMERCIAL" && version.status !== "SUBMITTED") {
     throw new Error("La aprobación comercial requiere una versión enviada");
   }
-  if (
-    approval.stage === "FINANCE" &&
-    version.status !== "COMMERCIAL_APPROVED"
-  ) {
-    throw new Error("La validación financiera requiere aprobación comercial");
-  }
   if (approval.decision === "RETURNED") {
     return {
       ...version,
@@ -122,18 +116,15 @@ export function decideVersion(
   }
   return {
     ...version,
-    status:
-      approval.stage === "COMMERCIAL"
-        ? "COMMERCIAL_APPROVED"
-        : "FINANCE_VALIDATED",
+    status: "COMMERCIAL_APPROVED",
     approvals: [...version.approvals, approval],
   };
 }
 
 export function publishOfficial(plan: Plan, versionId: string): Plan {
   const version = plan.versions.find((candidate) => candidate.id === versionId);
-  if (!version || version.status !== "FINANCE_VALIDATED") {
-    throw new Error("Sólo una versión validada por Finanzas puede oficializarse");
+  if (!version || version.status !== "COMMERCIAL_APPROVED") {
+    throw new Error("Sólo una versión aprobada por la autoridad comercial puede oficializarse");
   }
   if (plan.officialVersionId && plan.officialVersionId !== versionId) {
     throw new Error("Ya existe una versión oficial para esta cuenta y año");
