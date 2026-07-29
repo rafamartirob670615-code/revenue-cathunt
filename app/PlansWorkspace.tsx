@@ -337,7 +337,7 @@ export default function PlansWorkspace({
             setShowGrowthGate(false);
             setShowResultGate(false);
             setShowVersionGate(false);
-            void loadInputFiles(requestedPlan.id);
+            await loadInputFiles(requestedPlan.id);
             setView("workspace");
           }
         }
