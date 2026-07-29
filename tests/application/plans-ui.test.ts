@@ -51,15 +51,25 @@ test("Marketing y Trade Marketing viven en pantallas independientes", async () =
   assert.match(platform, /active === "plan-marketing"/);
   assert.match(platform, /active === "plan-trade"/);
   assert.match(platform, /growthCanBuild/);
+  assert.match(platform, /syntheticPlan \|\| \(marketingReady && tradeReady\)/);
   assert.match(source, /Reconciliar Marketing y Trade/);
+  assert.match(source, /Caso guiado sintético/);
 });
 
 test("las acciones no fallan después del clic cuando faltan dependencias", async () => {
   const source = await readFile(modulesUrl, "utf8");
   const platform = await readFile(platformUrl, "utf8");
   assert.match(source, /action=\{ready \? <button className="clay-primary"/);
-  assert.match(source, /action=\{source && canBuild \? <button className="clay-primary"/);
+  assert.match(source, /action=\{\(synthetic \|\| source\) && canBuild \? <button className="clay-primary"/);
   assert.match(platform, /if \(accepted\) setActive\("volumen-base"\)/);
+});
+
+test("crear un Plan nuevo limpia el contexto del Plan anterior", async () => {
+  const source = await readFile(platformUrl, "utf8");
+  assert.match(source, /function startCreate\(\)/);
+  assert.match(source, /setSelected\(null\)/);
+  assert.match(source, /setState\(emptyPlanState\)/);
+  assert.match(source, /onCreate=\{startCreate\}/);
 });
 
 test("Plan anual muestra unidades, valor y reconciliación", async () => {

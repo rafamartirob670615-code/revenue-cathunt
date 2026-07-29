@@ -287,6 +287,13 @@ export default function RevenuePlatform() {
     finally { setBusy(""); }
   }
 
+  function startCreate() {
+    setSelected(null);
+    setState(emptyPlanState);
+    setCreating(true);
+    setError("");
+  }
+
   function navigate(module: RevenueModule) {
     if (module === "inicio") { setActive("inicio"); setCreating(false); }
     else setActive(module);
@@ -295,7 +302,7 @@ export default function RevenuePlatform() {
   const syntheticPlan = state.files.length > 0 && state.files.every((file) => file.synthetic);
   const marketingReady = state.files.some((file) => file.requirementId === "marketing-plan" && file.status === "READY");
   const tradeReady = state.files.some((file) => file.requirementId === "trade-marketing-plan" && file.status === "READY");
-  const growthCanBuild = state.review?.status === "APPROVED_FROZEN" && marketingReady && tradeReady;
+  const growthCanBuild = state.review?.status === "APPROVED_FROZEN" && (syntheticPlan || (marketingReady && tradeReady));
   const growthWaitingFor = state.review?.status !== "APPROVED_FROZEN"
     ? "Primero aprueba el Volumen base."
     : !marketingReady
@@ -308,17 +315,17 @@ export default function RevenuePlatform() {
     <Shell active={active} plan={selected} completed={completed} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => setCreating(false)} /> :
-      active === "inicio" ? <HomeModule plans={dashboardPlans} onCreate={() => setCreating(true)} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} /> :
-      active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
+      active === "inicio" ? <HomeModule plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} /> :
+      active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
+      active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={startCreate} /> :
+      active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
+      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={startCreate} /> :
+      active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
+      active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <NoPlan onCreate={startCreate} /> :
       <AdministrationModule />}
     </Shell>
   );

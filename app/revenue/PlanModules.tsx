@@ -66,16 +66,16 @@ export function BaselineModule({ baseline, review, ready, busy, onCalculate, onA
   </div>;
 }
 
-export function GrowthPlanModule({ family, growth, source, canBuild, waitingFor, busy, onUpload, onBuild }: {
+export function GrowthPlanModule({ family, growth, source, synthetic, canBuild, waitingFor, busy, onUpload, onBuild }: {
   family: "MARKETING" | "TRADE_MARKETING"; growth: GrowthResult | null; source?: ReceivedFile;
-  canBuild: boolean; waitingFor: string; busy: string; onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
+  synthetic: boolean; canBuild: boolean; waitingFor: string; busy: string; onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
 }) {
   const isMarketing = family === "MARKETING";
   const activities = growth?.activities.filter((activity) => activity.family === family) ?? [];
   const gross = activities.reduce((sum, activity) => sum + activity.grossUnits, 0);
   const net = activities.reduce((sum, activity) => sum + activity.netUnits, 0);
   const requirementId = isMarketing ? "marketing-plan" : "trade-marketing-plan";
-  const synthetic = growth?.dataClassification === "SYNTHETIC_NON_COMMERCIAL";
+  synthetic = synthetic || growth?.dataClassification === "SYNTHETIC_NON_COMMERCIAL";
   return <div className="module-page">
     <ModuleHead eyebrow={`Paso ${isMarketing ? 4 : 5} de 8 · ${isMarketing ? "Marketing" : "Trade Marketing"}`} title={isMarketing ? "¿Qué demanda construirá Marketing?" : "¿Qué ejecutará Trade Marketing en el cliente?"} description={isMarketing ? "Campañas, lanzamientos y construcción de demanda con su impacto bruto y sus efectos netos." : "Promociones, exhibiciones y ejecución en punto de venta, separadas de Marketing para evitar doble conteo."} />
     <section className="plan-source">
@@ -85,7 +85,7 @@ export function GrowthPlanModule({ family, growth, source, canBuild, waitingFor,
     {activities.length ? <>
       <section className="paper-metrics"><Metric label="Actividades" value={String(activities.length)} note={isMarketing ? "Marketing" : "Trade Marketing"} /><Metric label="Incremental bruto" value={`+${gross.toLocaleString("es-MX")}`} note="antes de efectos" /><Metric label="Incremental neto" value={`+${net.toLocaleString("es-MX")}`} note="aporte al Plan" tone="good" /></section>
       <section className="activity-sheet">{activities.map((activity) => <article key={activity.id}><div><small>{activity.period} · {activity.skuId}</small><b>{activity.name}</b><span>{activity.evidence}</span></div><div><span>Bruto {activity.grossUnits.toLocaleString("es-MX")}</span><strong>Neto +{activity.netUnits.toLocaleString("es-MX")}</strong></div></article>)}</section>
-    </> : <EmptyAnswer title={`Todavía no hay actividades de ${isMarketing ? "Marketing" : "Trade Marketing"}`} copy={source ? canBuild ? "Las dos áreas entregaron sus fuentes. Ya puedes reconciliar el crecimiento sin doble conteo." : waitingFor : "Carga el Excel de esta área. Esta pantalla no mezclará sus actividades con la otra disciplina."} action={source && canBuild ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Construyendo…" : "Reconciliar Marketing y Trade"}</button> : undefined} />}
+    </> : <EmptyAnswer title={`Todavía no hay actividades de ${isMarketing ? "Marketing" : "Trade Marketing"}`} copy={synthetic && canBuild ? "La prueba guiada ya preparó las dos disciplinas. Reconcílialas para ver el aporte de cada una." : source ? canBuild ? "Las dos áreas entregaron sus fuentes. Ya puedes reconciliar el crecimiento sin doble conteo." : waitingFor : "Carga el Excel de esta área. Esta pantalla no mezclará sus actividades con la otra disciplina."} action={(synthetic || source) && canBuild ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Construyendo…" : "Reconciliar Marketing y Trade"}</button> : undefined} />}
   </div>;
 }
 
