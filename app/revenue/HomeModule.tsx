@@ -1,21 +1,38 @@
 import type { DashboardPlan } from "./model";
 import { ModuleHead } from "./ui";
+import { FUNCTION_LABELS, type RevenueIdentity } from "./access";
+import type { RevenueModule } from "./modules";
 
 export default function HomeModule({
   plans,
+  identity,
   onCreate,
   onOpen,
   onMonitor,
+  onNavigate,
 }: {
+  identity: RevenueIdentity;
   plans: DashboardPlan[];
   onCreate: () => void;
   onOpen: (id: string) => void;
   onMonitor: (id: string) => void;
+  onNavigate: (module: RevenueModule) => void;
 }) {
   const monitorable = plans.filter((plan) => ["SUBMITTED","COMMERCIAL_APPROVED","FINANCE_VALIDATED","OFFICIAL"].includes(plan.status));
   return (
     <div className="module-page home-module">
-      <ModuleHead eyebrow="Inicio" title="¿Qué necesita atención hoy?" description="Comienza un Plan, continúa una decisión pendiente o revisa el desempeño de una versión enviada." />
+      <ModuleHead eyebrow="Mi trabajo" title={`Hola, ${identity.displayName.split(" ")[0]}`} description="REVENUE organiza lo que te corresponde aportar, integrar, validar o aprobar." />
+      <section className="identity-band">
+        <div><small>Función principal</small><b>{FUNCTION_LABELS[identity.functions[0]]}</b><span>{identity.authenticated ? identity.email : "Identidad piloto local"}</span></div>
+        <div><small>Capacidades habilitadas</small><b>{identity.capabilities.length}</b><span>El alcance definitivo se asignará por cuenta.</span></div>
+        <div><small>Trabajo pendiente</small><b>{plans[0]?.nextAction ?? "Crear el primer Plan"}</b><span>Las tareas de otras áreas permanecen visibles, con dueño.</span></div>
+      </section>
+      <section className="contribution-lanes" aria-label="Aportaciones por función">
+        <button onClick={() => onNavigate("plan-marketing")}><small>Marketing</small><b>Registrar mi Plan de Marketing</b><span>Importar un archivo o construir campañas, temporadas y lanzamientos.</span><strong>→</strong></button>
+        <button onClick={() => onNavigate("plan-trade")}><small>Trade Marketing</small><b>Entregar promociones y ejecución</b><span>Recibir la app de promociones o construir actividades de la cadena.</span><strong>→</strong></button>
+        <button onClick={onCreate}><small>Responsable del Plan</small><b>Integrar una cuenta</b><span>Conectar histórico, aportaciones y economía en una sola versión.</span><strong>→</strong></button>
+        <button onClick={() => onNavigate("revision")}><small>Finanzas y aprobación</small><b>Validar una versión</b><span>Revisar calidad de supuestos, valor, margen y contribución.</span><strong>→</strong></button>
+      </section>
       <section className="answer-strip">
         <div><span>Planes activos</span><b>{plans.length}</b></div>
         <div><span>Listos para seguimiento</span><b>{monitorable.length}</b></div>

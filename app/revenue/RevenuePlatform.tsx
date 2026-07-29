@@ -25,6 +25,7 @@ import type {
 } from "./model";
 import type { RevenueModule } from "./modules";
 import { EmptyAnswer, ModuleHead } from "./ui";
+import type { RevenueIdentity } from "./access";
 
 const emptyPlanState = {
   files: [] as ReceivedFile[],
@@ -43,7 +44,7 @@ function friendly(message?: string) {
   return message || "No pudimos completar la acción. Tu trabajo guardado no se perdió.";
 }
 
-export default function RevenuePlatform() {
+export default function RevenuePlatform({ identity }: { identity: RevenueIdentity }) {
   const [active, setActive] = useState<RevenueModule>("inicio");
   const [dashboardPlans, setDashboardPlans] = useState<DashboardPlan[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -314,11 +315,11 @@ export default function RevenuePlatform() {
         : "Las fuentes están listas.";
 
   return (
-    <Shell active={active} plan={selected} completed={completed} onNavigate={navigate}>
+    <Shell active={active} plan={selected} identity={identity} completed={completed} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
-      active === "inicio" ? <HomeModule plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} /> :
+      active === "inicio" ? <HomeModule identity={identity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onNavigate={navigate} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :

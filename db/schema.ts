@@ -1,5 +1,98 @@
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    displayName: text("display_name").notNull(),
+    status: text("status").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("user_email_uq").on(table.email)],
+);
+
+export const organizationMemberships = sqliteTable(
+  "organization_memberships",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    userId: text("user_id").notNull().references(() => users.id),
+    businessFunction: text("business_function").notNull(),
+    status: text("status").notNull(),
+    grantedBy: text("granted_by").notNull(),
+    grantedAt: text("granted_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("membership_function_uq").on(
+      table.organizationId,
+      table.userId,
+      table.businessFunction,
+    ),
+    index("membership_user_idx").on(table.userId, table.status),
+  ],
+);
+
+export const accessAssignments = sqliteTable(
+  "access_assignments",
+  {
+    id: text("id").primaryKey(),
+    membershipId: text("membership_id").notNull().references(() => organizationMemberships.id),
+    capability: text("capability").notNull(),
+    scopeType: text("scope_type").notNull(),
+    scopeId: text("scope_id").notNull(),
+    sensitivityJson: text("sensitivity_json").notNull().default("[]"),
+    validFrom: text("valid_from").notNull(),
+    validUntil: text("valid_until"),
+    grantedBy: text("granted_by").notNull(),
+  },
+  (table) => [
+    uniqueIndex("access_assignment_uq").on(
+      table.membershipId,
+      table.capability,
+      table.scopeType,
+      table.scopeId,
+    ),
+    index("access_scope_idx").on(table.scopeType, table.scopeId),
+  ],
+);
+
+export const planContributions = sqliteTable(
+  "plan_contributions",
+  {
+    id: text("id").primaryKey(),
+    planId: text("plan_id").notNull(),
+    versionId: text("version_id"),
+    ownerUserId: text("owner_user_id").notNull().references(() => users.id),
+    businessFunction: text("business_function").notNull(),
+    lever: text("lever").notNull(),
+    title: text("title").notNull(),
+    sourceMode: text("source_mode").notNull(),
+    sourceSystem: text("source_system"),
+    sourceFileId: text("source_file_id"),
+    detailLevel: text("detail_level").notNull(),
+    assumptionQuality: text("assumption_quality").notNull(),
+    status: text("status").notNull(),
+    periodStart: text("period_start"),
+    periodEnd: text("period_end"),
+    productScopeJson: text("product_scope_json").notNull().default("[]"),
+    accountScopeJson: text("account_scope_json").notNull().default("[]"),
+    grossUnits: real("gross_units"),
+    investmentAmount: real("investment_amount"),
+    currency: text("currency"),
+    evidenceJson: text("evidence_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    submittedAt: text("submitted_at"),
+  },
+  (table) => [
+    index("contribution_plan_idx").on(table.planId, table.status),
+    index("contribution_owner_idx").on(table.ownerUserId, table.status),
+    index("contribution_lever_idx").on(table.planId, table.lever),
+  ],
+);
+
 export const plans = sqliteTable(
   "plans",
   {

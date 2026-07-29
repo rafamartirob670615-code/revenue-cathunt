@@ -2,6 +2,7 @@
 
 import type { Plan } from "../../domain/types";
 import { REVENUE_MODULES, type RevenueModule } from "./modules";
+import { FUNCTION_LABELS, type RevenueIdentity } from "./access";
 
 const groupLabels = {
   general: "",
@@ -13,12 +14,14 @@ const groupLabels = {
 export default function Shell({
   active,
   plan,
+  identity,
   completed,
   onNavigate,
   children,
 }: {
   active: RevenueModule;
   plan: Plan | null;
+  identity: RevenueIdentity;
   completed: Set<RevenueModule>;
   onNavigate: (module: RevenueModule) => void;
   children: React.ReactNode;
@@ -51,7 +54,7 @@ export default function Shell({
             </section>;
           })}
         </nav>
-        <footer><i /><span><b>Espacio privado</b><small>Guardado por Plan y versión</small></span></footer>
+        <footer><i /><span><b>{identity.displayName}</b><small>{FUNCTION_LABELS[identity.functions[0]]} · espacio privado</small></span></footer>
       </aside>
       <section className="revenue-stage">
         <header className="plan-context">
@@ -60,6 +63,7 @@ export default function Shell({
           <div><span>Año</span><b>{plan?.year ?? "—"}</b></div>
           <div><span>Versión</span><b>{version ? `V${version.number}` : "—"}</b></div>
           <div><span>Estado</span><b>{version?.status === "SUBMITTED" ? "En revisión" : plan ? "En construcción" : "Sin iniciar"}</b></div>
+          <div className="identity-context"><span>Mi función</span><b>{FUNCTION_LABELS[identity.functions[0]]}</b></div>
         </header>
         <main className="revenue-content">{children}</main>
       </section>
