@@ -66,13 +66,13 @@ test("la revisión del baseline cubre periodos, SKU, ajuste documentado y congel
 
 test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Crecimiento gobernado/);
+  assert.match(source, /Paso 3 · Crecimiento/);
   assert.match(source, /Marketing y Trade Marketing sin doble conteo/);
   assert.match(source, /Incremental bruto/);
   assert.match(source, /Incremental neto/);
   assert.match(source, /canibalización/);
   assert.match(source, /compra anticipada/);
-  assert.match(source, /Solapamientos pendientes/);
+  assert.match(source, /Ver controles del cálculo/);
   assert.match(source, /Construir crecimiento sintético/);
   assert.match(source, /Construir crecimiento real/);
   assert.match(source, /PLANES EMPRESARIALES — TRAZABLES/);
@@ -80,13 +80,12 @@ test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async 
 
 test("resultado muestra unidades y valor mensual con evidencia de precio y conversión", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Plan mensual reconciliado por SKU/);
+  assert.match(source, /Resultado anual del Plan/);
   assert.match(source, /Base aprobada \+ incremental neto = unidades del Plan/);
   assert.match(source, /Calcular unidades y valor/);
   assert.match(source, /Unidades anuales/);
   assert.match(source, /Valor anual/);
-  assert.match(source, /Conversiones faltantes/);
-  assert.match(source, /Precios faltantes/);
+  assert.match(source, /Calidad del cálculo/);
   assert.match(source, /precio aceptado/);
   assert.match(source, /DATOS SINTÉTICOS — NO COMERCIALES/);
 });
@@ -124,14 +123,14 @@ test("baseline permite ajustar cada combinación mensual y persiste evidencia", 
 
 test("crecimiento permite editar y guardar building blocks reconciliados", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Editar building blocks/);
+  assert.match(source, /Editar actividades/);
   assert.match(source, /Guardar crecimiento/);
   assert.match(source, /method:"PUT"/);
 });
 
 test("resultado permite edición tabular documentada", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Editar tabla/);
+  assert.match(source, /Editar detalle/);
   assert.match(source, /Ajuste autorizado/);
   assert.match(source, /Guardar resultado/);
 });

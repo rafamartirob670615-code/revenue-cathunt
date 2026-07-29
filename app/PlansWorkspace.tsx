@@ -254,6 +254,7 @@ export default function PlansWorkspace({
   const [year, setYear] = useState(currentYear + 1);
   const [currency, setCurrency] = useState("MXN");
   const [showInformation, setShowInformation] = useState(false);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [receivedFiles, setReceivedFiles] = useState<ReceivedFile[]>([]);
   const [uploadingRequirement, setUploadingRequirement] = useState("");
   const [packageIssues, setPackageIssues] = useState<Array<{ code: string; message: string }>>([]);
@@ -329,6 +330,7 @@ export default function PlansWorkspace({
             : undefined;
           if (requestedPlan) {
             setSelected(requestedPlan);
+            setLoadingWorkspace(true);
             setShowInformation(true);
             setReceivedFiles([]);
             setShowBaselineGate(false);
@@ -482,13 +484,15 @@ export default function PlansWorkspace({
         setPackageIssues(body.packageIssues ?? []);
         setSystemReady(body.systemReady ?? false);
         setPackageAccepted(body.accepted ?? false);
-        if (body.accepted) void loadBaseline(planId);
+        if (body.accepted) await loadBaseline(planId);
       }
     } catch {
       setReceivedFiles([]);
       setPackageIssues([]);
       setSystemReady(false);
       setPackageAccepted(false);
+    } finally {
+      setLoadingWorkspace(false);
     }
   }
 
@@ -503,7 +507,7 @@ export default function PlansWorkspace({
       if (response.ok && body.ok) {
         setBaseline(body.result ?? null);
         setBaselineReview(body.review ?? null);
-        if (body.review?.status === "APPROVED_FROZEN") void loadGrowth(planId);
+        if (body.review?.status === "APPROVED_FROZEN") await loadGrowth(planId);
       }
     } catch {
       setBaseline(null);
@@ -517,7 +521,7 @@ export default function PlansWorkspace({
       const body = (await response.json()) as { ok: boolean; result?: GrowthResult | null };
       if (response.ok && body.ok) {
         setGrowth(body.result ?? null);
-        if (body.result?.controls.reconciled) void loadPlanResult(planId);
+        if (body.result?.controls.reconciled) await loadPlanResult(planId);
       }
     } catch {
       setGrowth(null);
@@ -531,7 +535,7 @@ export default function PlansWorkspace({
       if (response.ok && body.ok) {
         setPlanResult(body.result ?? null);
         if (body.result?.controls.unitsReconciled && body.result.controls.valueReconciled) {
-          void loadProfitability(planId);
+          await loadProfitability(planId);
         }
       }
     } catch {
@@ -736,6 +740,7 @@ export default function PlansWorkspace({
 
   function openPlan(plan: Plan) {
     setSelected(plan);
+    setLoadingWorkspace(true);
     setShowInformation(true);
     setReceivedFiles([]);
     setShowBaselineGate(false);
@@ -840,6 +845,9 @@ export default function PlansWorkspace({
   }
 
   if (view === "workspace" && selected) {
+    if (loadingWorkspace) {
+      return <div className="recovery-loading"><span /><b>Recuperando el Plan completo…</b></div>;
+    }
     const version = activeVersion(selected);
     const inputPackage = createEmptyInputPackage(selected.id);
     const essentialReady = PILOT_INPUT_REQUIREMENTS.filter(
@@ -1073,7 +1081,7 @@ export default function PlansWorkspace({
             <div className="growth-workspace">
               <div className="baseline-head">
                 <div>
-                  <p className="eyebrow">Paso 3 · Crecimiento gobernado</p>
+                  <p className="eyebrow">Paso 3 · Crecimiento</p>
                   <h2>Marketing y Trade Marketing sin doble conteo</h2>
                   <p>El incremental neto parte de la base aprobada y separa cada efecto antes de alimentar el Plan.</p>
                 </div>
@@ -1090,8 +1098,6 @@ export default function PlansWorkspace({
                   <div className="growth-kpis">
                     <article><span>Incremental bruto</span><b>{growth.grossUnits.toLocaleString("es-MX")} unidades</b></article>
                     <article><span>Incremental neto</span><b>{growth.netUnits.toLocaleString("es-MX")} unidades</b></article>
-                    <article><span>Identidades duplicadas</span><b>{growth.controls.duplicateEconomicIdentities}</b></article>
-                    <article><span>Solapamientos pendientes</span><b>{growth.controls.unresolvedOverlaps}</b></article>
                   </div>
                   <div className="role-growth-summary">
                     {(["MARKETING", "TRADE_MARKETING"] as const).map((family) => {
@@ -1123,12 +1129,15 @@ export default function PlansWorkspace({
                     </div>
                   </details>
                   <div className="workspace-edit-actions">
-                    {editingGrowth?<><button className="secondary" onClick={()=>setGrowthDraft(current=>[...current,{...growth.activities[0],id:`ACT-${crypto.randomUUID()}`,name:"",grossUnits:0,cannibalizationUnits:0,haloUnits:0,pullForwardUnits:0,interactionUnits:0,netUnits:0,evidence:""}])}>Agregar actividad</button><button className="secondary" onClick={()=>setEditingGrowth(false)}>Cancelar</button><button className="primary" disabled={buildingGrowth} onClick={()=>void saveGrowth()}>{buildingGrowth?"Guardando…":"Guardar crecimiento"}</button></>:<button className="primary" onClick={()=>{setGrowthDraft(growth.activities);setEditingGrowth(true);}}>Editar building blocks</button>}
+                    {editingGrowth?<><button className="secondary" onClick={()=>setGrowthDraft(current=>[...current,{...growth.activities[0],id:`ACT-${crypto.randomUUID()}`,name:"",grossUnits:0,cannibalizationUnits:0,haloUnits:0,pullForwardUnits:0,interactionUnits:0,netUnits:0,evidence:""}])}>Agregar actividad</button><button className="secondary" onClick={()=>setEditingGrowth(false)}>Cancelar</button><button className="primary" disabled={buildingGrowth} onClick={()=>void saveGrowth()}>{buildingGrowth?"Guardando…":"Guardar crecimiento"}</button></>:<button className="secondary" onClick={()=>{setGrowthDraft(growth.activities);setEditingGrowth(true);}}>Editar actividades</button>}
                   </div>
-                  <div className="growth-reconciliation">
-                    <b>Incremental bruto − canibalización + halo − compra anticipada ± interacción = incremental neto</b>
-                    <span>{growth.methodId} v{growth.methodVersion} · resultado persistido</span>
-                  </div>
+                  <details className="technical-detail">
+                    <summary>Ver controles del cálculo</summary>
+                    <div className="growth-reconciliation">
+                      <b>Incremental bruto − canibalización + halo − compra anticipada ± interacción = incremental neto</b>
+                      <span>Duplicados: {growth.controls.duplicateEconomicIdentities} · cruces pendientes: {growth.controls.unresolvedOverlaps}</span>
+                    </div>
+                  </details>
                   <div className="guided-next-step">
                     <div><b>Crecimiento listo</b><p>Marketing y Trade Marketing ya están reconciliados. Continúa para ver el Plan anual.</p></div>
                     <button className="primary" onClick={() => {setShowGrowthGate(false);setShowResultGate(true);}}>Continuar al resultado</button>
@@ -1147,7 +1156,7 @@ export default function PlansWorkspace({
               <div className="baseline-head">
                 <div>
                   <p className="eyebrow">Paso 4 · Unidades y valor</p>
-                  <h2>Plan mensual reconciliado por SKU</h2>
+                  <h2>Resultado anual del Plan</h2>
                   <p>Base aprobada + incremental neto = unidades del Plan. El valor usa el precio aceptado y vigente del paquete.</p>
                 </div>
                 <span className={`calculation-state ${planResult?.controls.unitsReconciled && planResult.controls.valueReconciled ? "ready" : ""}`}>
@@ -1165,8 +1174,7 @@ export default function PlansWorkspace({
                   <div className="result-kpis">
                     <article><span>Unidades anuales</span><b>{planResult.annualUnits.toLocaleString("es-MX")}</b><small>Base + incremental neto</small></article>
                     <article><span>Valor anual</span><b>{planResult.annualValue.toLocaleString("es-MX", { style: "currency", currency: planResult.currency })}</b><small>Precio aceptado × unidades</small></article>
-                    <article><span>Conversiones faltantes</span><b>{planResult.controls.missingConversions}</b><small>Factor por SKU</small></article>
-                    <article><span>Precios faltantes</span><b>{planResult.controls.missingPrices}</b><small>Vigencia declarada</small></article>
+                    <article><span>Calidad del cálculo</span><b>{planResult.controls.missingConversions + planResult.controls.missingPrices === 0 ? "Completa" : "Revisar"}</b><small>precios y conversiones</small></article>
                   </div>
                   <details className="technical-detail">
                     <summary>Ver detalle mensual por producto</summary>
@@ -1185,12 +1193,7 @@ export default function PlansWorkspace({
                     ))}
                     </div>
                   </details>
-                  {editingResult?<form className="result-edit-form" onSubmit={savePlanResult}><label>Motivo<textarea required value={resultEditReason} onChange={event=>setResultEditReason(event.target.value)}/></label><label>Evidencia<textarea required value={resultEditEvidence} onChange={event=>setResultEditEvidence(event.target.value)}/></label><div><button type="button" className="secondary" onClick={()=>setEditingResult(false)}>Cancelar</button><button className="primary" disabled={calculatingResult}>{calculatingResult?"Guardando…":"Guardar resultado"}</button></div></form>:<div className="workspace-edit-actions"><button className="primary" onClick={()=>{setResultDraft(planResult.lines);setEditingResult(true);}}>Editar tabla</button></div>}
-                  <div className="result-reconciliation">
-                    <div><b>Unidades reconciliadas</b><span>Base aprobada + incremental neto = Plan</span></div>
-                    <div><b>Valor reconciliado</b><span>Unidades × precio aceptado = valor</span></div>
-                    <small>{planResult.methodId} v{planResult.methodVersion} · resultado persistido</small>
-                  </div>
+                  {editingResult?<form className="result-edit-form" onSubmit={savePlanResult}><label>Motivo<textarea required value={resultEditReason} onChange={event=>setResultEditReason(event.target.value)}/></label><label>Evidencia<textarea required value={resultEditEvidence} onChange={event=>setResultEditEvidence(event.target.value)}/></label><div><button type="button" className="secondary" onClick={()=>setEditingResult(false)}>Cancelar</button><button className="primary" disabled={calculatingResult}>{calculatingResult?"Guardando…":"Guardar resultado"}</button></div></form>:<div className="workspace-edit-actions"><button className="secondary" onClick={()=>{setResultDraft(planResult.lines);setEditingResult(true);}}>Editar detalle</button></div>}
                   <section className="profitability-section">
                     <div className="section-copy">
                       <p className="eyebrow">Rentabilidad · comparador declarado</p>
@@ -1203,37 +1206,40 @@ export default function PlansWorkspace({
                           <b>{profitability.dataClassification==="USER_PROVIDED" ? "CONDICIONES COMERCIALES Y COSTOS — TRAZABLES" : "PARÁMETROS SINTÉTICOS — NO SON CONDICIONES COMERCIALES"}</b>
                           <span>{profitability.parameters.explanation}</span>
                         </div>
-                        <div className="financial-parameters">
-                          <article><span>Deducciones</span><b>{(profitability.parameters.deductionRate * 100).toFixed(0)}%</b><small>sobre gross sales</small></article>
-                          <article><span>COGS</span><b>{(profitability.parameters.cogsRateOnNetSales * 100).toFixed(0)}%</b><small>sobre net sales</small></article>
-                          <article><span>Inversión</span><b>{(profitability.parameters.investmentRateOnIncrementalGross * 100).toFixed(0)}%</b><small>sobre valor incremental positivo</small></article>
-                          <article><span>Versión</span><b>{profitability.parameters.version}</b><small>{profitability.parameters.id}</small></article>
-                        </div>
-                        <div className="pnl-comparison">
-                          <div className="pnl-head"><span>Concepto</span><span>{profitability.comparator.name}</span><span>{profitability.dataClassification==="USER_PROVIDED" ? "Plan" : "Plan sintético"}</span><span>Variación</span></div>
-                          {([
-                            ["Gross sales", "grossSales"],
-                            ["− Deducciones", "deductions"],
-                            ["= Net sales", "netSales"],
-                            ["− COGS", "cogs"],
-                            ["= Gross margin", "grossMargin"],
-                            ["− Inversión", "investment"],
-                            ["= Contribution", "contribution"],
-                          ] as const).map(([label, field]) => (
-                            <div className={`pnl-row ${field === "contribution" ? "total" : ""}`} key={field}>
-                              <b>{label}</b>
-                              <span>{profitability.comparatorAnnual[field].toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</span>
-                              <span>{profitability.planAnnual[field].toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</span>
-                              <strong>{(profitability.planAnnual[field] - profitability.comparatorAnnual[field]).toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</strong>
-                            </div>
-                          ))}
-                        </div>
                         <div className="profitability-kpis">
                           <article><span>Margen bruto Plan</span><b>{profitability.planAnnual.grossMarginRate === null ? "No aplica" : `${(profitability.planAnnual.grossMarginRate * 100).toFixed(1)}%`}</b></article>
-                          <article><span>Contribution Plan</span><b>{profitability.planAnnual.contributionRate === null ? "No aplica" : `${(profitability.planAnnual.contributionRate * 100).toFixed(1)}%`}</b></article>
-                          <article><span>Variación contribution</span><b>{profitability.variance.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</b></article>
+                          <article><span>Contribución del Plan</span><b>{profitability.planAnnual.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency, maximumFractionDigits: 0 })}</b></article>
+                          <article><span>Margen de contribución</span><b>{profitability.planAnnual.contributionRate === null ? "No aplica" : `${(profitability.planAnnual.contributionRate * 100).toFixed(1)}%`}</b></article>
+                          <article><span>Mejora contra la base</span><b>{profitability.variance.contribution.toLocaleString("es-MX", { style: "currency", currency: profitability.currency, maximumFractionDigits: 0 })}</b></article>
                           <article><span>Reconciliación</span><b>{profitability.controls.planReconciled && profitability.controls.comparatorReconciled ? "Completa" : "Pendiente"}</b></article>
                         </div>
+                        <details className="technical-detail">
+                          <summary>Ver cálculo completo de rentabilidad</summary>
+                          <div className="financial-parameters">
+                            <article><span>Deducciones</span><b>{(profitability.parameters.deductionRate * 100).toFixed(0)}%</b><small>sobre gross sales</small></article>
+                            <article><span>COGS</span><b>{(profitability.parameters.cogsRateOnNetSales * 100).toFixed(0)}%</b><small>sobre net sales</small></article>
+                            <article><span>Inversión</span><b>{(profitability.parameters.investmentRateOnIncrementalGross * 100).toFixed(0)}%</b><small>sobre valor incremental positivo</small></article>
+                          </div>
+                          <div className="pnl-comparison">
+                            <div className="pnl-head"><span>Concepto</span><span>{profitability.comparator.name}</span><span>{profitability.dataClassification==="USER_PROVIDED" ? "Plan" : "Plan sintético"}</span><span>Variación</span></div>
+                            {([
+                              ["Gross sales", "grossSales"],
+                              ["− Deducciones", "deductions"],
+                              ["= Net sales", "netSales"],
+                              ["− COGS", "cogs"],
+                              ["= Gross margin", "grossMargin"],
+                              ["− Inversión", "investment"],
+                              ["= Contribution", "contribution"],
+                            ] as const).map(([label, field]) => (
+                              <div className={`pnl-row ${field === "contribution" ? "total" : ""}`} key={field}>
+                                <b>{label}</b>
+                                <span>{profitability.comparatorAnnual[field].toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</span>
+                                <span>{profitability.planAnnual[field].toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</span>
+                                <strong>{(profitability.planAnnual[field] - profitability.comparatorAnnual[field]).toLocaleString("es-MX", { style: "currency", currency: profitability.currency })}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
                       </>
                     ) : (
                       <div className="baseline-next-action">
