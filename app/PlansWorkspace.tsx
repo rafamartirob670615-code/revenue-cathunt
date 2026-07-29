@@ -238,10 +238,12 @@ export default function PlansWorkspace({
   initialPlanId,
   startInCreate = false,
   onExit,
+  onMonitor,
 }: {
   initialPlanId?: string;
   startInCreate?: boolean;
   onExit?: () => void;
+  onMonitor?: (planId: string) => void;
 }) {
   const [view, setView] = useState<View>(startInCreate ? "create" : "portfolio");
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -865,23 +867,54 @@ export default function PlansWorkspace({
     );
     const syntheticPackage = receivedFiles.length > 0 && receivedFiles.every((file) => file.synthetic);
     const visibleBaselineLines = baseline ? aggregateBaseline(baseline.lines, periodLevel) : [];
+    const onOverview = !showInformation&&!showBaselineGate&&!showGrowthGate&&!showResultGate&&!showVersionGate;
+    function openWorkspaceSection(section: "overview"|"information"|"baseline"|"growth"|"result"|"profitability"|"review") {
+      setShowInformation(section === "information");
+      setShowBaselineGate(section === "baseline");
+      setShowGrowthGate(section === "growth");
+      setShowResultGate(section === "result" || section === "profitability");
+      setShowVersionGate(section === "review");
+      if (section === "profitability") {
+        window.setTimeout(() => document.getElementById("rentabilidad")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
     return (
+      <div className="plan-app-shell">
+        <aside className="plan-sidebar" aria-label="Secciones de REVENUE">
+          <div className="plan-sidebar-brand"><span>R</span><div><b>REVENUE</b><small>Plan anual</small></div></div>
+          <nav>
+            <button className={onOverview ? "active" : ""} onClick={() => openWorkspaceSection("overview")}><b>Inicio</b><small>¿Qué necesito hacer hoy?</small></button>
+            <button className={showInformation ? "active" : ""} onClick={() => openWorkspaceSection("information")}><b>Información</b><small>¿Qué tengo y cómo se entendió?</small></button>
+            <button className={showBaselineGate ? "active" : ""} disabled={!packageAccepted} onClick={() => openWorkspaceSection("baseline")}><b>Volumen base</b><small>¿Qué vendería sin actividades?</small></button>
+            <button className={showGrowthGate ? "active" : ""} disabled={baselineReview?.status !== "APPROVED_FROZEN"} onClick={() => openWorkspaceSection("growth")}><b>Crecimiento</b><small>¿Qué aportarán Marketing y Trade?</small></button>
+            <button className={showResultGate && !profitability ? "active" : ""} disabled={!growth?.controls.reconciled} onClick={() => openWorkspaceSection("result")}><b>Plan anual</b><small>¿Cuánto venderemos?</small></button>
+            <button className={showResultGate && Boolean(profitability) ? "active" : ""} disabled={!planResult} onClick={() => openWorkspaceSection("profitability")}><b>Rentabilidad</b><small>¿Cuánto dinero dejará?</small></button>
+            <button className={showVersionGate ? "active" : ""} disabled={!profitability} onClick={() => openWorkspaceSection("review")}><b>Revisión</b><small>¿Qué falta validar o aprobar?</small></button>
+            <button disabled={!["SUBMITTED","COMMERCIAL_APPROVED","FINANCE_VALIDATED","OFFICIAL"].includes(selected.status)} onClick={() => onMonitor?.(selected.id)}><b>Monitoreo</b><small>¿Cómo vamos contra el Plan?</small></button>
+          </nav>
+          <div className="plan-sidebar-admin"><b>Administración</b><small>Compañías, usuarios, permisos y reglas</small></div>
+        </aside>
+        <div className="plan-app-content">
+        <div className="plan-context-bar">
+          <button onClick={onExit}>← Inicio</button>
+          <dl>
+            <div><dt>Compañía</dt><dd>{selected.companyName ?? selected.companyId}</dd></div>
+            <div><dt>Cuenta</dt><dd>{selected.accountName ?? selected.accountId}</dd></div>
+            <div><dt>Año</dt><dd>{selected.year}</dd></div>
+            <div><dt>Versión</dt><dd>{version?.number ?? 1}</dd></div>
+          </dl>
+          <span>{packageAccepted ? "Información lista" : "Información pendiente"}</span>
+        </div>
       <div className="page empty-plan-page">
         <div className="page-head">
           <div>
-            <p className="eyebrow">{selected.companyName ?? selected.companyId} · {selected.accountName ?? selected.accountId} · {selected.year}</p>
+            <p className="eyebrow">Planeación comercial</p>
             <h1>{selected.accountName ?? selected.accountId} · Plan anual {selected.year}</h1>
-            <p>Versión {version?.number ?? 1} · Borrador guardado</p>
+            <p>Primero el resultado; el detalle queda disponible cuando lo necesites.</p>
           </div>
           <span className="status-chip">{packageAccepted ? "✓ Paquete aceptado" : "● Información pendiente"}</span>
-        </div>
-        <div className="plan-tabs">
-          <button className={showInformation?"active":""} onClick={()=>{setShowInformation(true);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Información</button>
-          <button className={!showInformation&&!showBaselineGate&&!showGrowthGate&&!showResultGate&&!showVersionGate?"active":""} onClick={()=>{setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Resumen</button>
-          {packageAccepted && <button className={showBaselineGate ? "active" : ""} onClick={() => {setShowBaselineGate(true);setShowInformation(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(false);}}>Volumen base</button>}
-          {baselineReview?.status === "APPROVED_FROZEN" && <button className={showGrowthGate ? "active" : ""} onClick={() => {setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(true);setShowResultGate(false);setShowVersionGate(false);}}>Crecimiento</button>}
-          {growth?.controls.reconciled && <button className={showResultGate ? "active" : ""} onClick={() => {setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(true);setShowVersionGate(false);}}>Resultado y rentabilidad</button>}
-          {profitability && <button className={showVersionGate ? "active" : ""} onClick={() => {setShowInformation(false);setShowBaselineGate(false);setShowGrowthGate(false);setShowResultGate(false);setShowVersionGate(true);}}>Versión para revisión</button>}
         </div>
         <section className={`panel empty-workspace ${showBaselineGate || showGrowthGate || showResultGate ? "baseline-mode" : ""}`}>
           {showBaselineGate && packageAccepted && (
@@ -1194,7 +1227,7 @@ export default function PlansWorkspace({
                     </div>
                   </details>
                   {editingResult?<form className="result-edit-form" onSubmit={savePlanResult}><label>Motivo<textarea required value={resultEditReason} onChange={event=>setResultEditReason(event.target.value)}/></label><label>Evidencia<textarea required value={resultEditEvidence} onChange={event=>setResultEditEvidence(event.target.value)}/></label><div><button type="button" className="secondary" onClick={()=>setEditingResult(false)}>Cancelar</button><button className="primary" disabled={calculatingResult}>{calculatingResult?"Guardando…":"Guardar resultado"}</button></div></form>:<div className="workspace-edit-actions"><button className="secondary" onClick={()=>{setResultDraft(planResult.lines);setEditingResult(true);}}>Editar detalle</button></div>}
-                  <section className="profitability-section">
+                  <section className="profitability-section" id="rentabilidad">
                     <div className="section-copy">
                       <p className="eyebrow">Rentabilidad · comparador declarado</p>
                       <h3>{profitability ? (profitability.dataClassification==="USER_PROVIDED" ? "Rentabilidad real reconciliada" : "P&L sintético reconciliado") : "Construir rentabilidad desde condiciones comerciales"}</h3>
@@ -1636,6 +1669,8 @@ export default function PlansWorkspace({
           <span>✓ {baseline ? "Plan guardado con sus resultados" : "Plan guardado · todavía sin resultados"}</span>
           <button className="secondary" onClick={() => onExit ? onExit() : (setView("portfolio"), void loadPlans())}>Volver al lobby</button>
         </div>
+      </div>
+      </div>
       </div>
     );
   }

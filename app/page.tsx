@@ -50,6 +50,7 @@ export default function RevenueApp() {
             initialPlanId={requestedPlanId}
             startInCreate={startCreate}
             onExit={() => setView("lobby")}
+            onMonitor={(planId) => openMonitor(planId)}
           />
         )}
       </main>

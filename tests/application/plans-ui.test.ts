@@ -24,7 +24,7 @@ test("la información del Plan conserva requisitos y mantiene bloqueado el basel
   assert.match(source, /essentialReady.*4 grupos básicos reconocidos/s);
   assert.match(source, /No recibido/);
   assert.doesNotMatch(source, /no completa este paquete/);
-  assert.match(source, />Volumen base<\/button>/);
+  assert.match(source, /<b>Volumen base<\/b><small>¿Qué vendería sin actividades\?<\/small>/);
   assert.match(source, /Seleccionar Excel o CSV/);
   assert.match(source, /"sales-quota"/);
   assert.match(source, /"actual-sales"/);
@@ -106,7 +106,7 @@ test("rentabilidad distingue condiciones reales de parámetros sintéticos", asy
 
 test("el Plan completo tiene una vista de versión y presentación", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Versión para revisión/);
+  assert.match(source, /<b>Revisión<\/b><small>¿Qué falta validar o aprobar\?<\/small>/);
   assert.match(source, /Vista para defender el Plan/);
   assert.match(source, /Revenue del Plan/);
   assert.match(source, /Historia del Plan/);
