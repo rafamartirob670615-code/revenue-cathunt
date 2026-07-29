@@ -790,7 +790,7 @@ export default function PlansWorkspace({
             <label>Moneda base<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>MXN</option><option>USD</option></select></label>
           </div>
           <div className="dataset-first-notice">
-            <span>1</span><div><b>Siguiente: cargar información</b><small>Ventas del año anterior, actividades y promociones, catálogo de productos, conversiones y precios. REVENUE validará estructura y cobertura antes de calcular.</small></div>
+            <span>1</span><div><b>Siguiente: cargar lo que ya tengas</b><small>No necesitas reunir todo hoy ni preparar formatos especiales. REVENUE conservará los originales y te mostrará qué información reconoce y qué falta.</small></div>
           </div>
           {error && <div className="recoverable-error" role="alert">{error}</div>}
           <div className="create-plan-actions">
@@ -1314,22 +1314,40 @@ export default function PlansWorkspace({
                   <p className="eyebrow">Centro de datos · versión 1</p>
                   <h2>Convierte tus archivos en información utilizable</h2>
                   <p>{receivedFiles.length
-                    ? "REVENUE preserva el original, explica cómo lo interpretó y valida la información antes de calcular."
-                    : "Empieza con el Excel de historia de ventas. No necesitas convertirlo ni cambiar sus encabezados."}</p>
+                    ? "REVENUE conserva cada original, explica cómo lo interpretó y te permite continuar después."
+                    : "No necesitas tener todos los archivos. Empieza con la historia de ventas o con cualquier información disponible."}</p>
                 </div>
                 <span className={essentialReady === 4 && packageIssues.length === 0 ? "pill good" : "pill danger"}>{essentialReady} de 4 esenciales listos</span>
               </div>
               <div className="data-center-principle">
                 <span>01</span>
                 <div>
-                  <b>Lo más importante de REVENUE es la información</b>
-                  <p>Sube el archivo que ya produce tu empresa. REVENUE localizará la tabla, propondrá equivalencias y separará el original del dataset que usará el Plan.</p>
+                  <b>Sube los archivos tal como los produce tu empresa</b>
+                  <p>Pueden tener varias hojas y nombres propios. REVENUE localizará las tablas, propondrá equivalencias y sólo te pedirá ayuda cuando exista una duda real.</p>
                 </div>
               </div>
+              <div className="pilot-input-path" aria-label="Etapas de información del Plan">
+                <article className="current">
+                  <span>Para comenzar</span>
+                  <b>Base del Plan</b>
+                  <small>Historia de ventas, productos, conversiones y precios.</small>
+                </article>
+                <article>
+                  <span>Después</span>
+                  <b>Crecimiento y rentabilidad</b>
+                  <small>Actividades, condiciones comerciales, costos e inversión.</small>
+                </article>
+                <article>
+                  <span>Cuando exista</span>
+                  <b>Seguimiento</b>
+                  <small>Cuota comercial y ventas actuales.</small>
+                </article>
+              </div>
+              <p className="pilot-input-note"><b>No son doce archivos obligatorios.</b> Un mismo libro puede contener varias fuentes y puedes completar la información en diferentes momentos.</p>
               <div className="synthetic-package-card">
                 <div>
-                  <b>Continuar con un caso de prueba controlado</b>
-                  <p>Crea cinco archivos reproducibles para demostrar el recorrido. Quedarán marcados como datos sintéticos no comerciales y reemplazarán los archivos actuales de este Plan.</p>
+                  <b>¿Todavía no tienes información empresarial?</b>
+                  <p>Puedes recorrer el piloto con información de prueba claramente identificada. No se confundirá con un Plan real.</p>
                 </div>
                 <button className="secondary" onClick={() => void loadSyntheticPackage()} disabled={loadingSynthetic}>
                   {loadingSynthetic ? "Preparando…" : "Usar paquete sintético"}

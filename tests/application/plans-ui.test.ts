@@ -6,7 +6,7 @@ const componentUrl = new URL("../../app/PlansWorkspace.tsx", import.meta.url);
 
 test("Crear Plan real comienza vacío y permite volver al lobby", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Siguiente: cargar información/);
+  assert.match(source, /Siguiente: cargar lo que ya tengas/);
   assert.match(source, /Guardar y cargar datasets/);
   assert.match(source, /Volver al lobby/);
   assert.match(source, /lines:\s*\[\]/);
@@ -15,7 +15,7 @@ test("Crear Plan real comienza vacío y permite volver al lobby", async () => {
 test("el recorrido vacío no presenta cifras demostrativas como resultados", async () => {
   const source = await readFile(componentUrl, "utf8");
   assert.doesNotMatch(source, /\$75\.4 M|1\.79 M|31\.4%|Mercado Central/);
-  assert.match(source, /cargar los datasets necesarios|cargar información/);
+  assert.match(source, /cargar los datasets necesarios|cargar lo que ya tengas/);
 });
 
 test("el checklist muestra requisitos pendientes y conserva bloqueado el baseline", async () => {
