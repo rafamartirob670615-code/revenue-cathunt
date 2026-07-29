@@ -181,6 +181,16 @@ const salesFieldLabels = {
   value: "Valor",
   currency: "Moneda",
 };
+const excelInputRequirements = new Set([
+  "sales-history",
+  "marketing-plan",
+  "trade-marketing-plan",
+  "commercial-conditions",
+  "product-costs",
+  "activity-investments",
+  "sales-quota",
+  "actual-sales",
+]);
 
 function activeVersion(plan: Plan) {
   return plan.versions.at(-1);
@@ -1455,12 +1465,12 @@ export default function PlansWorkspace({
                         <label className="secondary file-button">
                           {uploadingRequirement === requirement.id
                             ? "Leyendo archivo…"
-                            : ["sales-history","marketing-plan","trade-marketing-plan","commercial-conditions","product-costs","activity-investments"].includes(requirement.id)
+                            : excelInputRequirements.has(requirement.id)
                               ? received ? "Reemplazar Excel o CSV" : "Seleccionar Excel o CSV"
                               : received ? "Reemplazar CSV" : "Seleccionar CSV"}
                           <input
                             type="file"
-                            accept={["sales-history","marketing-plan","trade-marketing-plan","commercial-conditions","product-costs","activity-investments"].includes(requirement.id)
+                            accept={excelInputRequirements.has(requirement.id)
                               ? ".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
                               : ".csv,text/csv"}
                             disabled={uploadingRequirement === requirement.id}
