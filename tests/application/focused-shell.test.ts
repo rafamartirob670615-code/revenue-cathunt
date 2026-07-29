@@ -2,44 +2,33 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("Inicio tiene dos puertas y continuar se presenta como trabajo reciente", async () => {
-  const source = await readFile(new URL("../../app/page.tsx", import.meta.url), "utf8");
-  const lobby = await readFile(new URL("../../app/RevenueLobby.tsx", import.meta.url), "utf8");
-  assert.match(source, /type AppView = "lobby" \| "plan" \| "monitor"/);
-  assert.match(source, /onExit=\{\(\) => setView\("lobby"\)\}/);
-  assert.doesNotMatch(source, />Monitoreo<\/button>/);
-  assert.match(lobby, /Continuar un Plan/);
-  assert.match(lobby, /Crear un Plan/);
-  assert.match(lobby, /Revisar desempeño/);
-  assert.match(lobby, /Trabajo guardado/);
-  assert.doesNotMatch(lobby, /Explorar el Plan piloto|openSynthetic|Sitio privado/);
-  assert.doesNotMatch(source, /Mercado Central|\$131\.4 M|Sistema confiable|Confianza del dato/);
-  assert.doesNotMatch(lobby, /Mercado Central|\$131\.4 M|Sistema confiable|Confianza del dato/);
+test("Inicio y los módulos viven en una sola maquinaria", async () => {
+  const page = await readFile(new URL("../../app/page.tsx", import.meta.url), "utf8");
+  const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
+  const home = await readFile(new URL("../../app/revenue/HomeModule.tsx", import.meta.url), "utf8");
+  assert.match(page, /RevenuePlatform/);
+  assert.match(shell, /REVENUE_MODULES\.map/);
+  assert.match(home, /Construir un Plan anual/);
+  assert.match(home, /Revisar un Plan enviado/);
+  assert.match(home, /Continuar exactamente donde quedó/);
+  assert.doesNotMatch(page, /RevenueLobby|PlansWorkspace/);
 });
 
-test("el baseline explica evidencia, estados y gobierno sin inventar resultados", async () => {
-  const source = await readFile(new URL("../../app/PlansWorkspace.tsx", import.meta.url), "utf8");
-  assert.match(source, /¿Qué venderíamos sin volver a contar las actividades\?/);
-  assert.match(source, /Historia observada/);
-  assert.match(source, /Base calculada/);
-  assert.match(source, /Base ajustada/);
-  assert.match(source, /Base aprobada/);
-  assert.match(source, /Aún no seleccionado/);
-  assert.match(source, /Todavía no existe un cálculo/);
-  assert.match(source, /salesEvidence\?\.summary\.rowCount/);
+test("el armazón conserva contexto y permisos de avance", async () => {
+  const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
+  const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
+  for (const label of ["Compañía", "Cuenta", "Año", "Versión", "Estado"]) assert.match(shell, new RegExp(label));
+  assert.match(platform, /available\.has/);
+  assert.match(platform, /APPROVED_FROZEN/);
+  assert.match(platform, /unitsReconciled/);
 });
 
-test("la información identifica responsables y la versión permite presentar sin oficializar el piloto", async () => {
-  const workspace = await readFile(new URL("../../app/PlansWorkspace.tsx", import.meta.url), "utf8");
+test("la información identifica responsables y la versión conserva gobierno", async () => {
   const requirements = await readFile(new URL("../../domain/input-package.ts", import.meta.url), "utf8");
-  assert.match(workspace, /Responsable sugerido/);
+  const modules = await readFile(new URL("../../app/revenue/PlanModules.tsx", import.meta.url), "utf8");
+  const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   assert.match(requirements, /suggestedOwner/);
-  assert.match(workspace, /Presentar en pantalla completa/);
-  assert.match(workspace, /Enviar a revisión/);
-  assert.match(workspace, /submitPlanForReview/);
-  assert.match(workspace, /action: "freezeAndSubmit"/);
-  assert.match(workspace, /disabled=\{syntheticPackage \|\| submittingPlan/);
-  assert.match(workspace, /DATOS SINTÉTICOS — NO COMERCIALES/);
-  assert.match(workspace, /\{showGrowthGate && \(/);
-  assert.match(workspace, /\{showResultGate && \(/);
+  assert.match(modules, /Oficialización bloqueada por ser sintético/);
+  assert.match(platform, /action: "freezeAndSubmit"/);
+  assert.match(platform, /setActive\("monitoreo"\)/);
 });

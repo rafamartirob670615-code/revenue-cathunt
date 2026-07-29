@@ -2,135 +2,93 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const componentUrl = new URL("../../app/PlansWorkspace.tsx", import.meta.url);
+const platformUrl = new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url);
+const modulesUrl = new URL("../../app/revenue/PlanModules.tsx", import.meta.url);
+const registryUrl = new URL("../../app/revenue/modules.ts", import.meta.url);
 
-test("Crear Plan real comienza vacío y permite volver al lobby", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Siguiente: cargar lo que ya tengas/);
+test("Crear Plan real comienza vacío y entra a Información", async () => {
+  const source = await readFile(platformUrl, "utf8");
+  assert.match(source, /Registra el contexto una sola vez/);
   assert.match(source, /Guardar y continuar/);
-  assert.match(source, /Volver al lobby/);
-  assert.match(source, /lines:\s*\[\]/);
+  assert.match(source, /lines: \[\]/);
+  assert.match(source, /setActive\("informacion"\)/);
 });
 
 test("el recorrido vacío no presenta cifras demostrativas como resultados", async () => {
-  const source = await readFile(componentUrl, "utf8");
+  const source = await readFile(platformUrl, "utf8");
   assert.doesNotMatch(source, /\$75\.4 M|1\.79 M|31\.4%|Mercado Central/);
-  assert.match(source, /cargar los datasets necesarios|cargar lo que ya tengas/);
+  assert.match(source, /No hay una cuenta activa/);
 });
 
-test("la información del Plan conserva requisitos y mantiene bloqueado el baseline", async () => {
-  const source = await readFile(componentUrl, "utf8");
+test("la información comienza con un Excel y revela lo demás después", async () => {
+  const source = await readFile(modulesUrl, "utf8");
   assert.match(source, /Seleccionar Excel de ventas/);
-  assert.match(source, /essentialReady.*4 grupos básicos reconocidos/s);
-  assert.match(source, /No recibido/);
-  assert.doesNotMatch(source, /no completa este paquete/);
-  assert.match(source, /<b>Volumen base<\/b><small>¿Qué vendería sin actividades\?<\/small>/);
-  assert.match(source, /Seleccionar Excel o CSV/);
-  assert.match(source, /"sales-quota"/);
-  assert.match(source, /"actual-sales"/);
-  assert.match(source, /Información del Plan/);
+  assert.match(source, /Ver información que se solicitará después/);
   assert.match(source, /Hoja elegida/);
-  assert.match(source, /Vista del dataset canónico/);
-  assert.match(source, /received\.issues/);
-  assert.match(source, /correspondencias pendientes/);
-  assert.match(source, /Descargar plantilla/);
-  assert.match(source, /requiredFields\.join/);
-  assert.match(source, /Confirmar paquete listo/);
+  assert.match(source, /Confirmar información/);
   assert.match(source, /Iniciar prueba guiada/);
-  assert.match(source, /Volumen base anual propuesto/);
-  assert.match(source, /Aceptar volumen base y continuar/);
-  assert.match(source, /¿Qué venderíamos sin volver a contar las actividades\?/);
-  assert.match(source, /Base desimpactada/);
-  assert.match(source, /Trade Marketing/);
-  assert.match(source, /Continuar al resultado/);
-  assert.match(source, /Resumen integral del Plan/);
-  assert.match(source, /Este es tu Plan anual/);
-  assert.match(source, /Base aprobada/);
-  assert.match(source, /Revenue del Plan/);
 });
 
-test("la revisión del baseline cubre periodos, SKU, ajuste documentado y congelamiento", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  for (const label of ["Año", "Trimestre", "Mes", "SKU"]) {
-    assert.match(source, new RegExp(`\"${label}\"`));
-  }
-  assert.match(source, /Proponer ajuste/);
-  assert.match(source, /Motivo del ajuste/);
-  assert.match(source, /Evidencia/);
-  assert.match(source, /Aprobar ajuste/);
-  assert.match(source, /Aceptar cálculo y congelar/);
-  assert.match(source, /No puede convertirse en Plan oficial/);
-  assert.match(source, /decidedBy/);
-  assert.match(source, /methodVersion/);
+test("el volumen base abre con una respuesta y mantiene detalle progresivo", async () => {
+  const source = await readFile(modulesUrl, "utf8");
+  assert.match(source, /Volumen base anual propuesto/);
+  assert.match(source, /Ver resultado mensual por producto/);
+  assert.match(source, /Aceptar volumen base/);
+  assert.match(source, /Todavía no existe una base calculada/);
 });
 
 test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Paso 3 · Crecimiento/);
-  assert.match(source, /Marketing y Trade Marketing sin doble conteo/);
+  const source = await readFile(modulesUrl, "utf8");
   assert.match(source, /Incremental bruto/);
   assert.match(source, /Incremental neto/);
-  assert.match(source, /canibalización/);
-  assert.match(source, /compra anticipada/);
-  assert.match(source, /Ver controles del cálculo/);
-  assert.match(source, /Construir crecimiento sintético/);
-  assert.match(source, /Construir crecimiento real/);
-  assert.match(source, /PLANES EMPRESARIALES — TRAZABLES/);
+  assert.match(source, /Marketing/);
+  assert.match(source, /Trade Marketing/);
+  assert.match(source, /Construir crecimiento/);
 });
 
-test("resultado muestra unidades y valor mensual con evidencia de precio y conversión", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Resultado anual del Plan/);
-  assert.match(source, /Base aprobada \+ incremental neto = unidades del Plan/);
-  assert.match(source, /Calcular unidades y valor/);
-  assert.match(source, /Unidades anuales/);
-  assert.match(source, /Valor anual/);
-  assert.match(source, /Calidad del cálculo/);
-  assert.match(source, /precio aceptado/);
-  assert.match(source, /DATOS SINTÉTICOS — NO COMERCIALES/);
+test("Plan anual muestra unidades, valor y reconciliación", async () => {
+  const source = await readFile(modulesUrl, "utf8");
+  assert.match(source, /Unidades del Plan/);
+  assert.match(source, /Revenue del Plan/);
+  assert.match(source, /Base aprobada/);
+  assert.match(source, /Ver detalle mensual por producto/);
+  assert.match(source, /Calcular Plan anual/);
 });
 
-test("rentabilidad distingue condiciones reales de parámetros sintéticos", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Rentabilidad · comparador declarado/);
-  assert.match(source, /valor del baseline aprobado/);
-  assert.match(source, /CONDICIONES COMERCIALES Y COSTOS — TRAZABLES/);
-  assert.match(source, /PARÁMETROS SINTÉTICOS — NO SON CONDICIONES COMERCIALES/);
-  assert.match(source, /Calcular rentabilidad real/);
-  assert.match(source, /Gross sales/);
-  assert.match(source, /Net sales/);
-  assert.match(source, /Gross margin/);
-  assert.match(source, /Contribution/);
+test("rentabilidad separa el estado de resultados", async () => {
+  const source = await readFile(modulesUrl, "utf8");
+  for (const label of ["Gross sales", "Deducciones", "Net sales", "COGS", "Gross margin", "Inversión", "Contribution"]) {
+    assert.match(source, new RegExp(label));
+  }
   assert.match(source, /Calcular rentabilidad/);
 });
 
-test("el Plan completo tiene una vista de versión y presentación", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /<b>Revisión<\/b><small>¿Qué falta validar o aprobar\?<\/small>/);
-  assert.match(source, /Vista para defender el Plan/);
-  assert.match(source, /Revenue del Plan/);
-  assert.match(source, /Historia del Plan/);
-  assert.match(source, /Baseline aprobado/);
+test("Revisión concentra validaciones y bloquea el caso sintético", async () => {
+  const source = await readFile(modulesUrl, "utf8");
   assert.match(source, /Oficialización bloqueada por ser sintético/);
+  assert.match(source, /Congelar y enviar a revisión/);
+  assert.match(source, /Volumen base aprobado/);
 });
 
-test("baseline permite ajustar cada combinación mensual y persiste evidencia", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /baseline-line-editor/);
-  assert.match(source, /Base ajustada/);
-  assert.match(source, /adjustments:/);
+test("la nueva maquinaria usa un registro único de módulos", async () => {
+  const source = await readFile(registryUrl, "utf8");
+  for (const module of ["inicio", "informacion", "volumen-base", "crecimiento", "plan-anual", "rentabilidad", "revision", "monitoreo", "administracion"]) {
+    assert.match(source, new RegExp(`\"${module}\"`));
+  }
 });
 
-test("crecimiento permite editar y guardar building blocks reconciliados", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Editar actividades/);
-  assert.match(source, /Guardar crecimiento/);
-  assert.match(source, /method:"PUT"/);
+test("cada cálculo permanece conectado a su API existente", async () => {
+  const source = await readFile(platformUrl, "utf8");
+  for (const route of ["/api/inputs", "/api/baseline", "/api/growth", "/api/result", "/api/profitability", "/api/plans"]) {
+    assert.match(source, new RegExp(route));
+  }
 });
 
-test("resultado permite edición tabular documentada", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Editar detalle/);
-  assert.match(source, /Ajuste autorizado/);
-  assert.match(source, /Guardar resultado/);
+test("la app conserva edición y gobierno en sus motores", async () => {
+  const baseline = await readFile(new URL("../../app/api/baseline/route.ts", import.meta.url), "utf8");
+  const growth = await readFile(new URL("../../app/api/growth/route.ts", import.meta.url), "utf8");
+  const result = await readFile(new URL("../../app/api/result/route.ts", import.meta.url), "utf8");
+  assert.match(baseline, /export async function PUT/);
+  assert.match(growth, /export async function PUT/);
+  assert.match(result, /export async function PUT/);
 });
