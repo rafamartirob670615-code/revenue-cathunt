@@ -26,12 +26,13 @@ type ReceivedFile = {
       selectedSheet: string | null;
       headerRow: number | null;
       sourceHeaders: string[];
-      mapping: Partial<Record<"account_id" | "sku_id" | "period" | "units" | "value" | "currency", string>>;
+      mapping: Record<string, string>;
       confidence: number;
       sourceRowCount: number;
       validRowCount: number;
       rejectedRowCount: number;
-      coverageMonths: number;
+      coverageMonths?: number;
+      allocatedUnits?: number;
       preview: Array<{
         account_id: string;
         sku_id: string;
@@ -39,7 +40,7 @@ type ReceivedFile = {
         units: number;
         value: number;
         currency: string;
-      }>;
+      } & Record<string, unknown>>;
     };
   };
   receivedAt: string;
@@ -78,7 +79,7 @@ type BaselineReview = {
   officializationAllowed?: boolean;
 };
 type GrowthResult = {
-  dataClassification: "SYNTHETIC_NON_COMMERCIAL";
+  dataClassification: "SYNTHETIC_NON_COMMERCIAL" | "USER_PROVIDED";
   methodId: string;
   methodVersion: string;
   activities: Array<{
@@ -583,7 +584,7 @@ export default function PlansWorkspace({
   }
   async function savePlanResult(event:React.FormEvent){event.preventDefault();if(!selected)return;setCalculatingResult(true);setError("");try{const response=await fetch("/api/result",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({planId:selected.id,reason:resultEditReason,evidence:resultEditEvidence,lines:resultDraft.map(line=>({skuId:line.skuId,period:line.period,authorizedAdjustmentUnits:line.authorizedAdjustmentUnits??0,unitPrice:line.unitPrice}))})});const body=await response.json() as {ok:boolean;result?:PlanResult;error?:string};if(!response.ok||!body.ok||!body.result)throw new Error(body.error);setPlanResult(body.result);setProfitability(null);setEditingResult(false);}catch(cause){setError(friendlyError(cause instanceof Error?cause.message:""));}finally{setCalculatingResult(false);}}
 
-  async function buildSyntheticGrowth() {
+  async function buildGrowth() {
     if (!selected) return;
     setBuildingGrowth(true);
     setError("");
@@ -1022,8 +1023,10 @@ export default function PlansWorkspace({
                 <span className={`calculation-state ${growth?.controls.reconciled ? "ready" : ""}`}>{growth?.controls.reconciled ? "✓ Reconciliado" : "Pendiente"}</span>
               </div>
               <div className="synthetic-banner" role="status">
-                <b>DATOS SINTÉTICOS — NO COMERCIALES</b>
-                <span>Las actividades y sus impactos son artificiales y no representan compromisos comerciales.</span>
+                <b>{baseline?.dataClassification === "USER_PROVIDED" ? "PLANES EMPRESARIALES — TRAZABLES" : "DATOS SINTÉTICOS — NO COMERCIALES"}</b>
+                <span>{baseline?.dataClassification === "USER_PROVIDED"
+                  ? "El crecimiento se construye desde los Excel de Marketing y Trade Marketing, conservando su origen."
+                  : "Las actividades y sus impactos son artificiales y no representan compromisos comerciales."}</span>
               </div>
               {growth ? (
                 <>
@@ -1056,8 +1059,8 @@ export default function PlansWorkspace({
                 </>
               ) : (
                 <div className="baseline-next-action">
-                  <div><b>Crear caso gobernado de crecimiento</b><p>Generará tres actividades sintéticas trazables y comprobará el incremental neto.</p></div>
-                  <button className="primary" onClick={() => void buildSyntheticGrowth()} disabled={buildingGrowth}>{buildingGrowth ? "Construyendo…" : "Construir crecimiento sintético"}</button>
+                  <div><b>{baseline?.dataClassification === "USER_PROVIDED" ? "Construir crecimiento desde los planes aprobados" : "Crear caso gobernado de crecimiento"}</b><p>{baseline?.dataClassification === "USER_PROVIDED" ? "Usará los Excel de Marketing y Trade Marketing cargados en Datasets, asignará a la cuenta su participación y reconciliará el incremental neto." : "Generará tres actividades sintéticas trazables y comprobará el incremental neto."}</p></div>
+                  <button className="primary" onClick={() => void buildGrowth()} disabled={buildingGrowth}>{buildingGrowth ? "Construyendo…" : baseline?.dataClassification === "USER_PROVIDED" ? "Construir crecimiento real" : "Construir crecimiento sintético"}</button>
                 </div>
               )}
             </div>
@@ -1383,21 +1386,21 @@ export default function PlansWorkspace({
                               </div>
                               <div>
                                 <small>Cobertura</small>
-                                <b>{received.summary.workbook.coverageMonths} meses</b>
+                                <b>{received.summary.workbook.coverageMonths !== undefined ? `${received.summary.workbook.coverageMonths} meses` : `${received.summary.workbook.allocatedUnits?.toLocaleString("es-MX") ?? 0} unidades asignadas`}</b>
                               </div>
                             </div>
                             <p className="workbook-sheets">
                               Hojas encontradas: {received.summary.workbook.sheetNames.join(", ")}
                             </p>
                             <div className="mapping-grid">
-                              {Object.entries(salesFieldLabels).map(([field, label]) => (
+                              {Object.entries(requirement.id === "sales-history" ? salesFieldLabels : Object.fromEntries(Object.keys(received.summary.workbook.mapping).map((field) => [field, field.replaceAll("_", " ") ]))).map(([field, label]) => (
                                 <div key={field}>
                                   <span>{label}</span>
                                   <b>{received.summary.workbook?.mapping[field as keyof typeof salesFieldLabels] ?? "No identificado"}</b>
                                 </div>
                               ))}
                             </div>
-                            {received.summary.workbook.preview.length > 0 && (
+                            {requirement.id === "sales-history" && received.summary.workbook.preview.length > 0 && (
                               <div className="canonical-preview">
                                 <div className="canonical-preview-head">
                                   <b>Vista del dataset canónico</b>

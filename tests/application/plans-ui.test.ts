@@ -68,6 +68,8 @@ test("crecimiento conecta Marketing, Trade Marketing e incremental neto", async 
   assert.match(source, /compra anticipada/);
   assert.match(source, /Solapamientos pendientes/);
   assert.match(source, /Construir crecimiento sintético/);
+  assert.match(source, /Construir crecimiento real/);
+  assert.match(source, /PLANES EMPRESARIALES — TRAZABLES/);
 });
 
 test("resultado muestra unidades y valor mensual con evidencia de precio y conversión", async () => {

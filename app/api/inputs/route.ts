@@ -8,6 +8,7 @@ import {
 } from "../../../domain/input-package.ts";
 import {
   analyzeSalesWorkbook,
+  analyzeActivityWorkbook,
   type WorkbookCell,
 } from "../../../domain/excel-intake.ts";
 import { createSyntheticPilotPackage } from "../../../domain/synthetic-pilot.ts";
@@ -134,8 +135,12 @@ export async function POST(request: Request) {
     if (!isExcel && !isCsv) {
       throw new Error("Utiliza un archivo Excel (.xlsx o .xls) o CSV.");
     }
-    if (isExcel && requirementId !== "sales-history") {
-      throw new Error("La primera ingesta inteligente de Excel está habilitada para Historia de ventas.");
+    const intelligentExcelRequirements = new Set(["sales-history", "marketing-plan", "trade-marketing-plan"]);
+    if (isExcel && !intelligentExcelRequirements.has(requirementId)) {
+      throw new Error("Este insumo utiliza por ahora el formato CSV indicado.");
+    }
+    if (isCsv && (requirementId === "marketing-plan" || requirementId === "trade-marketing-plan")) {
+      throw new Error("Para construir Crecimiento, carga este plan en Excel (.xlsx o .xls).");
     }
     if (file.size === 0 || file.size > 20_000_000) {
       throw new Error("El archivo debe contener información y pesar menos de 20 MB");
@@ -171,7 +176,12 @@ export async function POST(request: Request) {
           blankrows: false,
         }),
       }));
-      const analysis = analyzeSalesWorkbook(sheets);
+      const analysis = requirementId === "sales-history"
+        ? analyzeSalesWorkbook(sheets)
+        : analyzeActivityWorkbook(
+            sheets,
+            requirementId === "marketing-plan" ? "MARKETING" : "TRADE_MARKETING",
+          );
       status = analysis.status;
       issues = analysis.issues;
       selectedSheet = analysis.selectedSheet;
@@ -185,7 +195,8 @@ export async function POST(request: Request) {
         accountIds: analysis.summary.accountIds,
         skuIds: analysis.summary.skuIds,
         periods: analysis.summary.periods,
-        currencies: analysis.summary.currencies,
+        ...("currencies" in analysis.summary ? { currencies: analysis.summary.currencies } : {}),
+        ...("allocatedUnits" in analysis.summary ? { allocatedUnits: analysis.summary.allocatedUnits } : {}),
         workbook: {
           sheetNames: analysis.sheetNames,
           selectedSheet: analysis.selectedSheet,
@@ -196,12 +207,15 @@ export async function POST(request: Request) {
           sourceRowCount: analysis.summary.rowCount,
           validRowCount: analysis.summary.validRowCount,
           rejectedRowCount: analysis.summary.rejectedRowCount,
-          coverageMonths: analysis.summary.coverageMonths,
+          ...("coverageMonths" in analysis.summary ? { coverageMonths: analysis.summary.coverageMonths } : {}),
+          ...("allocatedUnits" in analysis.summary ? { allocatedUnits: analysis.summary.allocatedUnits } : {}),
           preview: analysis.canonicalRows.slice(0, 5),
         },
       };
       canonicalPayload = JSON.stringify({
-        contract: "REVENUE-CANONICAL-SALES-V1",
+        contract: requirementId === "sales-history"
+          ? "REVENUE-CANONICAL-SALES-V1"
+          : "REVENUE-CANONICAL-GROWTH-V1",
         source: {
           originalName: file.name,
           selectedSheet: analysis.selectedSheet,

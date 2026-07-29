@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { analyzeSalesWorkbook } from "../../domain/excel-intake.ts";
+import { analyzeActivityWorkbook, analyzeSalesWorkbook } from "../../domain/excel-intake.ts";
 
 test("detecta una tabla de ventas aunque los encabezados estén en español y no comiencen en la primera fila", () => {
   const rows: Array<Array<string | number | null>> = [
@@ -27,6 +27,22 @@ test("detecta una tabla de ventas aunque los encabezados estén en español y no
   assert.equal(result.summary.coverageMonths, 12);
   assert.equal(result.mapping.account_id, "Cliente");
   assert.equal(result.canonicalRows[0].period, "2025-01");
+});
+
+test("convierte un plan de Marketing y asigna a la cuenta su participación del volumen corporativo", () => {
+  const result = analyzeActivityWorkbook([{
+    name: "Plan Marketing",
+    rows: [
+      ["ID actividad","Actividad","Cuenta","SKU","Fecha inicio","Fecha fin","Unidades corporativas","Participación cuenta","Canibalización","Halo","Compra anticipada","Interacción","Evidencia"],
+      ["MKT-01","Campaña verano","WALMART","SKU-1","2027-05","2027-06",1000,40,30,10,20,-5,"Plan MKT aprobado"],
+    ],
+  }], "MARKETING");
+  assert.equal(result.status, "READY");
+  assert.equal(result.confidence, 100);
+  assert.equal(result.canonicalRows[0].allocationShare, 0.4);
+  assert.equal(result.canonicalRows[0].grossUnits, 400);
+  assert.equal(result.summary.allocatedUnits, 400);
+  assert.equal(result.canonicalRows[0].source_row, 2);
 });
 
 test("no inventa campos ni aprueba una historia con cobertura insuficiente", () => {

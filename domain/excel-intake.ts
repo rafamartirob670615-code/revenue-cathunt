@@ -44,6 +44,49 @@ export type SalesWorkbookAnalysis = {
   canonicalRows: CanonicalSalesRow[];
 };
 
+export const ACTIVITY_FIELDS = [
+  "activity_id", "activity_name", "account_id", "sku_id", "start_period", "end_period",
+  "corporate_gross_units", "allocation_share", "cannibalization_units", "halo_units",
+  "pull_forward_units", "interaction_units", "evidence",
+] as const;
+export type ActivityField = typeof ACTIVITY_FIELDS[number];
+export type ActivityFamily = "MARKETING" | "TRADE_MARKETING";
+export type CanonicalGrowthActivity = {
+  id: string;
+  family: ActivityFamily;
+  name: string;
+  accountId: string;
+  skuId: string;
+  period: string;
+  startPeriod: string;
+  endPeriod: string;
+  corporateGrossUnits: number;
+  allocationShare: number;
+  grossUnits: number;
+  cannibalizationUnits: number;
+  haloUnits: number;
+  pullForwardUnits: number;
+  interactionUnits: number;
+  evidence: string;
+  source_sheet: string;
+  source_row: number;
+};
+export type ActivityWorkbookAnalysis = {
+  status: "READY" | "INCOMPLETE";
+  selectedSheet: string | null;
+  sheetNames: string[];
+  headerRow: number | null;
+  sourceHeaders: string[];
+  mapping: Partial<Record<ActivityField, string>>;
+  confidence: number;
+  issues: Array<{ code: string; message: string; rows?: number[] }>;
+  summary: {
+    rowCount: number; validRowCount: number; rejectedRowCount: number;
+    accountIds: string[]; skuIds: string[]; periods: string[]; allocatedUnits: number;
+  };
+  canonicalRows: CanonicalGrowthActivity[];
+};
+
 const aliases: Record<SalesField, string[]> = {
   account_id: [
     "account id", "account", "account code", "customer id", "customer code",
@@ -71,6 +114,28 @@ const aliases: Record<SalesField, string[]> = {
   ],
 };
 
+const activityAliases: Record<ActivityField, string[]> = {
+  activity_id: ["activity id", "id actividad", "codigo actividad", "event id", "id evento"],
+  activity_name: ["activity name", "actividad", "nombre actividad", "event name", "evento", "nombre evento"],
+  account_id: aliases.account_id,
+  sku_id: aliases.sku_id,
+  start_period: ["start period", "start date", "inicio", "periodo inicio", "fecha inicio", "mes inicio"],
+  end_period: ["end period", "end date", "fin", "periodo fin", "fecha fin", "mes fin"],
+  corporate_gross_units: [
+    "corporate gross units", "gross units", "unidades brutas corporativas",
+    "unidades corporativas", "volumen corporativo", "unidades brutas",
+  ],
+  allocation_share: [
+    "allocation share", "account share", "share of business", "participacion cuenta",
+    "share cuenta", "porcentaje asignacion", "asignacion cuenta",
+  ],
+  cannibalization_units: ["cannibalization units", "cannibalization", "canibalizacion", "unidades canibalizacion"],
+  halo_units: ["halo units", "halo", "efecto halo", "unidades halo"],
+  pull_forward_units: ["pull forward units", "pull forward", "compra anticipada", "unidades anticipadas"],
+  interaction_units: ["interaction units", "interaction", "interaccion", "unidades interaccion"],
+  evidence: ["evidence", "source", "support", "evidencia", "fuente", "soporte", "referencia"],
+};
+
 function normalized(value: unknown) {
   return String(value ?? "")
     .normalize("NFD")
@@ -95,6 +160,27 @@ function findHeader(rows: WorkbookCell[][]) {
     const mapping: Partial<Record<SalesField, number>> = {};
     row.forEach((cell, column) => {
       const field = fieldForHeader(cell);
+      if (field && mapping[field] === undefined) mapping[field] = column;
+    });
+    const score = Object.keys(mapping).length;
+    if (!best || score > best.score) best = { index, score, mapping };
+  });
+  return best;
+}
+
+function activityFieldForHeader(header: unknown): ActivityField | undefined {
+  const candidate = normalized(header);
+  return ACTIVITY_FIELDS.find((field) =>
+    activityAliases[field].some((alias) => candidate === normalized(alias)),
+  );
+}
+
+function findActivityHeader(rows: WorkbookCell[][]) {
+  let best: { index: number; score: number; mapping: Partial<Record<ActivityField, number>> } | null = null;
+  rows.slice(0, 30).forEach((row, index) => {
+    const mapping: Partial<Record<ActivityField, number>> = {};
+    row.forEach((cell, column) => {
+      const field = activityFieldForHeader(cell);
       if (field && mapping[field] === undefined) mapping[field] = column;
     });
     const score = Object.keys(mapping).length;
@@ -240,6 +326,99 @@ export function analyzeSalesWorkbook(sheets: WorkbookSheet[]): SalesWorkbookAnal
       skuIds: [...new Set(canonicalRows.map((row) => row.sku_id))].sort(),
       periods,
       currencies: [...new Set(canonicalRows.map((row) => row.currency))].sort(),
+    },
+    canonicalRows,
+  };
+}
+
+export function analyzeActivityWorkbook(
+  sheets: WorkbookSheet[],
+  family: ActivityFamily,
+): ActivityWorkbookAnalysis {
+  const candidates = sheets.map((sheet) => ({ sheet, header: findActivityHeader(sheet.rows) }))
+    .sort((a, b) => (b.header?.score ?? 0) - (a.header?.score ?? 0));
+  const selected = candidates[0];
+  const header = selected?.header;
+  const sourceHeaders = header ? selected.sheet.rows[header.index].map(asText) : [];
+  const mapping: Partial<Record<ActivityField, string>> = {};
+  if (header) for (const field of ACTIVITY_FIELDS) {
+    const column = header.mapping[field];
+    if (column !== undefined) mapping[field] = sourceHeaders[column] || `Columna ${column + 1}`;
+  }
+  const issues: ActivityWorkbookAnalysis["issues"] = [];
+  const missing = ACTIVITY_FIELDS.filter((field) => !mapping[field]);
+  if (!selected || !header || header.score < 5) {
+    issues.push({ code: "TABLE_NOT_FOUND", message: "No encontramos una tabla de actividades reconocible." });
+  } else if (missing.length) {
+    issues.push({ code: "MISSING_FIELDS", message: `Falta identificar: ${missing.join(", ")}.` });
+  }
+  const canonicalRows: CanonicalGrowthActivity[] = [];
+  const rejectedRows: number[] = [];
+  if (selected && header && missing.length === 0) {
+    const indexes = header.mapping as Record<ActivityField, number>;
+    selected.sheet.rows.slice(header.index + 1).forEach((row, offset) => {
+      if (row.every((cell) => asText(cell) === "")) return;
+      const sourceRow = header.index + offset + 2;
+      const id = asText(row[indexes.activity_id]);
+      const name = asText(row[indexes.activity_name]);
+      const accountId = asText(row[indexes.account_id]);
+      const skuId = asText(row[indexes.sku_id]);
+      const startPeriod = asPeriod(row[indexes.start_period]);
+      const endPeriod = asPeriod(row[indexes.end_period]);
+      const corporateGrossUnits = asNumber(row[indexes.corporate_gross_units]);
+      const rawShare = asNumber(row[indexes.allocation_share]);
+      const allocationShare = rawShare !== null && rawShare > 1 && rawShare <= 100 ? rawShare / 100 : rawShare;
+      const cannibalizationUnits = asNumber(row[indexes.cannibalization_units]);
+      const haloUnits = asNumber(row[indexes.halo_units]);
+      const pullForwardUnits = asNumber(row[indexes.pull_forward_units]);
+      const interactionUnits = asNumber(row[indexes.interaction_units]);
+      const evidence = asText(row[indexes.evidence]);
+      const numbers = [corporateGrossUnits, allocationShare, cannibalizationUnits, haloUnits, pullForwardUnits, interactionUnits];
+      if (!id || !name || !accountId || !skuId || !startPeriod || !endPeriod || !evidence
+        || numbers.some((value) => value === null)
+        || corporateGrossUnits! < 0 || allocationShare! < 0 || allocationShare! > 1
+        || cannibalizationUnits! < 0 || haloUnits! < 0 || pullForwardUnits! < 0) {
+        rejectedRows.push(sourceRow);
+        return;
+      }
+      canonicalRows.push({
+        id, family, name, accountId, skuId, period: startPeriod, startPeriod, endPeriod,
+        corporateGrossUnits: corporateGrossUnits!, allocationShare: allocationShare!,
+        grossUnits: corporateGrossUnits! * allocationShare!,
+        cannibalizationUnits: cannibalizationUnits!, haloUnits: haloUnits!,
+        pullForwardUnits: pullForwardUnits!, interactionUnits: interactionUnits!,
+        evidence, source_sheet: selected.sheet.name, source_row: sourceRow,
+      });
+    });
+  }
+  if (rejectedRows.length) {
+    issues.push({
+      code: "REJECTED_ROWS",
+      message: `${rejectedRows.length} filas tienen fechas, asignaciones o cantidades inválidas.`,
+      rows: rejectedRows.slice(0, 20),
+    });
+  }
+  if (!canonicalRows.length && !issues.some((issue) => issue.code === "TABLE_NOT_FOUND")) {
+    issues.push({ code: "NO_VALID_ROWS", message: "La tabla fue localizada, pero ninguna actividad pudo convertirse." });
+  }
+  const rowCount = selected && header ? selected.sheet.rows.slice(header.index + 1)
+    .filter((row) => row.some((cell) => asText(cell) !== "")).length : 0;
+  const periods = [...new Set(canonicalRows.flatMap((row) => [row.startPeriod, row.endPeriod]))].sort();
+  const blockingCodes = new Set(["TABLE_NOT_FOUND", "MISSING_FIELDS", "NO_VALID_ROWS"]);
+  return {
+    status: issues.some((issue) => blockingCodes.has(issue.code)) ? "INCOMPLETE" : "READY",
+    selectedSheet: selected?.sheet.name ?? null,
+    sheetNames: sheets.map((sheet) => sheet.name),
+    headerRow: header ? header.index + 1 : null,
+    sourceHeaders, mapping,
+    confidence: header ? Math.round((header.score / ACTIVITY_FIELDS.length) * 100) : 0,
+    issues,
+    summary: {
+      rowCount, validRowCount: canonicalRows.length, rejectedRowCount: rejectedRows.length,
+      accountIds: [...new Set(canonicalRows.map((row) => row.accountId))].sort(),
+      skuIds: [...new Set(canonicalRows.map((row) => row.skuId))].sort(),
+      periods,
+      allocatedUnits: canonicalRows.reduce((sum, row) => sum + row.grossUnits, 0),
     },
     canonicalRows,
   };
