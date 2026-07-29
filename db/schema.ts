@@ -331,3 +331,35 @@ export const financialResults = sqliteTable("financial_results", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const monitoringActions = sqliteTable(
+  "monitoring_actions",
+  {
+    id: text("id").primaryKey(),
+    planId: text("plan_id").notNull(),
+    ownerId: text("owner_id").notNull(),
+    versionNumber: integer("version_number").notNull(),
+    period: text("period").notNull(),
+    comparison: text("comparison").notNull(),
+    planValue: real("plan_value").notNull(),
+    actualValue: real("actual_value").notNull(),
+    varianceValue: real("variance_value").notNull(),
+    varianceRate: real("variance_rate"),
+    material: integer("material", { mode: "boolean" }).notNull(),
+    cause: text("cause").notNull(),
+    evidence: text("evidence").notNull(),
+    action: text("action").notNull(),
+    responsible: text("responsible").notNull(),
+    dueDate: text("due_date").notNull(),
+    status: text("status").notNull(),
+    outcomeNote: text("outcome_note"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    closedAt: text("closed_at"),
+  },
+  (table) => [
+    index("monitoring_action_plan_idx").on(table.planId, table.status),
+    index("monitoring_action_due_idx").on(table.ownerId, table.dueDate),
+  ],
+);

@@ -16,6 +16,13 @@ type MonitorData = {
   datasets: Array<{ requirementId: string; status: string; summary: { periods: string[] }; receivedAt: string }>;
   updatedAt: string;
 };
+type MonitoringAction = {
+  id: string; period: string; plan_value: number; actual_value: number;
+  variance_value: number; variance_rate: number | null; material: number;
+  cause: string; evidence: string; action: string; responsible: string;
+  due_date: string; status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+  outcome_note: string | null; created_at: string; updated_at: string;
+};
 
 const periods = ["Ene", "Feb", "Mar", "T1", "Abr", "May", "Jun", "T2", "Jul", "Ago", "Sep", "T3", "Oct", "Nov", "Dic", "T4", "FY", "YTD"];
 const monthKeys = ["01", "02", "03", "Q1", "04", "05", "06", "Q2", "07", "08", "09", "Q3", "10", "11", "12", "Q4", "FY", "YTD"];
@@ -34,18 +41,32 @@ function annualView(monthly: Record<string, number>, ytdMonth: number | null) {
 export default function PlanMonitor({ planId, onExit }: { planId: string; onExit: () => void }) {
   const [data, setData] = useState<MonitorData | null>(null);
   const [error, setError] = useState("");
-  const [view, setView] = useState<"blocks" | "billing">("blocks");
+  const [view, setView] = useState<"blocks" | "billing" | "actions">("blocks");
   const [family, setFamily] = useState<"TODOS" | "MARKETING" | "TRADE_MARKETING">("TODOS");
   const [uploading, setUploading] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
+  const [actions, setActions] = useState<MonitoringAction[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [cause, setCause] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const [actionText, setActionText] = useState("");
+  const [responsible, setResponsible] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [outcomeNotes, setOutcomeNotes] = useState<Record<string, string>>({});
+  const [savingAction, setSavingAction] = useState(false);
 
   function loadMonitoring() {
     setError("");
-    fetch(`/api/monitoring?planId=${encodeURIComponent(planId)}`, { cache: "no-store" })
-      .then(async (response) => {
-        const body = await response.json() as MonitorData & { ok?: boolean; error?: string };
-        if (!response.ok || body.ok === false) throw new Error(body.error);
+    Promise.all([
+      fetch(`/api/monitoring?planId=${encodeURIComponent(planId)}`, { cache: "no-store" }),
+      fetch(`/api/monitoring/actions?planId=${encodeURIComponent(planId)}`, { cache: "no-store" }),
+    ]).then(async ([monitorResponse, actionsResponse]) => {
+        const body = await monitorResponse.json() as MonitorData & { ok?: boolean; error?: string };
+        const actionsBody = await actionsResponse.json() as { ok?: boolean; actions?: MonitoringAction[]; error?: string };
+        if (!monitorResponse.ok || body.ok === false) throw new Error(body.error);
+        if (!actionsResponse.ok || actionsBody.ok === false) throw new Error(actionsBody.error);
         setData(body);
+        setActions(actionsBody.actions ?? []);
       })
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "No pudimos abrir Monitoreo"));
   }
@@ -75,6 +96,48 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
       setUploadMessage(cause instanceof Error ? cause.message : "No pudimos procesar el Excel.");
     } finally {
       setUploading("");
+    }
+  }
+
+  async function createAction(event: React.FormEvent) {
+    event.preventDefault();
+    setSavingAction(true);
+    setUploadMessage("");
+    try {
+      const response = await fetch("/api/monitoring/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId, period:selectedPeriod, cause, evidence, action:actionText, responsible, dueDate }),
+      });
+      const body = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error);
+      setCause(""); setEvidence(""); setActionText(""); setResponsible(""); setDueDate(""); setSelectedPeriod("");
+      setView("actions");
+      loadMonitoring();
+    } catch (problem) {
+      setUploadMessage(problem instanceof Error ? problem.message : "No pudimos guardar la acción.");
+    } finally {
+      setSavingAction(false);
+    }
+  }
+
+  async function updateAction(item: MonitoringAction, status: MonitoringAction["status"]) {
+    setSavingAction(true);
+    setUploadMessage("");
+    try {
+      const response = await fetch("/api/monitoring/actions", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId, actionId:item.id, status, outcomeNote:status === "CLOSED" ? outcomeNotes[item.id] : item.outcome_note }),
+      });
+      const body = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error);
+      setOutcomeNotes((current) => ({ ...current, [item.id]:"" }));
+      loadMonitoring();
+    } catch (problem) {
+      setUploadMessage(problem instanceof Error ? problem.message : "No pudimos actualizar la acción.");
+    } finally {
+      setSavingAction(false);
     }
   }
 
@@ -118,6 +181,14 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
     if (key === "FY") return cutoffMonth === 12 ? actualValues.FY : null;
     return actualValues.YTD;
   };
+  const materialDeviations = Array.from({ length: cutoffMonth ?? 0 }, (_, index) => {
+    const month = String(index + 1).padStart(2, "0");
+    const plan = Number(planValues[month] ?? 0);
+    const actual = Number(actualValues[month] ?? 0);
+    const gap = actual - plan;
+    const rate = plan === 0 ? null : gap / plan;
+    return { period:`${data.plan.year}-${month}`, month, plan, actual, gap, rate };
+  }).filter((item) => item.rate !== null && Math.abs(item.rate) >= 0.05);
   const quotaReady = data.quota.ready;
   const actualReady = data.actuals.ready;
 
@@ -130,6 +201,7 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
       <nav className="monitor-tabs" aria-label="Vistas de Monitoreo">
         <button className={view === "blocks" ? "active" : ""} onClick={() => setView("blocks")}>Building blocks</button>
         <button className={view === "billing" ? "active" : ""} onClick={() => setView("billing")}>Vista integral Billing</button>
+        <button className={view === "actions" ? "active" : ""} onClick={() => setView("actions")}>Acciones · {actions.filter((item) => item.status !== "CLOSED").length}</button>
       </nav>
 
       {view === "blocks" ? (
@@ -150,7 +222,7 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
             {!activities.length && <div className="monitor-empty">Esta versión no tiene building blocks guardados.</div>}
           </div>
         </section>
-      ) : (
+      ) : view === "billing" ? (
         <section className="monitor-panel billing-panel">
           <div className="monitor-title"><div><p className="eyebrow">Billing File Customer</p><h2>Vista integral del Plan</h2><p>Meses, trimestres, FY y YTD · valores en {data.result?.currency ?? data.plan.currency}</p></div></div>
           <div className="dataset-health">
@@ -179,6 +251,49 @@ export default function PlanMonitor({ planId, onExit }: { planId: string; onExit
             <div className={`billing-grid ${data.priorYear.year && actualReady ? "" : "muted"}`}><b>Variación vs. AA</b>{monthKeys.map((key) => <span key={key}>{data.priorYear.year && actualReady ? formatValue(variance(actualComparable(key), priorValues[key as keyof typeof priorValues] ?? null, true), true) : "Sin dato"}</span>)}</div>
           </div>
           <div className="billing-note"><b>Comparaciones protegidas</b><span>Los cálculos sólo usan cuenta, SKU, periodo y moneda que coinciden con el Plan. YTD termina en el mes de la fecha de corte recibida.</span></div>
+          <div className="deviation-callout"><div><b>{materialDeviations.length} desviaciones requieren explicación</b><span>Umbral operativo del MVP: diferencia absoluta de 5% contra el Plan. No sustituye una política corporativa.</span></div><button className="primary" onClick={() => setView("actions")}>Gestionar desviaciones →</button></div>
+        </section>
+      ) : (
+        <section className="monitor-panel action-management">
+          <div className="monitor-title"><div><p className="eyebrow">Gestión de ejecución</p><h2>Desviación → causa → acción → seguimiento</h2><p>Cada registro conserva la brecha observada, evidencia, responsable, compromiso y resultado.</p></div><button className="secondary" onClick={() => setView("billing")}>Ver comparativo</button></div>
+          {uploadMessage && <div className="monitor-upload-message">{uploadMessage}</div>}
+          <div className="action-summary">
+            <article><span>Desviaciones materiales</span><b>{materialDeviations.length}</b><small>umbral operativo 5%</small></article>
+            <article><span>Acciones abiertas</span><b>{actions.filter((item) => item.status === "OPEN").length}</b><small>requieren inicio</small></article>
+            <article><span>En seguimiento</span><b>{actions.filter((item) => item.status === "IN_PROGRESS").length}</b><small>con responsable</small></article>
+            <article><span>Cerradas</span><b>{actions.filter((item) => item.status === "CLOSED").length}</b><small>con resultado documentado</small></article>
+          </div>
+          <div className="deviation-list">
+            <div className="deviation-head"><b>Periodo</b><span>Plan</span><span>Actual</span><span>Gap</span><span>Variación</span><span>Gestión</span></div>
+            {materialDeviations.map((item) => {
+              const existing = actions.find((action) => action.period === item.period && action.status !== "CLOSED");
+              return <div className="deviation-row" key={item.period}><b>{item.period}</b><span>{formatValue(item.plan)}</span><span>{formatValue(item.actual)}</span><strong className={item.gap < 0 ? "negative" : "positive"}>{formatValue(item.gap)}</strong><span>{formatValue(item.rate, true)}</span>{existing?<button onClick={() => setView("actions")}>Acción {existing.status === "OPEN" ? "abierta" : "en curso"}</button>:<button onClick={() => setSelectedPeriod(item.period)}>Registrar acción</button>}</div>;
+            })}
+            {!materialDeviations.length && <div className="monitor-empty">No hay desviaciones por encima del umbral operativo con el corte actual.</div>}
+          </div>
+          {selectedPeriod && <form className="action-capture" onSubmit={createAction}>
+            <div className="action-capture-head"><div><p className="eyebrow">Nueva acción</p><h3>{selectedPeriod} · brecha contra Plan</h3></div><button type="button" className="secondary" onClick={() => setSelectedPeriod("")}>Cancelar</button></div>
+            <label>Causa observada<textarea required value={cause} onChange={(event) => setCause(event.target.value)} placeholder="¿Qué explica la desviación?" /></label>
+            <label>Evidencia<textarea required value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="Reporte, correo, acuerdo o dato que la sustenta" /></label>
+            <label>Acción correctiva<textarea required value={actionText} onChange={(event) => setActionText(event.target.value)} placeholder="¿Qué se hará para corregir o capturar la oportunidad?" /></label>
+            <label>Responsable<input required value={responsible} onChange={(event) => setResponsible(event.target.value)} placeholder="Nombre o rol" /></label>
+            <label>Fecha compromiso<input required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+            <div className="action-form-submit"><button className="primary" disabled={savingAction}>{savingAction ? "Guardando…" : "Guardar acción trazable"}</button></div>
+          </form>}
+          <div className="action-register">
+            <div className="action-register-head"><div><p className="eyebrow">Registro vivo</p><h3>Acciones y seguimiento</h3></div><span>{actions.length} registros</span></div>
+            {actions.map((item) => <article className={`tracking-card ${item.status.toLowerCase()}`} key={item.id}>
+              <div className="tracking-status"><span>{item.status === "OPEN" ? "Abierta" : item.status === "IN_PROGRESS" ? "En seguimiento" : "Cerrada"}</span><b>{item.period}</b><small>Vence {item.due_date}</small></div>
+              <div className="tracking-story"><p><b>Causa</b>{item.cause}</p><p><b>Evidencia</b>{item.evidence}</p><p><b>Acción</b>{item.action}</p><p><b>Responsable</b>{item.responsible}</p>{item.outcome_note&&<p className="outcome"><b>Resultado</b>{item.outcome_note}</p>}</div>
+              <div className="tracking-metrics"><span>Gap registrado</span><b>{formatValue(item.variance_value)}</b><small>{formatValue(item.variance_rate, true)}</small></div>
+              {item.status !== "CLOSED" && <div className="tracking-controls">
+                {item.status === "OPEN" && <button className="secondary" disabled={savingAction} onClick={() => updateAction(item, "IN_PROGRESS")}>Iniciar seguimiento</button>}
+                <textarea value={outcomeNotes[item.id] ?? ""} onChange={(event) => setOutcomeNotes((current) => ({ ...current, [item.id]:event.target.value }))} placeholder="Resultado obtenido para cerrar" />
+                <button className="primary" disabled={savingAction || !(outcomeNotes[item.id] ?? "").trim()} onClick={() => updateAction(item, "CLOSED")}>Cerrar con resultado</button>
+              </div>}
+            </article>)}
+            {!actions.length && <div className="monitor-empty">Todavía no hay acciones registradas.</div>}
+          </div>
         </section>
       )}
       <footer className="monitor-footer"><span>Última actualización · {new Date(data.updatedAt).toLocaleString("es-MX")}</span><button className="secondary" onClick={onExit}>Volver al lobby</button></footer>
