@@ -1106,7 +1106,9 @@ export default function PlansWorkspace({
                       );
                     })}
                   </div>
-                  <div className="growth-table">
+                  <details className="technical-detail">
+                    <summary>Ver detalle por actividad</summary>
+                    <div className="growth-table">
                     <div className="growth-table-head"><span>Familia y actividad</span><span>Periodo / SKU</span><span>Bruto</span><span>Ajustes</span><span>Neto</span><span>Evidencia</span></div>
                     {(editingGrowth?growthDraft:growth.activities).map((activity,index) => (
                       <div className="growth-row" key={activity.id}>
@@ -1118,7 +1120,8 @@ export default function PlansWorkspace({
                         {editingGrowth?<div><input aria-label={`Evidencia ${index+1}`} value={activity.evidence} onChange={event=>setGrowthDraft(current=>current.map((item,i)=>i===index?{...item,evidence:event.target.value}:item))}/><button type="button" className="text-action" onClick={()=>setGrowthDraft(current=>current.filter((_,i)=>i!==index))}>Eliminar</button></div>:<small>{activity.evidence}</small>}
                       </div>
                     ))}
-                  </div>
+                    </div>
+                  </details>
                   <div className="workspace-edit-actions">
                     {editingGrowth?<><button className="secondary" onClick={()=>setGrowthDraft(current=>[...current,{...growth.activities[0],id:`ACT-${crypto.randomUUID()}`,name:"",grossUnits:0,cannibalizationUnits:0,haloUnits:0,pullForwardUnits:0,interactionUnits:0,netUnits:0,evidence:""}])}>Agregar actividad</button><button className="secondary" onClick={()=>setEditingGrowth(false)}>Cancelar</button><button className="primary" disabled={buildingGrowth} onClick={()=>void saveGrowth()}>{buildingGrowth?"Guardando…":"Guardar crecimiento"}</button></>:<button className="primary" onClick={()=>{setGrowthDraft(growth.activities);setEditingGrowth(true);}}>Editar building blocks</button>}
                   </div>
@@ -1165,7 +1168,9 @@ export default function PlansWorkspace({
                     <article><span>Conversiones faltantes</span><b>{planResult.controls.missingConversions}</b><small>Factor por SKU</small></article>
                     <article><span>Precios faltantes</span><b>{planResult.controls.missingPrices}</b><small>Vigencia declarada</small></article>
                   </div>
-                  <div className="result-table">
+                  <details className="technical-detail">
+                    <summary>Ver detalle mensual por producto</summary>
+                    <div className="result-table">
                     <div className="result-table-head"><span>Mes / SKU</span><span>Base aprobada</span><span>Incremental neto</span><span>Unidades Plan</span><span>Conversión</span><span>Precio</span><span>Valor</span></div>
                     {(editingResult?resultDraft:planResult.lines).map((line,index) => (
                       <div className="result-row" key={`${line.skuId}|${line.period}`}>
@@ -1178,7 +1183,8 @@ export default function PlansWorkspace({
                         <b>{line.planValue.toLocaleString("es-MX", { style: "currency", currency: line.currency })}</b>
                       </div>
                     ))}
-                  </div>
+                    </div>
+                  </details>
                   {editingResult?<form className="result-edit-form" onSubmit={savePlanResult}><label>Motivo<textarea required value={resultEditReason} onChange={event=>setResultEditReason(event.target.value)}/></label><label>Evidencia<textarea required value={resultEditEvidence} onChange={event=>setResultEditEvidence(event.target.value)}/></label><div><button type="button" className="secondary" onClick={()=>setEditingResult(false)}>Cancelar</button><button className="primary" disabled={calculatingResult}>{calculatingResult?"Guardando…":"Guardar resultado"}</button></div></form>:<div className="workspace-edit-actions"><button className="primary" onClick={()=>{setResultDraft(planResult.lines);setEditingResult(true);}}>Editar tabla</button></div>}
                   <div className="result-reconciliation">
                     <div><b>Unidades reconciliadas</b><span>Base aprobada + incremental neto = Plan</span></div>
