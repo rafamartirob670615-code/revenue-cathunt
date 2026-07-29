@@ -1384,8 +1384,17 @@ export default function PlansWorkspace({
           </section>
           {!showInformation ? (
             <div className="next-gate-card">
-              <div><span>2</span><div><b>Siguiente: preparar la información mínima</b><p>Revisa qué necesita REVENUE, para qué sirve y qué elementos bloquean el cálculo.</p></div></div>
-              <button className="secondary" onClick={() => setShowInformation(true)}>Abrir checklist</button>
+              <div><span>→</span><div>
+                <b>{profitability ? "Plan completo: revisar la versión" : planResult ? "Siguiente: calcular rentabilidad" : growth ? "Siguiente: calcular el Plan anual" : baselineReview?.status === "APPROVED_FROZEN" ? "Siguiente: revisar Marketing y Trade Marketing" : packageAccepted ? "Siguiente: revisar el volumen base" : "Siguiente: comenzar con la información"}</b>
+                <p>{profitability ? "Todos los resultados están conectados y listos para revisión." : planResult ? "Completa GSV, deducciones, NSV, margen, inversión y contribución." : growth ? "Convierte la base y el crecimiento en unidades y valor." : baselineReview?.status === "APPROVED_FROZEN" ? "Construye y reconcilia el aporte de las actividades." : packageAccepted ? "Acepta o ajusta la propuesta antes de construir crecimiento." : "Usa la prueba guiada o carga los archivos empresariales disponibles."}</p>
+              </div></div>
+              <button className="secondary" onClick={() => {
+                if (profitability) setShowVersionGate(true);
+                else if (planResult || growth) setShowResultGate(true);
+                else if (baselineReview?.status === "APPROVED_FROZEN") setShowGrowthGate(true);
+                else if (packageAccepted) setShowBaselineGate(true);
+                else setShowInformation(true);
+              }}>{profitability ? "Revisar versión" : planResult ? "Abrir rentabilidad" : growth ? "Abrir resultado" : baselineReview?.status === "APPROVED_FROZEN" ? "Abrir crecimiento" : packageAccepted ? "Abrir volumen base" : "Comenzar"}</button>
             </div>
           ) : (
             <div className="input-package">

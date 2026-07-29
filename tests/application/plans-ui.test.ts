@@ -20,7 +20,7 @@ test("el recorrido vacío no presenta cifras demostrativas como resultados", asy
 
 test("el checklist muestra requisitos pendientes y conserva bloqueado el baseline", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /Abrir checklist/);
+  assert.match(source, /Tengo archivos empresariales/);
   assert.match(source, /essentialReady.*4 esenciales listos/s);
   assert.match(source, /No recibido/);
   assert.match(source, /no completa este paquete/);
