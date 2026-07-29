@@ -27,11 +27,13 @@ export function InformationModule({
   files: ReceivedFile[]; accepted: boolean; systemReady: boolean; busy: string;
   onUpload: (requirementId: string, file?: File) => void; onAccept: () => void; onSynthetic: () => void;
 }) {
-  const essential = PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.essential);
+  const essential = PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "ESSENTIAL");
+  const salesReceived = files.some((file) => file.requirementId === "sales-history" && file.status === "READY");
+  const visibleEssential = salesReceived ? essential : essential.filter((requirement) => requirement.id === "sales-history");
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" description="No hay formatos escondidos ni una captura interminable. REVENUE conserva el original, interpreta la tabla y muestra qué entendió." />
     <section className="source-board">
-      {essential.map((requirement, index) => {
+      {visibleEssential.map((requirement, index) => {
         const received = files.find((file) => file.requirementId === requirement.id);
         return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}>
           <i>{received?.status === "READY" ? "✓" : index + 1}</i>
@@ -41,7 +43,7 @@ export function InformationModule({
       })}
     </section>
     <details className="paper-detail"><summary>Fuentes complementarias</summary><div className="source-board compact">
-      {PILOT_INPUT_REQUIREMENTS.filter((requirement) => !requirement.essential).map((requirement) => {
+      {PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "CONDITIONAL").map((requirement) => {
         const received = files.find((file) => file.requirementId === requirement.id);
         return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}><i>{received ? "✓" : "·"}</i><div><b>{requirement.name}</b><p>{requirement.purpose}</p></div><label>{received ? "Reemplazar" : "Cargar"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></article>;
       })}
@@ -52,7 +54,7 @@ export function InformationModule({
   </div>;
 }
 
-export function BaselineModule({ baseline, review, busy, onCalculate, onApprove }: { baseline: BaselineResult | null; review: BaselineReview | null; busy: string; onCalculate: () => void; onApprove: () => void }) {
+export function BaselineModule({ baseline, review, ready, busy, onCalculate, onApprove }: { baseline: BaselineResult | null; review: BaselineReview | null; ready: boolean; busy: string; onCalculate: () => void; onApprove: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 3 de 8 · Volumen base" title="¿Qué venderíamos sin nuevas actividades?" description="La historia aceptada se limpia de impactos conocidos y produce una base mensual defendible." />
     {baseline ? <>
@@ -60,50 +62,51 @@ export function BaselineModule({ baseline, review, busy, onCalculate, onApprove 
       <section className="paper-metrics"><Metric label="Historia utilizada" value={`${baseline.historyPeriods} periodos`} note="fuente aceptada" /><Metric label="Decisión" value={review?.status === "APPROVED_FROZEN" ? "Aprobada" : "Pendiente"} note="antes de sumar crecimiento" tone={review?.status === "APPROVED_FROZEN" ? "good" : "warn"} /></section>
       <details className="paper-detail"><summary>Resultado mensual por producto</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>Unidades</span><span>Confianza</span></div>{baseline.lines.map((line) => <div className="paper-row" key={`${line.accountId}|${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span>{line.calculatedUnits.toLocaleString("es-MX")}</span><span>{Math.round(line.confidence * 100)}%</span></div>)}</div></details>
       {review?.status !== "APPROVED_FROZEN" && <button className="clay-primary action-wide" onClick={onApprove}>Aprobar y congelar Volumen base</button>}
-    </> : <EmptyAnswer title="Falta calcular esta respuesta" copy="Primero se necesita Información aceptada. Si ya está lista, ejecuta el cálculo." action={<button className="clay-primary" disabled={Boolean(busy)} onClick={onCalculate}>{busy ? "Calculando…" : "Calcular Volumen base"}</button>} />}
+    </> : <EmptyAnswer title={ready ? "Falta calcular esta respuesta" : "Primero confirma la Información"} copy={ready ? "Los archivos esenciales están aceptados y el motor puede construir la respuesta." : "Regresa a Información, completa las fuentes esenciales y confirma la interpretación."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onCalculate}>{busy ? "Calculando…" : "Calcular Volumen base"}</button> : undefined} />}
   </div>;
 }
 
-export function GrowthPlanModule({ family, growth, source, busy, onUpload, onBuild }: {
+export function GrowthPlanModule({ family, growth, source, canBuild, waitingFor, busy, onUpload, onBuild }: {
   family: "MARKETING" | "TRADE_MARKETING"; growth: GrowthResult | null; source?: ReceivedFile;
-  busy: string; onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
+  canBuild: boolean; waitingFor: string; busy: string; onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
 }) {
   const isMarketing = family === "MARKETING";
   const activities = growth?.activities.filter((activity) => activity.family === family) ?? [];
   const gross = activities.reduce((sum, activity) => sum + activity.grossUnits, 0);
   const net = activities.reduce((sum, activity) => sum + activity.netUnits, 0);
   const requirementId = isMarketing ? "marketing-plan" : "trade-marketing-plan";
+  const synthetic = growth?.dataClassification === "SYNTHETIC_NON_COMMERCIAL";
   return <div className="module-page">
     <ModuleHead eyebrow={`Paso ${isMarketing ? 4 : 5} de 8 · ${isMarketing ? "Marketing" : "Trade Marketing"}`} title={isMarketing ? "¿Qué demanda construirá Marketing?" : "¿Qué ejecutará Trade Marketing en el cliente?"} description={isMarketing ? "Campañas, lanzamientos y construcción de demanda con su impacto bruto y sus efectos netos." : "Promociones, exhibiciones y ejecución en punto de venta, separadas de Marketing para evitar doble conteo."} />
     <section className="plan-source">
-      <div><small>Fuente de esta sección</small><h2>{source ? source.originalName : `Excel del Plan de ${isMarketing ? "Marketing" : "Trade Marketing"}`}</h2><p>{source ? `${source.summary.rowCount} filas interpretadas y preservadas.` : "Carga el archivo que ya utiliza el área responsable."}</p></div>
-      <label className="paper-button">{busy === requirementId ? "Leyendo…" : source ? "Reemplazar Excel" : "Seleccionar Excel"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirementId, event.target.files?.[0])} /></label>
+      <div><small>Fuente de esta sección</small><h2>{source ? source.originalName : synthetic ? "Caso guiado sintético" : `Excel del Plan de ${isMarketing ? "Marketing" : "Trade Marketing"}`}</h2><p>{source ? `${source.summary.rowCount} filas interpretadas y preservadas.` : synthetic ? "Fuente de demostración aislada y no comercial." : "Carga el archivo que ya utiliza el área responsable."}</p></div>
+      {!synthetic && <label className="paper-button">{busy === requirementId ? "Leyendo…" : source ? "Reemplazar Excel" : "Seleccionar Excel"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirementId, event.target.files?.[0])} /></label>}
     </section>
     {activities.length ? <>
       <section className="paper-metrics"><Metric label="Actividades" value={String(activities.length)} note={isMarketing ? "Marketing" : "Trade Marketing"} /><Metric label="Incremental bruto" value={`+${gross.toLocaleString("es-MX")}`} note="antes de efectos" /><Metric label="Incremental neto" value={`+${net.toLocaleString("es-MX")}`} note="aporte al Plan" tone="good" /></section>
       <section className="activity-sheet">{activities.map((activity) => <article key={activity.id}><div><small>{activity.period} · {activity.skuId}</small><b>{activity.name}</b><span>{activity.evidence}</span></div><div><span>Bruto {activity.grossUnits.toLocaleString("es-MX")}</span><strong>Neto +{activity.netUnits.toLocaleString("es-MX")}</strong></div></article>)}</section>
-    </> : <EmptyAnswer title={`Todavía no hay actividades de ${isMarketing ? "Marketing" : "Trade Marketing"}`} copy={source ? "La fuente está recibida. Construye el crecimiento para reconciliar sus actividades." : "Carga el Excel de esta área. Esta pantalla no mezclará sus actividades con la otra disciplina."} action={source ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Construyendo…" : "Interpretar y reconciliar"}</button> : undefined} />}
+    </> : <EmptyAnswer title={`Todavía no hay actividades de ${isMarketing ? "Marketing" : "Trade Marketing"}`} copy={source ? canBuild ? "Las dos áreas entregaron sus fuentes. Ya puedes reconciliar el crecimiento sin doble conteo." : waitingFor : "Carga el Excel de esta área. Esta pantalla no mezclará sus actividades con la otra disciplina."} action={source && canBuild ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Construyendo…" : "Reconciliar Marketing y Trade"}</button> : undefined} />}
   </div>;
 }
 
-export function ResultModule({ result, baselineUnits, growthUnits, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; busy: string; onBuild: () => void }) {
+export function ResultModule({ result, baselineUnits, growthUnits, ready, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; ready: boolean; busy: string; onBuild: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 6 de 8 · Plan anual" title="Una sola respuesta en unidades y valor" description="Volumen base + Marketing + Trade Marketing, reconciliados por cuenta, producto y mes." />
     {result ? <>
       <section className="double-answer"><div><span>Unidades del Plan</span><strong>{result.annualUnits.toLocaleString("es-MX")}</strong><small>unidades reconciliadas</small></div><div><span>Revenue del Plan</span><strong>{formatMoney(result.annualValue, result.currency)}</strong><small>{result.currency}</small></div></section>
       <section className="equation-strip"><div><span>Volumen base</span><b>{baselineUnits.toLocaleString("es-MX")}</b></div><strong>+</strong><div><span>Crecimiento neto</span><b>{growthUnits.toLocaleString("es-MX")}</b></div><strong>=</strong><div><span>Plan anual</span><b>{result.annualUnits.toLocaleString("es-MX")}</b></div></section>
       <details className="paper-detail"><summary>Detalle mensual por producto</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>Unidades</span><span>Valor</span></div>{result.lines.map((line) => <div className="paper-row" key={`${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span>{line.planUnits.toLocaleString("es-MX")}</span><span>{formatMoney(line.planValue, line.currency)}</span></div>)}</div></details>
-    </> : <EmptyAnswer title="Todavía no existe el Plan consolidado" copy="Se habilita cuando Volumen base, Marketing y Trade Marketing están reconciliados." action={<button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Consolidando…" : "Consolidar Plan anual"}</button>} />}
+    </> : <EmptyAnswer title="Todavía no existe el Plan consolidado" copy={ready ? "Volumen base, Marketing y Trade Marketing están reconciliados." : "Primero deben quedar reconciliados Volumen base, Marketing y Trade Marketing."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Consolidando…" : "Consolidar Plan anual"}</button> : undefined} />}
   </div>;
 }
 
-export function ProfitabilityModule({ profitability, busy, onBuild }: { profitability: ProfitabilityResult | null; busy: string; onBuild: () => void }) {
+export function ProfitabilityModule({ profitability, ready, busy, onBuild }: { profitability: ProfitabilityResult | null; ready: boolean; busy: string; onBuild: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 7 de 8 · Rentabilidad" title="¿Cuánto dinero dejará el Plan?" description="Ventas, condiciones, costo, margen, inversión y contribución permanecen separados." />
     {profitability ? <>
       <section className="paper-metrics"><Metric label="Net sales" value={formatMoney(profitability.planAnnual.netSales, profitability.currency)} note="después de deducciones" /><Metric label="Margen bruto" value={`${((profitability.planAnnual.grossMarginRate ?? 0) * 100).toFixed(1)}%`} note={formatMoney(profitability.planAnnual.grossMargin, profitability.currency)} /><Metric label="Contribución" value={formatMoney(profitability.planAnnual.contribution, profitability.currency)} note={`${((profitability.planAnnual.contributionRate ?? 0) * 100).toFixed(1)}% de net sales`} tone="good" /></section>
       <section className="pnl-statement">{([["Gross sales","grossSales"],["− Condiciones comerciales","deductions"],["= Net sales","netSales"],["− Costo","cogs"],["= Margen bruto","grossMargin"],["− Inversión","investment"],["= Contribución","contribution"]] as const).map(([label,key]) => <div key={key}><b>{label}</b><span>{formatMoney(profitability.planAnnual[key], profitability.currency)}</span></div>)}</section>
-    </> : <EmptyAnswer title="Falta calcular la economía del Plan" copy="Se necesitan unidades y valor consolidados, además de condiciones, costos e inversión trazables." action={<button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Calculando…" : "Calcular Rentabilidad"}</button>} />}
+    </> : <EmptyAnswer title="Falta calcular la economía del Plan" copy={ready ? "Unidades y valor están listos; se aplicarán condiciones, costos e inversión trazables." : "Primero consolida el Plan anual en unidades y valor."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Calculando…" : "Calcular Rentabilidad"}</button> : undefined} />}
   </div>;
 }
 

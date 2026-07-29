@@ -22,6 +22,9 @@ test("el recorrido vacío no presenta cifras demostrativas como resultados", asy
 
 test("la información comienza con un Excel y revela lo demás después", async () => {
   const source = await readFile(modulesUrl, "utf8");
+  assert.match(source, /criticality === "ESSENTIAL"/);
+  assert.doesNotMatch(source, /requirement\.essential/);
+  assert.match(source, /salesReceived \? essential/);
   assert.match(source, /Seleccionar archivo/);
   assert.match(source, /Fuentes complementarias/);
   assert.match(source, /conserva el original/);
@@ -47,6 +50,16 @@ test("Marketing y Trade Marketing viven en pantallas independientes", async () =
   assert.match(platform, /family="TRADE_MARKETING"/);
   assert.match(platform, /active === "plan-marketing"/);
   assert.match(platform, /active === "plan-trade"/);
+  assert.match(platform, /growthCanBuild/);
+  assert.match(source, /Reconciliar Marketing y Trade/);
+});
+
+test("las acciones no fallan después del clic cuando faltan dependencias", async () => {
+  const source = await readFile(modulesUrl, "utf8");
+  const platform = await readFile(platformUrl, "utf8");
+  assert.match(source, /action=\{ready \? <button className="clay-primary"/);
+  assert.match(source, /action=\{source && canBuild \? <button className="clay-primary"/);
+  assert.match(platform, /if \(accepted\) setActive\("volumen-base"\)/);
 });
 
 test("Plan anual muestra unidades, valor y reconciliación", async () => {

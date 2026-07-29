@@ -175,8 +175,8 @@ export default function RevenuePlatform() {
 
   async function acceptInformation() {
     if (!selected) return;
-    await run("Aceptando información…", "/api/inputs", "PATCH", () => setState((current) => ({ ...current, accepted: true })));
-    setActive("volumen-base");
+    const accepted = await run("Aceptando información…", "/api/inputs", "PATCH", () => setState((current) => ({ ...current, accepted: true })));
+    if (accepted) setActive("volumen-base");
   }
 
   async function synthetic() {
@@ -199,7 +199,7 @@ export default function RevenuePlatform() {
   }
 
   async function run(label: string, url: string, method: string, apply: (result: unknown) => void) {
-    if (!selected) return;
+    if (!selected) return false;
     setBusy(label);
     setError("");
     try {
@@ -207,8 +207,10 @@ export default function RevenuePlatform() {
       const body = await response.json() as { ok: boolean; result?: unknown; review?: unknown; error?: string };
       if (!response.ok || !body.ok) throw new Error(body.error);
       apply(body.result ?? body.review);
+      return true;
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
+      return false;
     } finally {
       setBusy("");
     }
@@ -291,6 +293,16 @@ export default function RevenuePlatform() {
   }
 
   const syntheticPlan = state.files.length > 0 && state.files.every((file) => file.synthetic);
+  const marketingReady = state.files.some((file) => file.requirementId === "marketing-plan" && file.status === "READY");
+  const tradeReady = state.files.some((file) => file.requirementId === "trade-marketing-plan" && file.status === "READY");
+  const growthCanBuild = state.review?.status === "APPROVED_FROZEN" && marketingReady && tradeReady;
+  const growthWaitingFor = state.review?.status !== "APPROVED_FROZEN"
+    ? "Primero aprueba el Volumen base."
+    : !marketingReady
+      ? "Falta el Plan de Marketing."
+      : !tradeReady
+        ? "Falta el Plan de Trade Marketing."
+        : "Las fuentes están listas.";
 
   return (
     <Shell active={active} plan={selected} completed={completed} onNavigate={navigate}>
@@ -300,11 +312,11 @@ export default function RevenuePlatform() {
       active === "inicio" ? <HomeModule plans={dashboardPlans} onCreate={() => setCreating(true)} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={() => setCreating(true)} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} onSynthetic={synthetic} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={() => setCreating(true)} /> :
-      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} canBuild={growthCanBuild} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={() => setCreating(true)} /> :
+      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} /> : <NoPlan onCreate={() => setCreating(true)} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={() => setCreating(true)} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <NoPlan onCreate={() => setCreating(true)} /> :
       <AdministrationModule />}
