@@ -1412,7 +1412,7 @@ export default function PlansWorkspace({
                     ? "REVENUE conserva cada original, explica cómo lo interpretó y te permite continuar después."
                     : "No necesitas tener todos los archivos. Empieza con la historia de ventas o con cualquier información disponible."}</p>
                 </div>
-                {receivedFiles.length > 0 && <span className={essentialReady === 4 && packageIssues.length === 0 ? "pill good" : "pill danger"}>{essentialReady} de 4 grupos básicos reconocidos</span>}
+                {showFileDetails && receivedFiles.length > 0 && <span className={essentialReady === 4 && packageIssues.length === 0 ? "pill good" : "pill danger"}>{essentialReady} de 4 grupos básicos reconocidos</span>}
               </div>
               <div className="data-center-principle">
                 <span>01</span>
@@ -1476,7 +1476,26 @@ export default function PlansWorkspace({
                   </div>
                 </div>
               )}
-              {(showFileDetails || receivedFiles.length > 0) && <div className="input-requirements">
+              {!syntheticPackage && salesEvidence?.summary.workbook && (
+                <div className="sales-upload-confirmation">
+                  <span className="sales-upload-check">✓</span>
+                  <div className="sales-upload-copy">
+                    <b>Excel de ventas reconocido</b>
+                    <p>{salesEvidence.originalName}</p>
+                    <div className="sales-upload-facts">
+                      <span><strong>{salesEvidence.summary.rowCount}</strong> filas válidas</span>
+                      <span><strong>{salesEvidence.summary.workbook.coverageMonths ?? 0}</strong> meses</span>
+                      <span><strong>{salesEvidence.summary.skuIds?.length ?? 0}</strong> productos</span>
+                      <span><strong>{salesEvidence.summary.workbook.confidence}%</strong> confianza</span>
+                    </div>
+                    <small>Guardado correctamente. REVENUE pedirá la siguiente información cuando llegue al cálculo que la necesita.</small>
+                  </div>
+                  <button className="secondary" type="button" onClick={() => setShowFileDetails(true)}>
+                    Ver cómo se interpretó
+                  </button>
+                </div>
+              )}
+              {showFileDetails && <div className="input-requirements">
                 {PILOT_INPUT_REQUIREMENTS.map((requirement) => {
                   const item = inputPackage.items.find((candidate) => candidate.requirementId === requirement.id);
                   const received = receivedFiles.find((file) => file.requirementId === requirement.id);
