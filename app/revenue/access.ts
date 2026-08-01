@@ -38,5 +38,5 @@ export const FUNCTION_LABELS: Record<BusinessFunction, string> = {
 
 export const ASSIGNABLE_CAPABILITIES: Capability[] = [
   "MARKETING_CONTRIBUTE", "TRADE_CONTRIBUTE", "PLAN_INTEGRATE",
-  "REVIEW", "APPROVE", "VIEW_FINANCIALS",
+  "REVIEW", "APPROVE", "VIEW_FINANCIALS", "MONITOR",
 ];

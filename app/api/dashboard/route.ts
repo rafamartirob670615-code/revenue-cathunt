@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 import type { Plan, PlanStatus } from "../../../domain/types.ts";
+import { authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
 
 export const runtime = "edge";
 
@@ -34,7 +35,8 @@ function database(): D1DatabaseLike {
 }
 
 function authenticatedEmail(request: Request) {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
+  // Production identity is supplied by oai-authenticated-user-email; localhost uses the demo account.
+  return resolveAuthenticatedEmail(request);
 }
 
 function displayName(request: Request) {

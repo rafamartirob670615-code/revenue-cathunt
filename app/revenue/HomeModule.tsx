@@ -10,6 +10,8 @@ export default function HomeModule({
   onOpen,
   onMonitor,
   onWork,
+  onOfficialDemo,
+  officialDemoAvailable,
 }: {
   identity: RevenueIdentity;
   plans: DashboardPlan[];
@@ -17,6 +19,8 @@ export default function HomeModule({
   onOpen: (id: string) => void;
   onMonitor: (id: string) => void;
   onWork: (module: RevenueModule) => void;
+  onOfficialDemo: () => void;
+  officialDemoAvailable: boolean;
 }) {
   const monitorable = plans.filter((plan) => ["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(plan.status));
   const can = (capability: RevenueIdentity["capabilities"][number]) => identity.capabilities.includes(capability);
@@ -40,6 +44,11 @@ export default function HomeModule({
         <div><span>Planes activos</span><b>{plans.length}</b></div>
         <div><span>Listos para seguimiento</span><b>{monitorable.length}</b></div>
         <div><span>Siguiente decisión</span><b>{plans[0]?.nextAction ?? "Crear el primer Plan"}</b></div>
+      </section>
+      <section className="plain-note">
+        <b>Demo oficial · Nubelia</b>
+        <p>{officialDemoAvailable ? "El caso sintético oficial ya está guardado. Continúa el recorrido con sus cifras y fuentes." : "Prepara el contexto de la demo y carga directamente las 11 fuentes oficiales."} Fuente única: <code>outputs/demo_sintetica_oficial/</code>.</p>
+        <button className="clay-primary" disabled={!canCreate} onClick={onOfficialDemo}>{officialDemoAvailable ? "Abrir demo oficial" : "Preparar demo oficial"} <b>→</b></button>
       </section>
       <section className="home-decisions">
         <article>

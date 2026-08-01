@@ -22,10 +22,10 @@ export function ContextModule({ plan }: { plan: Plan }) {
 }
 
 export function InformationModule({
-  files, accepted, systemReady, busy, onUpload, onAccept, onSynthetic,
+  files, accepted, systemReady, busy, onUpload, onAccept,
 }: {
   files: ReceivedFile[]; accepted: boolean; systemReady: boolean; busy: string;
-  onUpload: (requirementId: string, file?: File) => void; onAccept: () => void; onSynthetic: () => void;
+  onUpload: (requirementId: string, file?: File) => void; onAccept: () => void;
 }) {
   const essential = PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "ESSENTIAL");
   const salesReceived = files.some((file) => file.requirementId === "sales-history" && file.status === "READY");
@@ -49,7 +49,7 @@ export function InformationModule({
       })}
     </div></details>
     {!accepted && systemReady && <EmptyAnswer title="La información esencial está completa" copy="Confirma la interpretación para construir el Volumen base." action={<button className="clay-primary" onClick={onAccept}>Confirmar información</button>} />}
-    {!accepted && !systemReady && <button className="text-button" onClick={onSynthetic}>Usar prueba guiada para conocer el recorrido</button>}
+    {!accepted && !systemReady && <section className="plain-note"><b>Demo sintética oficial</b><p>Carga directamente los 11 archivos desde <code>outputs/demo_sintetica_oficial/inputs/</code>. La antigua acción “Usar prueba guiada” no genera ni sustituye fuentes.</p></section>}
     {accepted && <section className="answer-card good"><div><small>Resultado</small><h2>Información aceptada</h2><p>Los datasets canónicos ya pueden alimentar los cálculos de este Plan.</p></div><span>Listo</span></section>}
   </div>;
 }
@@ -150,6 +150,6 @@ export function ReviewModule({ baseline, growth, result, profitability, syntheti
     <ModuleHead eyebrow="Paso 8 de 8 · Revisión y aprobación" title="Una versión defendible, no otra hoja de cálculo" description="Las decisiones y controles se presentan en un solo lugar antes de congelar la versión." />
     <section className="approval-sheet">{checks.map(([label,ok], index) => <article className={ok ? "ready" : ""} key={label}><i>{ok ? "✓" : index + 1}</i><div><b>{label}</b><small>{ok ? "Listo" : "Pendiente"}</small></div></article>)}</section>
     {synthetic && <section className="plain-note warning"><b>Prueba no comercial</b><p>Este recorrido demuestra la maquinaria, pero no puede convertirse en compromiso oficial.</p></section>}
-    <EmptyAnswer title={ready ? "La versión está completa" : "Todavía hay decisiones pendientes"} copy={ready ? "Congela los resultados y envía la versión a revisión." : "Abre cualquier paso pendiente desde el menú lateral."} action={ready && !synthetic ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onSubmit}>{busy ? "Enviando…" : "Congelar y enviar"}</button> : undefined} />
+    <EmptyAnswer title={ready ? "La versión está completa" : "Todavía hay decisiones pendientes"} copy={ready ? (synthetic ? "Congela los resultados y envía la demo al seguimiento; la oficialización comercial permanece bloqueada." : "Congela los resultados y envía la versión a revisión.") : "Abre cualquier paso pendiente desde el menú lateral."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onSubmit}>{busy ? "Enviando…" : synthetic ? "Congelar y enviar a Monitoreo" : "Congelar y enviar"}</button> : undefined} />
   </div>;
 }

@@ -13,11 +13,22 @@ test("las capacidades piloto universales fueron sustituidas por asignaciones por
   }
 });
 
-test("la administración sólo concede las seis capacidades aprobadas", async () => {
+test("la administración sólo concede las seis capacidades de construcción y gobierno", async () => {
   const route = await readFile(new URL("../../app/api/admin/access/route.ts", import.meta.url), "utf8");
   assert.match(route, /ASSIGNABLE_CAPABILITIES\.includes/);
   assert.doesNotMatch(route, /FINANCE.*APPROVE|VIEW_FINANCIALS.*PLAN_INTEGRATE/);
   assert.match(route, /ADMINISTER_ACCESS/);
+  assert.doesNotMatch(route, /MONITOR_SCOPE_TYPES|capability === "MONITOR"/);
+});
+
+test("Monitoreo es transversal y Construcción reconoce al administrador", async () => {
+  const monitoring = await readFile(new URL("../../app/api/monitoring/route.ts", import.meta.url), "utf8");
+  const access = await readFile(new URL("../../app/api/_access.ts", import.meta.url), "utf8");
+  const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
+  assert.match(monitoring, /requestIdentity\(request\)/);
+  assert.doesNotMatch(monitoring, /authorizePlan\(request/);
+  assert.match(access, /administrator && buildAccess/);
+  assert.match(shell, /slug === "monitoreo"\) return true/);
 });
 
 test("Marketing y Trade sólo aportan a su función y únicamente el KAM integra", async () => {

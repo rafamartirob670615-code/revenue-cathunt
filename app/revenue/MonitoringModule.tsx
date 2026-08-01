@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
 type MonitorData = {
@@ -10,6 +10,13 @@ type MonitorData = {
   quota: { ready: boolean; months: Record<string, { value: number }> };
   priorYear: { year: number | null; months: Record<string, { value: number }> };
   updatedAt: string;
+  billing: Array<BillingRow>;
+};
+
+type BillingRow = {
+  accountId: string; skuId: string; period: string; planValue: number;
+  quotaValue: number | null; actualValue: number | null; varianceValue: number | null;
+  territory: string; channel: string; category: string; segment: string;
 };
 
 type Action = {
@@ -28,8 +35,9 @@ export default function MonitoringModule({ planId }: { planId: string }) {
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [form, setForm] = useState({ cause:"", evidence:"", action:"", responsible:"", dueDate:"" });
   const [outcomes, setOutcomes] = useState<Record<string,string>>({});
+  const [billingFilters, setBillingFilters] = useState({ territory:"Todos", account:"Todos", channel:"Todos", category:"Todos", segment:"Todos", sku:"Todos", period:"Todos" });
 
-  async function load() {
+  const load = useCallback(async () => {
     setError("");
     try {
       const [monitorResponse, actionResponse] = await Promise.all([
@@ -45,9 +53,11 @@ export default function MonitoringModule({ planId }: { planId: string }) {
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "No pudimos abrir Seguimiento");
     }
-  }
+  }, [planId]);
 
-  useEffect(() => { void load(); }, [planId]);
+  // The effect initiates an asynchronous request; the request callbacks update the view state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
 
   async function upload(requirementId: "sales-quota" | "actual-sales", file?: File) {
     if (!file) return;
@@ -107,6 +117,18 @@ export default function MonitoringModule({ planId }: { planId: string }) {
   const actualYtd = comparable.reduce((sum, row) => sum + (row.actual ?? 0), 0);
   const deviations = comparable.filter((row) => row.rate !== null && Math.abs(row.rate) >= .05);
   const currency = data.result?.currency ?? data.plan.currency;
+  const billingDimensions = [
+    ["territory", "Territorio"], ["accountId", "Cuenta"], ["channel", "Canal"],
+    ["category", "Categoría"], ["segment", "Segmento"], ["skuId", "Producto"], ["period", "Periodo"],
+  ] as const;
+  const billingFiltered = data.billing.filter((row) => Object.entries(billingFilters).every(([key, value]) => value === "Todos" || String(row[key as keyof BillingRow]) === value));
+  const billingTotals = billingFiltered.reduce((totals, row) => ({
+    plan: totals.plan + row.planValue,
+    quota: totals.quota + (row.quotaValue ?? 0),
+    actual: totals.actual + (row.actualValue ?? 0),
+    variance: totals.variance + (row.varianceValue ?? 0),
+  }), { plan:0, quota:0, actual:0, variance:0 });
+  const billingHasMissingDimensions = data.billing.some((row) => [row.territory, row.channel, row.category, row.segment].includes("No informado"));
 
   return <div className="module-page">
     <ModuleHead eyebrow="Ejecutar el Plan · Seguimiento" title="Plan contra venta real" description="Un solo comparativo mensual. Las desviaciones materiales se convierten en acciones con responsable y fecha." />
@@ -117,6 +139,15 @@ export default function MonitoringModule({ planId }: { planId: string }) {
       <label className={data.actuals.ready ? "ready" : ""}><b>Venta real</b><span>{data.actuals.cutoffDate ? `Corte ${data.actuals.cutoffDate}` : "Falta el Excel"}</span><strong>{busy === "actual-sales" ? "Leyendo…" : data.actuals.ready ? "Actualizar" : "Cargar"}<input type="file" accept=".xlsx,.xls" onChange={(event) => upload("actual-sales", event.target.files?.[0])} /></strong></label>
     </section>
     <section className="paper-metrics"><Metric label="Plan comparable" value={formatMoney(planYtd, currency)} note="hasta el corte" /><Metric label="Venta real" value={data.actuals.ready ? formatMoney(actualYtd, currency) : "Pendiente"} note={data.actuals.cutoffDate ?? "sin corte"} /><Metric label="Variación" value={planYtd ? `${((actualYtd / planYtd - 1) * 100).toFixed(1)}%` : "N/D"} note="Actual vs. Plan" tone={actualYtd < planYtd ? "warn" : "good"} /><Metric label="Desviaciones" value={String(deviations.length)} note="umbral operativo 5%" /></section>
+    <section className="billing-explorer">
+      <div className="section-title"><small>Vista de negocio completo</small><h2>Billing consolidado</h2><p>Comienza con todos los canales y desciende por territorio, cuenta, canal, categoría, segmento, producto y periodo.</p></div>
+      <div className="billing-filters">{billingDimensions.map(([key, label]) => {
+        const values = Array.from(new Set(data.billing.map((row) => String(row[key as keyof BillingRow])))).sort();
+        return <label key={key}>{label}<select value={billingFilters[key as keyof typeof billingFilters]} onChange={(event) => setBillingFilters({ ...billingFilters, [key]:event.target.value })}><option>Todos</option>{values.map((value) => <option key={value}>{value}</option>)}</select></label>;
+      })}</div>
+      {billingHasMissingDimensions && <p className="billing-note">La fuente sintética oficial no contiene territorio, canal, categoría o segmento; esos campos se muestran como “No informado” sin inferir valores.</p>}
+      <div className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Territorio</th><th>Cuenta</th><th>Canal</th><th>Categoría</th><th>Segmento</th><th>Producto</th><th>Periodo</th><th>Plan</th><th>Cuota</th><th>Venta real</th><th>Variación</th></tr></thead><tbody><tr className="billing-total"><th colSpan={7}>Total consolidado · {billingFiltered.length} filas</th><td>{formatMoney(billingTotals.plan, currency)}</td><td>{formatMoney(billingTotals.quota, currency)}</td><td>{formatMoney(billingTotals.actual, currency)}</td><td>{formatMoney(billingTotals.variance, currency)}</td></tr>{billingFiltered.map((row) => <tr key={`${row.accountId}-${row.skuId}-${row.period}`}><td>{row.territory}</td><td>{row.accountId}</td><td>{row.channel}</td><td>{row.category}</td><td>{row.segment}</td><td>{row.skuId}</td><td>{row.period}</td><td>{formatMoney(row.planValue, currency)}</td><td>{row.quotaValue === null ? "—" : formatMoney(row.quotaValue, currency)}</td><td>{row.actualValue === null ? "—" : formatMoney(row.actualValue, currency)}</td><td className={(row.varianceValue ?? 0) < 0 ? "negative" : "positive"}>{row.varianceValue === null ? "—" : formatMoney(row.varianceValue, currency)}</td></tr>)}</tbody></table></div>
+    </section>
     <section className="monthly-comparison">
       <header><b>Mes</b><span>Plan</span><span>Cuota</span><span>Venta real</span><span>Variación</span><span>Acción</span></header>
       {comparison.map((row) => {

@@ -12,7 +12,17 @@ export const ASSIGNABLE_CAPABILITIES = [
   "VIEW_FINANCIALS",
 ] as const satisfies readonly Capability[];
 
+const LOCAL_DEMO_EMAIL = "pilot@revenue.local";
+
+export function authenticatedEmail(request: Request): string | undefined {
+  const header = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
+  if (header) return header;
+  const host = new URL(request.url).hostname;
+  return ["localhost", "127.0.0.1", "::1"].includes(host) ? LOCAL_DEMO_EMAIL : undefined;
+}
+
 export type AssignableCapability = (typeof ASSIGNABLE_CAPABILITIES)[number];
+export type MonitoringAccessRule = { type: "ALL" | "ACCOUNT" | "TERRITORY" | "CHANNEL" | "FAMILY"; value?: string };
 
 export function database(): D1DatabaseLike {
   if (!env.DB) throw new Error("Persistencia no disponible");
@@ -20,11 +30,11 @@ export function database(): D1DatabaseLike {
 }
 
 export function requestIdentity(request: Request) {
-  const email = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
+  const email = authenticatedEmail(request);
   if (!email) throw new Error("Autenticación requerida");
   const encoded = request.headers.get("oai-authenticated-user-full-name");
   const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
-  let displayName = email;
+  let displayName = email === LOCAL_DEMO_EMAIL ? "Usuario demo Nubelia" : email;
   if (encoded && encoding === "percent-encoded-utf-8") {
     try { displayName = decodeURIComponent(encoded); } catch { /* email is the safe fallback */ }
   }
@@ -76,8 +86,12 @@ export async function authorizePlan(
   const record = await planRecord(planId);
   const owner = actor.email === record.ownerEmail;
   const capabilities = await planCapabilities(actor.email, planId);
-  if (!owner && !capabilities.length) throw new Error("No tienes una asignación para este Plan");
-  if (allowed.length && !owner && !allowed.some((capability) => capabilities.includes(capability))) {
+  const administrator = capabilities.includes("ADMINISTER_ACCESS");
+  const buildAccess = !allowed.length || allowed.some((capability) =>
+    ["PLAN_INTEGRATE", "MARKETING_CONTRIBUTE", "TRADE_CONTRIBUTE"].includes(capability),
+  );
+  if (!owner && !administrator && !capabilities.length) throw new Error("No tienes una asignación para este Plan");
+  if (allowed.length && !owner && !(administrator && buildAccess) && !allowed.some((capability) => capabilities.includes(capability))) {
     throw new Error("No estás autorizado para realizar esta acción");
   }
   return { ...record, actor, owner, capabilities, dataOwnerId: record.ownerEmail };
@@ -99,7 +113,7 @@ export async function resolveRevenueIdentity(request: Request): Promise<RevenueI
     `SELECT 1 AS owned FROM plan_aggregates
      WHERE lower(json_extract(aggregate_json,'$.versions[0].createdBy'))=lower(?) LIMIT 1`,
   ).bind(actor.email).first<{ owned: number }>();
-  if (owned) {
+  if (owned || actor.email === LOCAL_DEMO_EMAIL) {
     for (const capability of ["PLAN_CREATE", "PLAN_INTEGRATE", "BASELINE_REVIEW", "MONITOR", "ADMINISTER_ACCESS"] as Capability[]) {
       if (!capabilities.includes(capability)) capabilities.push(capability);
     }
@@ -111,6 +125,13 @@ export async function resolveRevenueIdentity(request: Request): Promise<RevenueI
     functions: functions.length ? functions : ["PLAN_OWNER"],
     capabilities,
   };
+}
+
+export async function authorizeMonitoring(request: Request) {
+  const actor = await requestIdentity(request);
+  // Monitoreo es una vista transversal para cualquier usuario autenticado.
+  // La restricción por cuenta aplica a Construcción, no a la lectura del Billing.
+  return { ...actor, monitoringRules: [] as MonitoringAccessRule[], monitoringAll: true };
 }
 
 export function accessError(error: unknown, fallback = "No pudimos completar la acción") {

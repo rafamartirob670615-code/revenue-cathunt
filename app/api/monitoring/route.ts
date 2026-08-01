@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
-import { authorizePlan } from "../_access.ts";
+import { planRecord, requestIdentity } from "../_access.ts";
 
 export const runtime = "edge";
 
@@ -47,11 +47,21 @@ function aggregateRows(
   return months;
 }
 
+function dimension(row: Record<string, string | number> | undefined, names: string[]) {
+  if (!row) return "No informado";
+  for (const name of names) {
+    const value = String(row[name] ?? "").trim();
+    if (value) return value;
+  }
+  return "No informado";
+}
+
 export async function GET(request: Request) {
   try {
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["MONITOR","PLAN_INTEGRATE","VIEW_FINANCIALS"]);
+    await requestIdentity(request);
+    const { ownerEmail: ownerId } = await planRecord(planId);
     const aggregate = await database()
       .prepare("SELECT aggregate_json, updated_at FROM plan_aggregates WHERE plan_id = ?")
       .bind(planId)
@@ -89,8 +99,37 @@ export async function GET(request: Request) {
       allowed.has(`${row.account_id}|${row.sku_id}|${row.period}`)
       && (!row.currency || String(row.currency) === plan.currency),
     );
-    const actualMonths = aggregateRows(compatible(actualRows), plan.year, "actual_value", "actual_units");
-    const quotaMonths = aggregateRows(compatible(quotaRows), plan.year, "quota_value");
+    const compatibleActuals = compatible(actualRows);
+    const compatibleQuota = compatible(quotaRows);
+    const rowByKey = new Map<string, Record<string, string | number>>();
+    for (const row of [...compatibleQuota, ...compatibleActuals]) {
+      const key = `${row.account_id}|${row.sku_id}|${row.period}`;
+      if (!rowByKey.has(key) || compatibleActuals.includes(row)) rowByKey.set(key, row);
+    }
+    const billingRows = (planResult?.lines ?? []).filter((line) => line.period.startsWith(`${plan.year}-`)).map((line) => {
+      const key = `${line.accountId}|${line.skuId}|${line.period}`;
+      const source = rowByKey.get(key);
+      const actual = compatibleActuals.find((row) => `${row.account_id}|${row.sku_id}|${row.period}` === key);
+      const quota = compatibleQuota.find((row) => `${row.account_id}|${row.sku_id}|${row.period}` === key);
+      const actualValue = actual ? Number(actual.actual_value ?? 0) : null;
+      const quotaValue = quota ? Number(quota.quota_value ?? 0) : null;
+      const varianceValue = actualValue === null ? null : Number((actualValue - line.planValue).toFixed(2));
+      return {
+        accountId: line.accountId,
+        skuId: line.skuId,
+        period: line.period,
+        planValue: line.planValue,
+        quotaValue,
+        actualValue,
+        varianceValue,
+        territory: dimension(source, ["territory", "territorio"]),
+        channel: dimension(source, ["channel", "canal"]),
+        category: dimension(source, ["category", "categoria", "categoría"]),
+        segment: dimension(source, ["segment", "segmento"]),
+      };
+    });
+    const actualMonths = aggregateRows(compatibleActuals, plan.year, "actual_value", "actual_units");
+    const quotaMonths = aggregateRows(compatibleQuota, plan.year, "quota_value");
     const compatibleHistory = historyRows.filter((row) =>
       allowedDimensions.has(`${row.account_id}|${row.sku_id}`)
       && (!row.currency || String(row.currency) === plan.currency),
@@ -131,6 +170,7 @@ export async function GET(request: Request) {
         includedRows: compatible(quotaRows).length,
         excludedRows: quotaRows.length - compatible(quotaRows).length,
       },
+      billing: billingRows,
       priorYear: { year: priorYear, months: priorMonths },
       datasets: (inputs.results ?? []).map((row) => ({
         requirementId: row.requirement_id,
@@ -142,7 +182,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No pudimos abrir Monitoreo";
-    const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
+    const status = /Autenticación/.test(message) ? 401 : /asignación|no autorizado/.test(message) ? 403 : 422;
     return Response.json({ ok: false, error: message }, { status });
   }
 }

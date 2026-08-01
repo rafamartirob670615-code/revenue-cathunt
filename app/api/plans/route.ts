@@ -9,7 +9,7 @@ import {
   type CommandContext,
 } from "../../../application/plan-service.ts";
 import type { Approval, Plan } from "../../../domain/types.ts";
-import { authorizePlan } from "../_access.ts";
+import { authorizePlan, authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
 
 export const runtime = "edge";
 
@@ -26,7 +26,7 @@ function database(): D1DatabaseLike {
 }
 
 function authenticatedEmail(request: Request): string | undefined {
-  return request.headers.get("oai-authenticated-user-email") ?? undefined;
+  return resolveAuthenticatedEmail(request);
 }
 
 function authorizedContext(

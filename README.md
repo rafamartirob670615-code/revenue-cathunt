@@ -14,7 +14,12 @@ Drizzle support.
 npm install
 npm run dev
 npm run build
+npm run start
 ```
+
+`npm run start` serves the built Cloudflare Worker from `dist/server/` with
+the local D1/R2 bindings persisted under `dist/server/.wrangler/`. The production artifact is started through Wrangler
+because the built Worker uses the `cloudflare:workers` runtime.
 
 This starter does not use `wrangler.jsonc`.
 

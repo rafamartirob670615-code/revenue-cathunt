@@ -20,11 +20,11 @@ function files(): R2BucketLike {
 
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos guardar la acción";
-  const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
+  const status = /Autenticación/.test(message) ? 401 : /asignación|no autorizado/.test(message) ? 403 : 422;
   return Response.json({ ok: false, error: message }, { status });
 }
 
-async function planContext(planId: string, ownerId: string) {
+async function planContext(planId: string) {
   const aggregate = await database().prepare(
     "SELECT aggregate_json FROM plan_aggregates WHERE plan_id = ?",
   ).bind(planId).first<{ aggregate_json: string }>();
@@ -55,7 +55,7 @@ async function actualRows(planId: string, ownerId: string) {
 const selectActions = `SELECT id, plan_id, version_number, period, comparison, plan_value,
   actual_value, variance_value, variance_rate, material, cause, evidence, action,
   responsible, due_date, status, outcome_note, created_by, created_at, updated_at, closed_at
-  FROM monitoring_actions WHERE plan_id = ? AND owner_id = ? ORDER BY
+  FROM monitoring_actions WHERE plan_id = ? AND owner_id = ? AND version_number = ? ORDER BY
   CASE status WHEN 'OPEN' THEN 0 WHEN 'IN_PROGRESS' THEN 1 ELSE 2 END, due_date, created_at DESC`;
 
 export async function GET(request: Request) {
@@ -63,8 +63,8 @@ export async function GET(request: Request) {
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
     const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["MONITOR","PLAN_INTEGRATE"]);
-    await planContext(planId, ownerId);
-    const rows = await database().prepare(selectActions).bind(planId, ownerId).run<Record<string, unknown>>();
+    const { active } = await planContext(planId);
+    const rows = await database().prepare(selectActions).bind(planId, ownerId, active.number).run<Record<string, unknown>>();
     return Response.json({ ok: true, actions: rows.results ?? [] });
   } catch (error) {
     return responseError(error);
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       throw new Error("Causa, evidencia, acción y responsable son obligatorios");
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(body.dueDate ?? "")) throw new Error("Define una fecha compromiso válida");
-    const { plan, active } = await planContext(planId, ownerId);
+    const { plan, active } = await planContext(planId);
     if (!period.startsWith(`${plan.year}-`)) throw new Error("El periodo no pertenece al año del Plan");
     const resultRow = await database().prepare(
       "SELECT result_json FROM plan_results WHERE plan_id = ? AND owner_id = ?",
@@ -110,8 +110,8 @@ export async function POST(request: Request) {
     const varianceRate = planValue === 0 ? null : Number((varianceValue / planValue).toFixed(4));
     const material = varianceRate !== null && Math.abs(varianceRate) >= 0.05;
     const existing = await database().prepare(
-      "SELECT id FROM monitoring_actions WHERE plan_id = ? AND owner_id = ? AND period = ? AND status IN ('OPEN','IN_PROGRESS')",
-    ).bind(planId, ownerId, period).first<{ id: string }>();
+      "SELECT id FROM monitoring_actions WHERE plan_id = ? AND owner_id = ? AND version_number = ? AND period = ? AND status IN ('OPEN','IN_PROGRESS')",
+    ).bind(planId, ownerId, active.number, period).first<{ id: string }>();
     if (existing) throw new Error("Ese periodo ya tiene una acción abierta");
     const now = new Date().toISOString();
     const id = `monitor-action:${crypto.randomUUID()}`;
@@ -127,8 +127,8 @@ export async function POST(request: Request) {
       body.action!.trim(), body.responsible!.trim(), body.dueDate, actor.email, now, now,
     ).run();
     const created = await database().prepare(
-      `${selectActions.replace("WHERE plan_id = ? AND owner_id = ?", "WHERE id = ? AND owner_id = ?")}`,
-    ).bind(id, ownerId).run<Record<string, unknown>>();
+      `${selectActions.replace("WHERE plan_id = ? AND owner_id = ? AND version_number = ?", "WHERE id = ? AND owner_id = ? AND version_number = ?")}`,
+    ).bind(id, ownerId, active.number).run<Record<string, unknown>>();
     return Response.json({ ok: true, action: created.results?.[0] });
   } catch (error) {
     return responseError(error);
@@ -144,18 +144,26 @@ export async function PUT(request: Request) {
     const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["MONITOR","PLAN_INTEGRATE"]);
     const actionId = body.actionId ?? "";
     if (!planId || !actionId) throw new Error("Acción no reconocida");
-    await planContext(planId, ownerId);
+    const { active } = await planContext(planId);
     if (!["OPEN","IN_PROGRESS","CLOSED"].includes(body.status ?? "")) throw new Error("Estado no válido");
     if (body.status === "CLOSED" && !body.outcomeNote?.trim()) {
       throw new Error("Documenta el resultado antes de cerrar la acción");
     }
+    const current = await database().prepare(
+      "SELECT status FROM monitoring_actions WHERE id = ? AND plan_id = ? AND owner_id = ? AND version_number = ?",
+    ).bind(actionId, planId, ownerId, active.number).first<{ status: string }>();
+    if (!current) throw new Error("Acción no encontrada o no autorizada");
+    if (current.status === "CLOSED") throw new Error("Una acción cerrada no puede reabrirse");
+    if (current.status === "IN_PROGRESS" && body.status === "OPEN") {
+      throw new Error("Una acción en seguimiento no puede volver a abierta");
+    }
     const now = new Date().toISOString();
     const updated = await database().prepare(
       `UPDATE monitoring_actions SET status = ?, outcome_note = ?, updated_at = ?,
-      closed_at = ? WHERE id = ? AND plan_id = ? AND owner_id = ?`,
+      closed_at = ? WHERE id = ? AND plan_id = ? AND owner_id = ? AND version_number = ?`,
     ).bind(
       body.status, body.outcomeNote?.trim() || null, now,
-      body.status === "CLOSED" ? now : null, actionId, planId, ownerId,
+      body.status === "CLOSED" ? now : null, actionId, planId, ownerId, active.number,
     ).run();
     if ((updated.meta?.changes ?? 0) !== 1) throw new Error("Acción no encontrada o no autorizada");
     return Response.json({ ok: true });

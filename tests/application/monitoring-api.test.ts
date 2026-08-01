@@ -11,6 +11,10 @@ test("Monitoreo consume Actuals, cuota e historia canónicos", async () => {
   assert.match(route, /includedRows/);
   assert.match(route, /excludedRows/);
   assert.match(route, /account_id.*sku_id.*period/s);
+  assert.match(route, /billingRows/);
+  assert.match(route, /territory/);
+  assert.match(route, /category/);
+  assert.match(route, /segment/);
 });
 
 test("la vista integral carga Excel y calcula variaciones comparables", async () => {
@@ -20,6 +24,10 @@ test("la vista integral carga Excel y calcula variaciones comparables", async ()
   assert.match(source, /Plan contra venta real/);
   assert.match(source, /Actual vs\. Plan/);
   assert.match(source, /cutoffDate/);
+  assert.match(source, /Billing consolidado/);
+  assert.match(source, /Territorio/);
+  assert.match(source, /Categoría/);
+  assert.match(source, /Segmento/);
 });
 
 test("cada desviación puede convertirse en una acción trazable y cerrarse con resultado", async () => {
@@ -37,4 +45,13 @@ test("cada desviación puede convertirse en una acción trazable y cerrarse con 
   assert.match(source, />Iniciar</);
   assert.match(source, />Cerrar</);
   assert.match(source, /umbral operativo 5%/);
+});
+
+test("las acciones de Monitoreo quedan aisladas por versión y no pueden reabrirse", async () => {
+  const route = await readFile(new URL("../../app/api/monitoring/actions/route.ts", import.meta.url), "utf8");
+  assert.match(route, /version_number = \?/g);
+  assert.match(route, /AND version_number = \? AND period/);
+  assert.match(route, /Una acción cerrada no puede reabrirse/);
+  assert.match(route, /Una acción en seguimiento no puede volver a abierta/);
+  assert.match(route, /asignación\|no autorizado/);
 });

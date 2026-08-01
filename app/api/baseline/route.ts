@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     if (!salesRow) throw new Error("Falta la historia de ventas aceptada");
     const activityRow = rows.find((row) => row.requirement_id === "activity-history");
     const activityObject = activityRow ? await files().get(activityRow.object_key) : null;
-    const synthetic = rows.every((row) => row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_"));
+    const synthetic = rows.every((row) => row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_") || row.original_name.startsWith("DATOS_SINTETICOS_NUBELIA_"));
     const activityCsv = activityObject ? await activityObject.text() : undefined;
     const canonical = await database()
       .prepare(
@@ -117,6 +117,7 @@ export async function POST(request: Request) {
         synthetic,
       });
     }
+    if (synthetic) result.dataClassification = "SYNTHETIC_NON_COMMERCIAL";
     const calculatedAt = new Date().toISOString();
     await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
     await database().prepare("DELETE FROM plan_results WHERE plan_id = ?").bind(planId).run();

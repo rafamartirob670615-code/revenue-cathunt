@@ -35,9 +35,9 @@ export default function Shell({
     if (slug === "plan-trade") return can("TRADE_CONTRIBUTE") || can("PLAN_INTEGRATE");
     if (slug === "rentabilidad") return can("VIEW_FINANCIALS") || can("PLAN_INTEGRATE") || can("REVIEW") || can("APPROVE");
     if (slug === "revision") return can("REVIEW") || can("APPROVE") || can("PLAN_INTEGRATE");
-    if (slug === "monitoreo") return can("MONITOR") || can("PLAN_INTEGRATE");
+    if (slug === "monitoreo") return true;
     if (slug === "administracion") return can("ADMINISTER_ACCESS");
-    return can("PLAN_INTEGRATE");
+    return can("PLAN_INTEGRATE") || can("ADMINISTER_ACCESS");
   };
   return (
     <div className="revenue-platform">

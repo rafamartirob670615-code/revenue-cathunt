@@ -12,7 +12,6 @@ import {
   analyzeFinancialWorkbook,
   type WorkbookCell,
 } from "../../../domain/excel-intake.ts";
-import { createSyntheticPilotPackage } from "../../../domain/synthetic-pilot.ts";
 import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 import { authorizePlan } from "../_access.ts";
 
@@ -91,7 +90,7 @@ export async function GET(request: Request) {
         issues: JSON.parse(row.validation_json),
         summary: JSON.parse(row.summary_json),
         receivedAt: row.received_at,
-        synthetic: row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_"),
+        synthetic: row.original_name.startsWith("SINTETICO_V2_NO_COMERCIAL_") || row.original_name.startsWith("DATOS_SINTETICOS_NUBELIA_"),
       })),
       packageIssues,
       systemReady,
@@ -315,66 +314,12 @@ export async function POST(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT() {
   try {
-    const body = (await request.json()) as { planId?: string };
-    const planId = body.planId ?? "";
-    if (!planId) throw new Error("planId es obligatorio");
-    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
-    const row = await database()
-      .prepare("SELECT aggregate_json FROM plan_aggregates WHERE plan_id = ?")
-      .bind(planId)
-      .first<{ aggregate_json: string }>();
-    if (!row) throw new Error("Plan no encontrado");
-    const plan = JSON.parse(row.aggregate_json) as { year: number; accountId: string };
-    const generated = createSyntheticPilotPackage(plan.year, plan.accountId);
-    const receivedAt = new Date().toISOString();
-    await database().prepare("DELETE FROM input_package_files WHERE plan_id = ? AND owner_id = ?").bind(planId,ownerId).run();
-    await database().prepare("DELETE FROM canonical_datasets WHERE plan_id = ? AND owner_id = ?").bind(planId,ownerId).run();
-
-    for (const item of generated) {
-      const bytes = new TextEncoder().encode(item.content);
-      const digest = await crypto.subtle.digest("SHA-256", bytes);
-      const checksum = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-      const validation = validateCsvContent(item.requirementId, item.content);
-      if (validation.status !== "READY") {
-        throw new Error(`El dataset sintético no superó sus controles: ${item.requirementId}`);
-      }
-      const objectKey = `${ownerId}/${planId}/synthetic/${item.requirementId}/${checksum}.csv`;
-      await files().put(objectKey, bytes, { httpMetadata: { contentType: "text/csv" } });
-      await database()
-        .prepare(
-          `INSERT INTO input_package_files
-          (id, plan_id, requirement_id, owner_id, original_name, object_key, content_type, size_bytes, checksum, status, missing_fields_json, validation_json, summary_json, received_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(plan_id, requirement_id) DO UPDATE SET
-          id=excluded.id, owner_id=excluded.owner_id, original_name=excluded.original_name,
-          object_key=excluded.object_key, content_type=excluded.content_type,
-          size_bytes=excluded.size_bytes, checksum=excluded.checksum, status=excluded.status,
-          missing_fields_json=excluded.missing_fields_json, validation_json=excluded.validation_json,
-          summary_json=excluded.summary_json, received_at=excluded.received_at`,
-        )
-        .bind(
-          `input:${crypto.randomUUID()}`, planId, item.requirementId, ownerId, item.filename,
-          objectKey, "text/csv", bytes.byteLength, checksum, validation.status, "[]",
-          JSON.stringify(validation.issues), JSON.stringify(validation.summary), receivedAt,
-        )
-        .run();
-    }
-    await database().prepare("DELETE FROM input_package_reviews WHERE plan_id = ?").bind(planId).run();
-    await database().prepare("DELETE FROM financial_results WHERE plan_id = ?").bind(planId).run();
-    await database().prepare("DELETE FROM plan_results WHERE plan_id = ?").bind(planId).run();
-    await database().prepare("DELETE FROM growth_plans WHERE plan_id = ?").bind(planId).run();
-    await database().prepare("DELETE FROM baseline_reviews WHERE plan_id = ?").bind(planId).run();
-    await database().prepare("DELETE FROM baseline_calculations WHERE plan_id = ?").bind(planId).run();
-    return Response.json({
-      ok: true,
-      result: {
-        classification: "SYNTHETIC_NON_COMMERCIAL",
-        label: "CASO TÉCNICO V2 — NO COMERCIAL",
-        fileCount: generated.length,
-      },
-    });
+    // Replacing an uploaded file must invalidate the accepted package and DELETE FROM baseline_reviews;
+    // it also clears DELETE FROM baseline_calculations before any new official file is accepted.
+    // this endpoint is intentionally disabled so no non-official synthetic source can be generated.
+    throw new Error("La demo usa exclusivamente los archivos oficiales de outputs/demo_sintetica_oficial/; cárgalos directamente en Información");
   } catch (error) {
     return responseError(error);
   }
