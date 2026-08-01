@@ -48,7 +48,7 @@ export default function Shell({
         </div>
         <nav aria-label="Recorrido de REVENUE">
           {groups.map((group) => {
-            const modules = REVENUE_MODULES.filter((module) => module.group === group && visible(module.slug));
+            const modules = REVENUE_MODULES.filter((module) => module.group === group && visible(module.slug) && (plan || module.slug === "inicio" || module.slug === "monitoreo"));
             return <section className="nav-group" key={group}>
               {groupLabels[group] && <p>{groupLabels[group]}</p>}
               {modules.map((module) => {

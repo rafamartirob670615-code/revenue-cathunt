@@ -9,9 +9,10 @@ test("Inicio y los módulos viven en una sola maquinaria", async () => {
   assert.match(page, /RevenuePlatform/);
   assert.match(shell, /REVENUE_MODULES\.filter/);
   assert.match(shell, /Construir el Plan/);
-  assert.match(home, /Construir un Plan anual/);
-  assert.match(home, /Revisar un Plan enviado/);
-  assert.match(home, /Continuar exactamente donde quedó/);
+  assert.match(home, /Crear un Plan anual/);
+  assert.match(home, /Ver el negocio completo/);
+  assert.match(home, /Rutas principales/);
+  assert.doesNotMatch(home, /Continuar exactamente donde quedó|Aportaciones por función|Demo oficial/);
   assert.doesNotMatch(page, /RevenueLobby|PlansWorkspace/);
 });
 

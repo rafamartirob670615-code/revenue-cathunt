@@ -18,7 +18,6 @@ import type {
   BaselineResult,
   BaselineReview,
   Contribution,
-  DashboardPlan,
   GrowthResult,
   PlanResult,
   ProfitabilityResult,
@@ -49,32 +48,21 @@ function friendly(message?: string) {
 export default function RevenuePlatform({ identity }: { identity: RevenueIdentity }) {
   const [effectiveIdentity, setEffectiveIdentity] = useState(identity);
   const [active, setActive] = useState<RevenueModule>("inicio");
-  const [dashboardPlans, setDashboardPlans] = useState<DashboardPlan[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
   const [selected, setSelected] = useState<Plan | null>(null);
   const [state, setState] = useState(emptyPlanState);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
-  const [guidedDemo, setGuidedDemo] = useState(false);
 
   const loadHome = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [dashboardResponse, plansResponse, accessResponse] = await Promise.all([
-        fetch("/api/dashboard", { cache: "no-store" }),
-        fetch("/api/plans", { cache: "no-store" }),
+      const [accessResponse] = await Promise.all([
         fetch("/api/access", { cache: "no-store" }),
       ]);
-      const dashboard = await dashboardResponse.json() as { ok?: boolean; plans?: DashboardPlan[]; error?: string };
-      const planBody = await plansResponse.json() as { ok: boolean; plans?: Plan[]; error?: string };
       const accessBody = await accessResponse.json() as { ok: boolean; identity?: RevenueIdentity };
-      if (!dashboardResponse.ok) throw new Error(dashboard.error);
-      if (!plansResponse.ok || !planBody.ok) throw new Error(planBody.error);
-      setDashboardPlans(dashboard.plans ?? []);
-      setPlans(planBody.plans ?? []);
       if (accessResponse.ok && accessBody.ok && accessBody.identity) setEffectiveIdentity(accessBody.identity);
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
@@ -144,11 +132,6 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     } finally {
       setBusy("");
     }
-  }
-
-  function openDashboardPlan(id: string, destination?: RevenueModule) {
-    const plan = plans.find((item) => item.id === id);
-    if (plan) void loadPlan(plan, destination);
   }
 
   const completed = useMemo(() => {
@@ -324,8 +307,6 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       const body = await response.json() as { ok: boolean; result?: Plan; error?: string };
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setCreating(false);
-      setGuidedDemo(false);
-      setPlans((current) => [body.result!, ...current]);
       await loadPlan(body.result);
     } catch (cause) { setError(friendly(cause instanceof Error ? cause.message : "")); }
     finally { setBusy(""); }
@@ -334,28 +315,13 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
   function startCreate() {
     setSelected(null);
     setState(emptyPlanState);
-    setGuidedDemo(false);
-    setCreating(true);
-    setError("");
-  }
-
-  function openOfficialDemo() {
-    const existing = dashboardPlans.find((plan) =>
-      plan.company === "Nubelia Distribución Sintética S.A. de C.V." && plan.account === "CUENTA-NORTE",
-    );
-    if (existing) {
-      openDashboardPlan(existing.id, "informacion");
-      return;
-    }
-    setSelected(null);
-    setState(emptyPlanState);
-    setGuidedDemo(true);
     setCreating(true);
     setError("");
   }
 
   function navigate(module: RevenueModule) {
     if (module === "inicio") { setActive("inicio"); setCreating(false); }
+    else if (module === "monitoreo" && !selected) window.location.assign("/monitoring");
     else setActive(module);
   }
 
@@ -386,15 +352,8 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     <Shell active={active} plan={selected} identity={effectiveIdentity} completed={completed} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule busy={busy} guidedDemo={guidedDemo} onSubmit={createPlan} onCancel={() => { setCreating(false); setGuidedDemo(false); setActive("inicio"); }} /> :
-      active === "inicio" ? <HomeModule identity={effectiveIdentity} plans={dashboardPlans} onCreate={startCreate} onOpen={openDashboardPlan} onMonitor={(id) => openDashboardPlan(id, "monitoreo")} onOfficialDemo={openOfficialDemo} officialDemoAvailable={dashboardPlans.some((plan) => plan.company === "Nubelia Distribución Sintética S.A. de C.V." && plan.account === "CUENTA-NORTE")} onWork={(module) => {
-        const candidate = dashboardPlans.find((plan) =>
-          plans.some((stored) => stored.id === plan.id)
-          && !/simulaci|revenue lab/i.test(`${plan.company} ${plan.account}`),
-        ) ?? dashboardPlans.find((plan) => plans.some((stored) => stored.id === plan.id));
-        if (candidate) openDashboardPlan(candidate.id, module);
-        else navigate(module);
-      }} /> :
+      creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
+      active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => window.location.assign("/monitoring")} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
@@ -413,8 +372,8 @@ function NoPlan({ onCreate }: { onCreate: () => void }) {
   return <div className="module-page"><ModuleHead eyebrow="Información" title="Primero selecciona o crea un Plan" description="El contexto de compañía, cuenta, año y versión gobierna toda la información." /><EmptyAnswer title="No hay una cuenta activa" copy="Registra el contexto una sola vez y REVENUE lo conservará durante todo el recorrido." action={<button className="clay-primary" onClick={onCreate}>Crear un Plan</button>} /></div>;
 }
 
-function CreatePlanModule({ busy, guidedDemo, onSubmit, onCancel }: { busy: string; guidedDemo: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
-  return <div className="module-page"><ModuleHead eyebrow={guidedDemo ? "Demo oficial · Nubelia" : "Nuevo Plan"} title={guidedDemo ? "Prepara el contexto de la demo oficial" : "Registra el contexto una sola vez"} description={guidedDemo ? "Este paso no genera datos. Después cargarás directamente los 11 archivos de outputs/demo_sintetica_oficial/inputs/." : "Compañía, cuenta, año y moneda acompañarán cada cálculo, decisión y versión."} /><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" defaultValue={guidedDemo ? "Nubelia Distribución Sintética S.A. de C.V." : undefined} /></label><label>Cuenta<input name="account" required placeholder="Ej. Liverpool" defaultValue={guidedDemo ? "CUENTA-NORTE" : undefined} /></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
+function CreatePlanModule({ busy, onSubmit, onCancel }: { busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Compañía, cuenta, año y moneda acompañarán cada cálculo, decisión y versión." /><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required placeholder="Ej. Liverpool" /></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
 function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {
