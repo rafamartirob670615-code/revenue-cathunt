@@ -48,12 +48,12 @@ function aggregateRows(
 }
 
 function dimension(row: Record<string, string | number> | undefined, names: string[]) {
-  if (!row) return "No informado";
+  if (!row) return "";
   for (const name of names) {
     const value = String(row[name] ?? "").trim();
     if (value) return value;
   }
-  return "No informado";
+  return "";
 }
 
 export async function GET(request: Request) {

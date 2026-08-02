@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         database().prepare(`SELECT u.email,u.display_name,om.business_function,aa.capability,aa.scope_type,aa.scope_id,aa.valid_from,aa.valid_until FROM users u LEFT JOIN organization_memberships om ON om.user_id=u.id AND om.status='ACTIVE' LEFT JOIN access_assignments aa ON aa.membership_id=om.id ORDER BY u.display_name,aa.capability`).run<Record<string, unknown>>(),
         database().prepare("SELECT aggregate_json FROM plan_aggregates ORDER BY updated_at DESC").run<{ aggregate_json: string }>(),
       ]);
-      return Response.json({ ok: true, users: users.results ?? [], plans: (plans.results ?? []).map((row) => { const plan = JSON.parse(row.aggregate_json) as { id: string; companyName?: string; accountName?: string; year: number; organizationId: string }; return { id: plan.id, company: plan.companyName ?? "", account: plan.accountName ?? "", year: plan.year, organizationId: plan.organizationId }; }), assignableCapabilities: ASSIGNABLE_CAPABILITIES });
+      return Response.json({ ok: true, users: users.results ?? [], plans: (plans.results ?? []).map((row) => { const plan = JSON.parse(row.aggregate_json) as { id: string; companyName?: string; accountName?: string; year: number; organizationId: string }; return { id: plan.id, company: plan.companyName ?? "", account: plan.accountName ?? "", year: plan.year, organizationId: plan.organizationId }; }), assignableCapabilities: ASSIGNABLE_CAPABILITIES, configuration: { monitoringVisibility: "ALL_AUTHENTICATED_USERS", constructionAccess: "PLAN_OWNER_OR_ADMINISTRATOR", accountScope: "PLAN_ACCOUNT_UNIVERSE", reviewApproval: "SEPARATE_REVIEW_AND_APPROVE_CAPABILITIES" } });
     }
     const result = await database().prepare(
       `SELECT u.email,u.display_name,om.business_function,aa.capability,aa.valid_from,aa.valid_until
@@ -113,10 +113,17 @@ export async function DELETE(request: Request) {
   try {
     const body = await request.json() as { planId?: string; email?: string; capability?: AssignableCapability };
     const planId = body.planId ?? "";
-    if (!planId || !body.email || !ASSIGNABLE_CAPABILITIES.includes(body.capability as AssignableCapability)) {
+    if ((!planId && body.capability !== "ADMINISTER_ACCESS") || !body.email || !ASSIGNABLE_CAPABILITIES.includes(body.capability as AssignableCapability)) {
       throw new Error("Plan, usuario y capacidad son obligatorios");
     }
-    await requireAdministrator(request, planId);
+    await requireAdministrator(request, planId || undefined);
+    if (!planId && body.capability === "ADMINISTER_ACCESS") {
+      await database().prepare(
+        `DELETE FROM access_assignments WHERE scope_type='ORGANIZATION' AND scope_id='revenue-pilot' AND capability=?
+         AND membership_id IN (SELECT om.id FROM organization_memberships om JOIN users u ON u.id=om.user_id WHERE lower(u.email)=lower(?))`,
+      ).bind(body.capability, body.email).run();
+      return Response.json({ ok: true });
+    }
     await database().prepare(
       `DELETE FROM access_assignments
        WHERE scope_type='PLAN' AND scope_id=? AND capability=?

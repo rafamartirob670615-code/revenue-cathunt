@@ -293,7 +293,10 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
     const companyName = String(form.get("company") ?? "").trim();
     const accountId = String(form.get("accountId") ?? "").trim();
     const accountInput = String(form.get("account") ?? "").trim();
-    const selectedAccount = ALFA_UNIVERSE_ACCOUNTS.find((account) => account.id === accountId || account.name.toLowerCase() === accountInput.toLowerCase());
+    const normalizedAccountInput = accountInput.trim().toLowerCase();
+    const exactAccount = ALFA_UNIVERSE_ACCOUNTS.find((account) => account.id === accountId || account.name.toLowerCase() === normalizedAccountInput);
+    const matchingAccounts = ALFA_UNIVERSE_ACCOUNTS.filter((account) => normalizedAccountInput && account.name.toLowerCase().includes(normalizedAccountInput));
+    const selectedAccount = exactAccount ?? (matchingAccounts.length === 1 ? matchingAccounts[0] : undefined);
     if (!selectedAccount) {
       setError("Selecciona una cuenta existente del universo comercial o escribe su nombre completo.");
       return;
@@ -375,7 +378,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} growth={state.growth} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
-      active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
+      active === "revision" ? selected ? <ReviewModule baseline={state.review} baselineResult={state.baseline} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
       <AdministrationModule plan={selected} onChanged={loadHome} />}
     </Shell>
@@ -395,13 +398,15 @@ function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChange
   const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; company: string; year: number }>>([]);
   const [targetPlanId, setTargetPlanId] = useState(plan?.id ?? "");
   const [message, setMessage] = useState("");
+  const [configuration, setConfiguration] = useState<Record<string,string>>({});
   const load = useCallback(async () => {
     const selectedPlanId = plan?.id ?? "";
     const response = await fetch(selectedPlanId ? `/api/admin/access?planId=${encodeURIComponent(selectedPlanId)}` : "/api/admin/access", { cache: "no-store" });
-    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; company: string; year: number }>; error?: string };
+    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; company: string; year: number }>; configuration?: Record<string,string>; error?: string };
     if (response.ok && body.ok) {
       setAssignments(body.assignments ?? body.users ?? []);
       setAdminPlans(body.plans ?? []);
+      setConfiguration(body.configuration ?? {});
     }
     else setMessage(body.error ?? "No pudimos recuperar los accesos.");
   }, [plan]);
@@ -416,28 +421,35 @@ function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChange
     const capability = String(form.get("capability") ?? "");
     const response = await fetch("/api/admin/access", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ planId: selectedPlanId, email: form.get("email"), displayName: form.get("displayName"), capability }),
+      body: JSON.stringify({ planId: capability === "ADMINISTER_ACCESS" ? "" : selectedPlanId, email: form.get("email"), displayName: form.get("displayName"), capability }),
     });
     const body = await response.json() as { ok: boolean; error?: string };
     setMessage(response.ok && body.ok ? "Acceso concedido para esta cuenta." : body.error ?? "No pudimos guardar el acceso.");
     if (response.ok && body.ok) { formElement.reset(); await load(); await onChanged(); }
+  }
+  async function revoke(item: Record<string,string>) {
+    const response = await fetch("/api/admin/access", { method:"DELETE", headers:{ "content-type":"application/json" }, body:JSON.stringify({ planId:item.scope_type === "PLAN" ? (plan?.id ?? targetPlanId) : "", email:item.email, capability:item.capability }) });
+    const body = await response.json() as { ok?: boolean; error?: string };
+    setMessage(response.ok && body.ok ? "Acceso retirado." : body.error ?? "No pudimos retirar el acceso.");
+    if (response.ok && body.ok) await load();
   }
   const activePlan = plan ?? adminPlans.find((item) => item.id === targetPlanId);
   const activeAccountName = plan?.accountName ?? adminPlans.find((item) => item.id === targetPlanId)?.account ?? "";
   return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Usuarios, roles y configuración de REVENUE" description="Administra personas, responsables, cuentas y permisos. Monitoreo es transversal; Construcción sólo corresponde al responsable del Plan y a Administración." />
     <section className="admin-foundation"><article><b>Cuentas administrables</b><p>{adminPlans.length || (plan ? 1 : 0)} Planes disponibles para asignar.</p></article><article><b>Regla de acceso</b><p>Monitoreo: cualquier usuario autenticado. Construcción: responsable o administrador.</p></article><article><b>Responsabilidad</b><p>{activePlan ? `${activeAccountName} · ${activePlan.year}` : "Selecciona una cuenta para gestionar su equipo."}</p></article></section>
     {(!plan && adminPlans.length > 0) && <label className="admin-plan-picker">Cuenta / Plan<select value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona una cuenta</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
-    {(plan || targetPlanId) ? <>
+    {(plan || targetPlanId || !plan) ? <>
       {activePlan && <section className="plain-note"><b>{activeAccountName} · {plan?.companyName ?? adminPlans.find((item) => item.id === targetPlanId)?.company ?? ""} · {activePlan.year}</b><p>El administrador concede capacidades concretas para esta cuenta. Ser administrador no sustituye la revisión o aprobación comercial.</p></section>}
       <form className="contribution-builder access-form" onSubmit={grant}>
-        {!plan && <label>Plan destino<select name="planId" required value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
+        {!plan && <label>Plan destino<select name="planId" value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Administración global</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select><small>Déjalo en Administración global para administrar personas con acceso a toda la aplicación.</small></label>}
         <label>Nombre<input name="displayName" required placeholder="Nombre de la persona" /></label>
         <label>Correo del workspace<input name="email" type="email" required placeholder="persona@empresa.com" /></label>
-        <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option><option value="MARKETING_CONTRIBUTE">Aportar Marketing</option><option value="TRADE_CONTRIBUTE">Aportar Trade Marketing</option><option value="PLAN_INTEGRATE">Construir e integrar Plan</option><option value="REVIEW">Revisar comercialmente</option><option value="APPROVE">Aprobar comercialmente</option><option value="VIEW_FINANCIALS">Consultar Finanzas</option></select></label>
+        <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option><option value="ADMINISTER_ACCESS">Administrador global</option><option value="MARKETING_CONTRIBUTE">Aportar Marketing</option><option value="TRADE_CONTRIBUTE">Aportar Trade Marketing</option><option value="PLAN_INTEGRATE">Construir e integrar Plan</option><option value="REVIEW">Revisar comercialmente</option><option value="APPROVE">Aprobar comercialmente</option><option value="VIEW_FINANCIALS">Consultar Finanzas</option></select></label>
         <button className="clay-primary">Conceder acceso</button>
       </form>
       {message && <section className="plain-note"><p>{message}</p></section>}
-      <section className="contribution-register"><div className="section-title"><small>Acceso vigente</small><h2>Personas asignadas a esta cuenta</h2></div>{assignments.map((item, index) => <article key={`${item.email}:${item.capability}:${index}`}><div><b>{item.display_name}</b><span>{item.email}</span></div><div><strong>{String(item.capability).replaceAll("_"," ")}</strong><span>{item.business_function}</span></div><div><strong>{String(item.scope_type).startsWith("MONITOR_") ? String(item.scope_type).replace("MONITOR_", "Monitoreo · ") : "Plan completo"}</strong><span>{String(item.scope_id)}</span></div></article>)}</section>
+      {Object.keys(configuration).length > 0 && <section className="admin-foundation">{Object.entries(configuration).map(([key,value]) => <article key={key}><b>{key.replaceAll(/([A-Z])/g," $1")}</b><p>{value.replaceAll("_"," ")}</p></article>)}</section>}
+      <section className="contribution-register"><div className="section-title"><small>Acceso vigente</small><h2>Personas asignadas a esta cuenta</h2></div>{assignments.map((item, index) => <article key={`${item.email}:${item.capability}:${index}`}><div><b>{item.display_name}</b><span>{item.email}</span></div><div><strong>{String(item.capability).replaceAll("_"," ")}</strong><span>{item.business_function}</span></div><div><strong>{String(item.scope_type).startsWith("MONITOR_") ? String(item.scope_type).replace("MONITOR_", "Monitoreo · ") : "Plan completo"}</strong><span>{String(item.scope_id)}</span></div><button className="paper-button" onClick={() => revoke(item)}>Retirar</button></article>)}</section>
     </> : <EmptyAnswer title="No hay cuentas cargadas" copy="Crea el primer Plan para que el administrador pueda asignar responsables y capacidades." />}
   </div>;
 }

@@ -11,6 +11,7 @@ type MonitorData = {
   priorYear: { year: number | null; months: Record<string, { value: number }> };
   updatedAt: string;
   billing: Array<BillingRow>;
+  growth: { activities: Array<{ id: string; family: string; name: string; skuId: string; period: string; grossUnits: number; netUnits: number; evidence: string }> } | null;
 };
 
 type BillingRow = {
@@ -26,6 +27,7 @@ type Action = {
 };
 
 const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const officialColumns = [{ key:"01", label:"Ene" },{ key:"02", label:"Feb" },{ key:"03", label:"Mar" },{ key:"Q1", label:"Q1" },{ key:"04", label:"Abr" },{ key:"05", label:"May" },{ key:"06", label:"Jun" },{ key:"Q2", label:"Q2" },{ key:"07", label:"Jul" },{ key:"08", label:"Ago" },{ key:"09", label:"Sep" },{ key:"Q3", label:"Q3" },{ key:"10", label:"Oct" },{ key:"11", label:"Nov" },{ key:"12", label:"Dic" },{ key:"Q4", label:"Q4" },{ key:"YTD", label:"YTD" }];
 
 export default function MonitoringModule({ planId }: { planId: string }) {
   const [data, setData] = useState<MonitorData | null>(null);
@@ -128,7 +130,17 @@ export default function MonitoringModule({ planId }: { planId: string }) {
     actual: totals.actual + (row.actualValue ?? 0),
     variance: totals.variance + (row.varianceValue ?? 0),
   }), { plan:0, quota:0, actual:0, variance:0 });
-  const billingHasMissingDimensions = data.billing.some((row) => [row.territory, row.channel, row.category, row.segment].includes("No informado"));
+  const billingHasMissingDimensions = data.billing.some((row) => [row.territory, row.channel, row.category, row.segment].some((value) => !value));
+  const matrixValue = (metric: "plan" | "quota" | "actual" | "variance", key: string) => {
+    const months = key === "YTD" ? ["01","02","03","04","05","06","07","08","09","10","11","12"] : key.startsWith("Q") ? (key === "Q1" ? ["01","02","03"] : key === "Q2" ? ["04","05","06"] : key === "Q3" ? ["07","08","09"] : ["10","11","12"]) : [key];
+    return billingFiltered.filter((row) => months.includes(row.period.slice(5, 7))).reduce((sum, row) => sum + (metric === "plan" ? row.planValue : metric === "quota" ? (row.quotaValue ?? 0) : metric === "actual" ? (row.actualValue ?? 0) : (row.varianceValue ?? 0)), 0);
+  };
+  function exportBilling() {
+    const header = ["Territorio","Cuenta","Canal","Categoría","Segmento","Producto","Periodo","Plan","Cuota","Venta real","Variación"];
+    const rows = billingFiltered.map((row) => [row.territory || "", row.accountId, row.channel || "", row.category || "", row.segment || "", row.skuId, row.period, row.planValue, row.quotaValue ?? "", row.actualValue ?? "", row.varianceValue ?? ""]);
+    const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"','""')}"`).join(",")).join("\n");
+    const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8" })); link.download = `REVENUE_Seguimiento_Billing_${planId}.csv`; link.click(); URL.revokeObjectURL(link.href);
+  }
 
   return <div className="module-page">
     <ModuleHead eyebrow="Ejecutar el Plan · Seguimiento" title="Plan contra venta real" description="Un solo comparativo mensual. Las desviaciones materiales se convierten en acciones con responsable y fecha." />
@@ -139,14 +151,16 @@ export default function MonitoringModule({ planId }: { planId: string }) {
       <label className={data.actuals.ready ? "ready" : ""}><b>Venta real</b><span>{data.actuals.cutoffDate ? `Corte ${data.actuals.cutoffDate}` : "Falta el Excel"}</span><strong>{busy === "actual-sales" ? "Leyendo…" : data.actuals.ready ? "Actualizar" : "Cargar"}<input type="file" accept=".xlsx,.xls" onChange={(event) => upload("actual-sales", event.target.files?.[0])} /></strong></label>
     </section>
     <section className="paper-metrics"><Metric label="Plan comparable" value={formatMoney(planYtd, currency)} note="hasta el corte" /><Metric label="Venta real" value={data.actuals.ready ? formatMoney(actualYtd, currency) : "Pendiente"} note={data.actuals.cutoffDate ?? "sin corte"} /><Metric label="Variación" value={planYtd ? `${((actualYtd / planYtd - 1) * 100).toFixed(1)}%` : "N/D"} note="Actual vs. Plan" tone={actualYtd < planYtd ? "warn" : "good"} /><Metric label="Desviaciones" value={String(deviations.length)} note="umbral operativo 5%" /></section>
+    <section className="billing-matrix"><div className="section-title"><small>Documento oficial de seguimiento</small><h2>Billing File · Plan, cuota, real y variación</h2><p>La misma estructura mensual del Plan oficial, con fuentes faltantes visibles como —.</p></div><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Métrica</th>{officialColumns.map((column) => <th key={column.key} className={column.key.startsWith("Q") || column.key === "YTD" ? "summary-col" : ""}>{column.label}</th>)}</tr></thead><tbody>{([['Plan','plan'],['Cuota','quota'],['Venta real','actual'],['Variación','variance']] as const).map(([label, metric]) => <tr className={`matrix-row ${metric === "variance" ? "percent-row" : ""}`} key={metric}><th>{label}</th>{officialColumns.map((column) => <td key={column.key} className={column.key.startsWith("Q") || column.key === "YTD" ? "summary-col" : ""}>{formatMoney(matrixValue(metric, column.key), currency)}</td>)}</tr>)}</tbody></table></div></section>
+    {data.growth?.activities?.length ? <section className="activity-sheet"><header className="section-title"><small>Building blocks ejecutables</small><h2>Actividades que explican el Plan</h2></header>{data.growth.activities.map((activity) => <article key={activity.id}><div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"} · {activity.period} · {activity.skuId}</small><b>{activity.name}</b><span>{activity.evidence}</span></div><div><span>Bruto {activity.grossUnits.toLocaleString("es-MX")}</span><strong>Neto +{activity.netUnits.toLocaleString("es-MX")}</strong></div></article>)}</section> : null}
     <section className="billing-explorer">
-      <div className="section-title"><small>Vista de negocio completo</small><h2>Billing consolidado</h2><p>Comienza con todos los canales y desciende por territorio, cuenta, canal, categoría, segmento, producto y periodo.</p></div>
+      <div className="section-title"><small>Vista de negocio completo</small><h2>Billing consolidado</h2><p>Comienza con todos los canales y desciende por territorio, cuenta, canal, categoría, segmento, producto y periodo.</p><div><button className="paper-button" onClick={() => window.print()}>Imprimir Billing</button> <button className="clay-primary" onClick={exportBilling}>Descargar Excel/CSV</button></div></div>
       <div className="billing-filters">{billingDimensions.map(([key, label]) => {
-        const values = Array.from(new Set(data.billing.map((row) => String(row[key as keyof BillingRow])))).sort();
+        const values = Array.from(new Set(data.billing.map((row) => String(row[key as keyof BillingRow] ?? "").trim()).filter(Boolean))).sort();
         return <label key={key}>{label}<select value={billingFilters[key as keyof typeof billingFilters]} onChange={(event) => setBillingFilters({ ...billingFilters, [key]:event.target.value })}><option>Todos</option>{values.map((value) => <option key={value}>{value}</option>)}</select></label>;
       })}</div>
-      {billingHasMissingDimensions && <p className="billing-note">La fuente sintética oficial no contiene territorio, canal, categoría o segmento; esos campos se muestran como “No informado” sin inferir valores.</p>}
-      <div className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Territorio</th><th>Cuenta</th><th>Canal</th><th>Categoría</th><th>Segmento</th><th>Producto</th><th>Periodo</th><th>Plan</th><th>Cuota</th><th>Venta real</th><th>Variación</th></tr></thead><tbody><tr className="billing-total"><th colSpan={7}>Total consolidado · {billingFiltered.length} filas</th><td>{formatMoney(billingTotals.plan, currency)}</td><td>{formatMoney(billingTotals.quota, currency)}</td><td>{formatMoney(billingTotals.actual, currency)}</td><td>{formatMoney(billingTotals.variance, currency)}</td></tr>{billingFiltered.map((row) => <tr key={`${row.accountId}-${row.skuId}-${row.period}`}><td>{row.territory}</td><td>{row.accountId}</td><td>{row.channel}</td><td>{row.category}</td><td>{row.segment}</td><td>{row.skuId}</td><td>{row.period}</td><td>{formatMoney(row.planValue, currency)}</td><td>{row.quotaValue === null ? "—" : formatMoney(row.quotaValue, currency)}</td><td>{row.actualValue === null ? "—" : formatMoney(row.actualValue, currency)}</td><td className={(row.varianceValue ?? 0) < 0 ? "negative" : "positive"}>{row.varianceValue === null ? "—" : formatMoney(row.varianceValue, currency)}</td></tr>)}</tbody></table></div>
+      {billingHasMissingDimensions && <p className="billing-note">La fuente no trae alguna dimensión comercial para todas las líneas. Se deja vacía y se muestra como “—”; no se inventan territorios, canales, categorías ni segmentos.</p>}
+      <div className="billing-table-wrap"><table className="billing-table"><thead><tr><th>Territorio</th><th>Cuenta</th><th>Canal</th><th>Categoría</th><th>Segmento</th><th>Producto</th><th>Periodo</th><th>Plan</th><th>Cuota</th><th>Venta real</th><th>Variación</th></tr></thead><tbody><tr className="billing-total"><th colSpan={7}>Total consolidado · {billingFiltered.length} filas</th><td>{formatMoney(billingTotals.plan, currency)}</td><td>{formatMoney(billingTotals.quota, currency)}</td><td>{formatMoney(billingTotals.actual, currency)}</td><td>{formatMoney(billingTotals.variance, currency)}</td></tr>{billingFiltered.map((row) => <tr key={`${row.accountId}-${row.skuId}-${row.period}`}><td>{row.territory || "—"}</td><td>{row.accountId}</td><td>{row.channel || "—"}</td><td>{row.category || "—"}</td><td>{row.segment || "—"}</td><td>{row.skuId}</td><td>{row.period}</td><td>{formatMoney(row.planValue, currency)}</td><td>{row.quotaValue === null ? "—" : formatMoney(row.quotaValue, currency)}</td><td>{row.actualValue === null ? "—" : formatMoney(row.actualValue, currency)}</td><td className={(row.varianceValue ?? 0) < 0 ? "negative" : "positive"}>{row.varianceValue === null ? "—" : formatMoney(row.varianceValue, currency)}</td></tr>)}</tbody></table></div>
     </section>
     <section className="monthly-comparison">
       <header><b>Mes</b><span>Plan</span><span>Cuota</span><span>Venta real</span><span>Variación</span><span>Acción</span></header>
