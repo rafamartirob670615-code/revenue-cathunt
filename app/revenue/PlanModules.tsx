@@ -5,6 +5,25 @@ import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
 import type { BaselineResult, BaselineReview, Contribution, GrowthResult, PlanResult, ProfitabilityResult, ReceivedFile } from "./model";
 import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
+const billingColumns = [
+  ["01", "Ene"], ["02", "Feb"], ["03", "Mar"], ["Q1", "Q1"],
+  ["04", "Abr"], ["05", "May"], ["06", "Jun"], ["Q2", "Q2"],
+  ["07", "Jul"], ["08", "Ago"], ["09", "Sep"], ["Q3", "Q3"],
+  ["10", "Oct"], ["11", "Nov"], ["12", "Dic"], ["Q4", "Q4"], ["YTD", "YTD"],
+] as const;
+
+function OfficialPlanBilling({ result }: { result: PlanResult }) {
+  const products = [...new Set(result.lines.map((line) => line.skuId))];
+  const quarterMonths: Record<string, string[]> = { Q1: ["01", "02", "03"], Q2: ["04", "05", "06"], Q3: ["07", "08", "09"], Q4: ["10", "11", "12"] };
+  const valueFor = (skuId: string, period: string, field: "planUnits" | "planValue") => result.lines.filter((line) => line.skuId === skuId && line.period.endsWith(`-${period}`)).reduce((sum, line) => sum + line[field], 0);
+  const cells = (skuId: string, field: "planUnits" | "planValue") => billingColumns.map(([key]) => {
+    if (key === "YTD") return result.lines.filter((line) => line.skuId === skuId).reduce((sum, line) => sum + line[field], 0);
+    if (key.startsWith("Q")) return (quarterMonths[key] ?? []).reduce((sum, month) => sum + valueFor(skuId, month, field), 0);
+    return valueFor(skuId, key, field);
+  });
+  return <section className="billing-matrix"><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Billing File · Plan</th>{billingColumns.map(([key, label]) => <th key={key} className={key.startsWith("Q") || key === "YTD" ? "summary-col" : ""}>{label}</th>)}</tr></thead><tbody><tr className="matrix-block"><th colSpan={billingColumns.length + 1}>Unidades del Plan</th></tr>{products.map((skuId) => <tr className="matrix-row" key={`units-${skuId}`}><th>{skuId}</th>{cells(skuId, "planUnits").map((value, index) => <td key={billingColumns[index][0]} className={billingColumns[index][0].startsWith("Q") || billingColumns[index][0] === "YTD" ? "summary-col" : ""}>{value.toLocaleString("es-MX")}</td>)}</tr>)}<tr className="matrix-block"><th colSpan={billingColumns.length + 1}>Valor del Plan · {result.currency}</th></tr>{products.map((skuId) => <tr className="matrix-row" key={`value-${skuId}`}><th>{skuId}</th>{cells(skuId, "planValue").map((value, index) => <td key={billingColumns[index][0]} className={billingColumns[index][0].startsWith("Q") || billingColumns[index][0] === "YTD" ? "summary-col" : ""}>{formatMoney(value, result.currency)}</td>)}</tr>)}</tbody></table></div></section>;
+}
+
 export function ContextModule({ plan }: { plan: Plan }) {
   const version = plan.versions.at(-1);
   return <div className="module-page">
@@ -32,12 +51,13 @@ export function InformationModule({
   const visibleEssential = salesReceived ? essential : essential.filter((requirement) => requirement.id === "sales-history");
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" description="No hay formatos escondidos ni una captura interminable. REVENUE conserva el original, interpreta la tabla y muestra qué entendió." />
+    <section className="plain-note"><b>Cómo preparar la información</b><p>Obligatorios para calcular el Volumen base: historia de ventas, catálogo y correspondencias, unidades/conversiones y precios/moneda. Las fuentes opcionales se solicitan sólo cuando desbloquean una etapa concreta: Marketing, Trade Marketing, condiciones comerciales, costos, inversiones, cuota y venta actual. Cada tarjeta indica para qué se usa, quién suele entregar el archivo y qué cobertura mínima necesita.</p></section>
     <section className="source-board">
       {visibleEssential.map((requirement, index) => {
         const received = files.find((file) => file.requirementId === requirement.id);
         return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}>
           <i>{received?.status === "READY" ? "✓" : index + 1}</i>
-          <div><b>{requirement.name}</b><p>{requirement.purpose}</p>{received && <small>{received.originalName} · {received.summary.rowCount} filas</small>}</div>
+          <div><b>{requirement.name} <em>{requirement.criticality === "ESSENTIAL" ? "· Obligatorio" : "· Opcional según etapa"}</em></b><p>{requirement.purpose}</p><small>Responsable sugerido: {requirement.suggestedOwner} · Cobertura: {requirement.minimumCoverage}</small>{received && <small>{received.originalName} · {received.summary.rowCount} filas</small>}{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div>
           <label>{busy === requirement.id ? "Leyendo…" : received ? "Reemplazar" : "Seleccionar archivo"}<input type="file" accept=".xlsx,.xls,.csv" disabled={Boolean(busy)} onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label>
         </article>;
       })}
@@ -45,7 +65,7 @@ export function InformationModule({
     <details className="paper-detail"><summary>Fuentes complementarias</summary><div className="source-board compact">
       {PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "CONDITIONAL").map((requirement) => {
         const received = files.find((file) => file.requirementId === requirement.id);
-        return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}><i>{received ? "✓" : "·"}</i><div><b>{requirement.name}</b><p>{requirement.purpose}</p></div><label>{received ? "Reemplazar" : "Cargar"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></article>;
+        return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}><i>{received?.status === "READY" ? "✓" : "·"}</i><div><b>{requirement.name} <em>· Opcional según etapa</em></b><p>{requirement.purpose}</p><small>Se usa en: {requirement.suggestedOwner} · Necesita: {requirement.minimumCoverage}</small>{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div><label>{received ? "Reemplazar" : "Cargar"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></article>;
       })}
     </div></details>
     {!accepted && systemReady && <EmptyAnswer title="La información esencial está completa" copy="Confirma la interpretación para construir el Volumen base." action={<button className="clay-primary" onClick={onAccept}>Confirmar información</button>} />}
@@ -57,10 +77,11 @@ export function InformationModule({
 export function BaselineModule({ baseline, review, ready, busy, onCalculate, onApprove }: { baseline: BaselineResult | null; review: BaselineReview | null; ready: boolean; busy: string; onCalculate: () => void; onApprove: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 3 de 8 · Volumen base" title="¿Qué venderíamos sin nuevas actividades?" description="La historia aceptada se limpia de impactos conocidos y produce una base mensual defendible." />
+    <span className="billing-filter-hint">Resultado mensual por producto · trazabilidad línea por línea</span>
     {baseline ? <>
       <section className="single-answer"><span>Volumen base anual</span><strong>{baseline.annualUnits.toLocaleString("es-MX")}</strong><small>unidades · {baseline.targetYear}</small><p>{baseline.explanation}</p></section>
       <section className="paper-metrics"><Metric label="Historia utilizada" value={`${baseline.historyPeriods} periodos`} note="fuente aceptada" /><Metric label="Decisión" value={review?.status === "APPROVED_FROZEN" ? "Aprobada" : "Pendiente"} note="antes de sumar crecimiento" tone={review?.status === "APPROVED_FROZEN" ? "good" : "warn"} /></section>
-      <details className="paper-detail"><summary>Resultado mensual por producto</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>Unidades</span><span>Confianza</span></div>{baseline.lines.map((line) => <div className="paper-row" key={`${line.accountId}|${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span>{line.calculatedUnits.toLocaleString("es-MX")}</span><span>{Math.round(line.confidence * 100)}%</span></div>)}</div></details>
+      <details className="paper-detail" open><summary>De dónde venía cada línea y a qué base llegó</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>Valores observados</span><span>Base calculada</span></div>{baseline.lines.map((line) => <div className="paper-row" key={`${line.accountId}|${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span>{(line.observedUnits ?? []).map((value) => value.toLocaleString("es-MX")).join(" · ") || "Sin detalle histórico"}</span><span><b>{line.calculatedUnits.toLocaleString("es-MX")}</b><small> · confianza {Math.round(line.confidence * 100)}%</small></span></div>)}</div></details>
       {review?.status !== "APPROVED_FROZEN" && <button className="clay-primary action-wide" onClick={onApprove}>Aprobar y congelar Volumen base</button>}
     </> : <EmptyAnswer title={ready ? "Falta calcular esta respuesta" : "Primero confirma la Información"} copy={ready ? "Los archivos esenciales están aceptados y el motor puede construir la respuesta." : "Regresa a Información, completa las fuentes esenciales y confirma la interpretación."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onCalculate}>{busy ? "Calculando…" : "Calcular Volumen base"}</button> : undefined} />}
   </div>;
@@ -121,24 +142,29 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
   </div>;
 }
 
-export function ResultModule({ result, baselineUnits, growthUnits, ready, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; ready: boolean; busy: string; onBuild: () => void }) {
+export function ResultModule({ result, baselineUnits, growthUnits, growth, ready, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; growth: GrowthResult | null; ready: boolean; busy: string; onBuild: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 6 de 8 · Plan anual" title="Una sola respuesta en unidades y valor" description="Volumen base + Marketing + Trade Marketing, reconciliados por cuenta, producto y mes." />
+    <span className="billing-filter-hint">Detalle mensual por producto · formato Billing oficial</span>
     {result ? <>
       <section className="double-answer"><div><span>Unidades del Plan</span><strong>{result.annualUnits.toLocaleString("es-MX")}</strong><small>unidades reconciliadas</small></div><div><span>Revenue del Plan</span><strong>{formatMoney(result.annualValue, result.currency)}</strong><small>{result.currency}</small></div></section>
       <section className="equation-strip"><div><span>Volumen base</span><b>{baselineUnits.toLocaleString("es-MX")}</b></div><strong>+</strong><div><span>Crecimiento neto</span><b>{growthUnits.toLocaleString("es-MX")}</b></div><strong>=</strong><div><span>Plan anual</span><b>{result.annualUnits.toLocaleString("es-MX")}</b></div></section>
-      <details className="paper-detail"><summary>Detalle mensual por producto</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>Unidades</span><span>Valor</span></div>{result.lines.map((line) => <div className="paper-row" key={`${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span>{line.planUnits.toLocaleString("es-MX")}</span><span>{formatMoney(line.planValue, line.currency)}</span></div>)}</div></details>
+      <section className="activity-sheet"><header className="section-title"><small>Building blocks reconciliados</small><h2>De qué se compone el Plan</h2></header>{(growth?.activities ?? []).map((activity) => <article key={activity.id}><div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"} · {activity.period} · {activity.skuId}</small><b>{activity.name}</b><span>{activity.evidence}</span></div><div><span>Bruto {activity.grossUnits.toLocaleString("es-MX")}</span><strong>Neto +{activity.netUnits.toLocaleString("es-MX")}</strong></div></article>)}</section>
+      <OfficialPlanBilling result={result} />
     </> : <EmptyAnswer title="Todavía no existe el Plan consolidado" copy={ready ? "Volumen base, Marketing y Trade Marketing están reconciliados." : "Primero deben quedar reconciliados Volumen base, Marketing y Trade Marketing."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Consolidando…" : "Consolidar Plan anual"}</button> : undefined} />}
   </div>;
 }
 
-export function ProfitabilityModule({ profitability, ready, busy, onBuild, readOnly = false }: { profitability: ProfitabilityResult | null; ready: boolean; busy: string; onBuild: () => void; readOnly?: boolean }) {
+export function ProfitabilityModule({ profitability, files, onUpload, ready, busy, onBuild, readOnly = false }: { profitability: ProfitabilityResult | null; files: ReceivedFile[]; onUpload: (requirementId: string, file?: File) => void; ready: boolean; busy: string; onBuild: () => void; readOnly?: boolean }) {
+  const productCosts = files.find((file) => file.requirementId === "product-costs");
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 7 de 8 · Rentabilidad" title="¿Cuánto dinero dejará el Plan?" description="Ventas, condiciones, costo, margen, inversión y contribución permanecen separados." />
     {readOnly && <section className="plain-note"><b>Consulta financiera autorizada</b><p>Esta vista no permite capturar, modificar, validar, devolver, aprobar ni oficializar.</p></section>}
+    {!productCosts || productCosts.status !== "READY" ? <section className="plain-note warning"><b>Falta Product Cost</b><p>Sin el costo vigente por producto REVENUE no puede calcular COGS, margen bruto ni contribución. Sube el archivo de costos para desbloquear Rentabilidad.</p><label className="paper-button">{productCosts ? "Reemplazar Product Cost" : "Subir Product Cost"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload("product-costs", event.target.files?.[0])} /></label></section> : null}
     {profitability ? <>
       <section className="paper-metrics"><Metric label="Net sales" value={formatMoney(profitability.planAnnual.netSales, profitability.currency)} note="después de deducciones" /><Metric label="Margen bruto" value={`${((profitability.planAnnual.grossMarginRate ?? 0) * 100).toFixed(1)}%`} note={formatMoney(profitability.planAnnual.grossMargin, profitability.currency)} /><Metric label="Contribución" value={formatMoney(profitability.planAnnual.contribution, profitability.currency)} note={`${((profitability.planAnnual.contributionRate ?? 0) * 100).toFixed(1)}% de net sales`} tone="good" /></section>
-      <section className="pnl-statement">{([["Gross sales","grossSales"],["− Condiciones comerciales","deductions"],["= Net sales","netSales"],["− Costo","cogs"],["= Margen bruto","grossMargin"],["− Inversión","investment"],["= Contribución","contribution"]] as const).map(([label,key]) => <div key={key}><b>{label}</b><span>{formatMoney(profitability.planAnnual[key], profitability.currency)}</span></div>)}</section>
+      <section className="plain-note"><b>Comparadores declarados</b><p>El P&amp;L ahora muestra el Plan actual contra el año anterior, con el diferencial entre ambos. El baseline aprobado permanece disponible como comparador operativo de construcción; Real/Actual se consulta en Monitoreo con fecha de corte.</p></section>
+      {profitability.priorYearAnnual ? <section className="pnl-statement"><div className="pnl-header"><b>Renglón financiero</b><b>{profitability.priorYear ?? "Año anterior"}</b><b>Plan actual</b><b>Diferencial</b></div>{([["Gross sales","grossSales"],["− Condiciones comerciales","deductions"],["= Net sales","netSales"],["− Costo","cogs"],["= Margen bruto","grossMargin"],["− Inversión","investment"],["= Contribución","contribution"]] as const).map(([label,key]) => <div className="pnl-row" key={key}><b>{label}</b><span>{formatMoney(profitability.priorYearAnnual[key], profitability.currency)}</span><span>{formatMoney(profitability.planAnnual[key], profitability.currency)}</span><strong className={profitability.priorYearVariance?.[key] < 0 ? "negative" : "positive"}>{formatMoney(profitability.priorYearVariance?.[key] ?? 0, profitability.currency)}</strong></div>)}</section> : <section className="plain-note warning"><b>Año anterior pendiente</b><p>El Plan se puede calcular, pero aún no hay una fuente histórica comparable con cobertura financiera completa.</p></section>}
     </> : <EmptyAnswer title="Falta calcular la economía del Plan" copy={ready ? "Unidades y valor están listos; se aplicarán condiciones, costos e inversión trazables." : "Primero consolida el Plan anual en unidades y valor."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Calculando…" : "Calcular Rentabilidad"}</button> : undefined} />}
   </div>;
 }
@@ -149,6 +175,7 @@ export function ReviewModule({ baseline, growth, result, profitability, syntheti
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 8 de 8 · Revisión y aprobación" title="Una versión defendible, no otra hoja de cálculo" description="Las decisiones y controles se presentan en un solo lugar antes de congelar la versión." />
     <section className="approval-sheet">{checks.map(([label,ok], index) => <article className={ok ? "ready" : ""} key={label}><i>{ok ? "✓" : index + 1}</i><div><b>{label}</b><small>{ok ? "Listo" : "Pendiente"}</small></div></article>)}</section>
+    <section className="official-document"><header><small>Documento oficial actualizado</small><h2>Vista completa para revisar antes de enviar</h2><p>Esta vista se reconstruye con el último estado de base, building blocks, Billing mensual y rentabilidad.</p></header><h3>Building blocks</h3>{growth?.activities.length ? <div className="paper-table"><div className="paper-row head"><span>Familia</span><span>Actividad</span><span>Periodo / SKU</span><span>Neto</span></div>{growth.activities.map((activity) => <div className="paper-row" key={activity.id}><span>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</span><b>{activity.name}</b><span>{activity.period} · {activity.skuId}</span><span>+{activity.netUnits.toLocaleString("es-MX")}</span></div>)}</div> : <p>No hay building blocks reconciliados.</p>}<h3>Billing mensual del Plan</h3>{result ? <OfficialPlanBilling result={result} /> : <p>El Billing mensual aparecerá cuando el Plan anual esté consolidado.</p>}<h3>Rentabilidad</h3><p>{profitability ? `Contribución del Plan: ${formatMoney(profitability.planAnnual.contribution, profitability.currency)} · diferencial contra año anterior: ${profitability.priorYearVariance ? formatMoney(profitability.priorYearVariance.contribution, profitability.currency) : "pendiente"}.` : "Falta calcular Rentabilidad."}</p></section>
     {synthetic && <section className="plain-note warning"><b>Prueba no comercial</b><p>Este recorrido demuestra la maquinaria, pero no puede convertirse en compromiso oficial.</p></section>}
     <EmptyAnswer title={ready ? "La versión está completa" : "Todavía hay decisiones pendientes"} copy={ready ? (synthetic ? "Congela los resultados y envía la demo al seguimiento; la oficialización comercial permanece bloqueada." : "Congela los resultados y envía la versión a revisión.") : "Abre cualquier paso pendiente desde el menú lateral."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onSubmit}>{busy ? "Enviando…" : synthetic ? "Congelar y enviar a Monitoreo" : "Congelar y enviar"}</button> : undefined} />
   </div>;

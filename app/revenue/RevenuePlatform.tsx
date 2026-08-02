@@ -26,6 +26,8 @@ import type {
 import type { RevenueModule } from "./modules";
 import { EmptyAnswer, ModuleHead } from "./ui";
 import type { RevenueIdentity } from "./access";
+import { ALFA_UNIVERSE_ACCOUNTS } from "../../domain/alfa-turmix-universe";
+import AlfaTurmixMonitor from "./AlfaTurmixMonitor";
 
 const emptyPlanState = {
   files: [] as ReceivedFile[],
@@ -45,9 +47,9 @@ function friendly(message?: string) {
   return message || "No pudimos completar la acción. Tu trabajo guardado no se perdió.";
 }
 
-export default function RevenuePlatform({ identity }: { identity: RevenueIdentity }) {
+export default function RevenuePlatform({ identity, initialModule = "inicio" }: { identity: RevenueIdentity; initialModule?: RevenueModule }) {
   const [effectiveIdentity, setEffectiveIdentity] = useState(identity);
-  const [active, setActive] = useState<RevenueModule>("inicio");
+  const [active, setActive] = useState<RevenueModule>(initialModule);
   const [selected, setSelected] = useState<Plan | null>(null);
   const [state, setState] = useState(emptyPlanState);
   const [loading, setLoading] = useState(true);
@@ -74,6 +76,10 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
   // The effect initiates an asynchronous request; the request callbacks update the view state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadHome(); }, [loadHome]);
+
+  // La ruta /monitoring también debe conservar el Shell y su navegación lateral.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setActive(initialModule); }, [initialModule]);
 
   async function loadPlan(plan: Plan, destination?: RevenueModule) {
     setSelected(plan);
@@ -148,7 +154,7 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     return modules;
   }, [selected, state]);
 
-  async function upload(requirementId: string, file?: File) {
+  async function upload(requirementId: string, file?: File, destination?: RevenueModule) {
     if (!selected || !file) return;
     setBusy(requirementId);
     setError("");
@@ -161,7 +167,7 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       const body = await response.json() as { ok: boolean; result?: ReceivedFile; error?: string };
       if (!response.ok || !body.ok) throw new Error(body.error);
       await loadPlan(selected);
-      setActive("informacion");
+      setActive(destination ?? "informacion");
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -285,7 +291,14 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const companyName = String(form.get("company") ?? "").trim();
-    const accountName = String(form.get("account") ?? "").trim();
+    const accountId = String(form.get("accountId") ?? "").trim();
+    const accountInput = String(form.get("account") ?? "").trim();
+    const selectedAccount = ALFA_UNIVERSE_ACCOUNTS.find((account) => account.id === accountId || account.name.toLowerCase() === accountInput.toLowerCase());
+    if (!selectedAccount) {
+      setError("Selecciona una cuenta existente del universo comercial o escribe su nombre completo.");
+      return;
+    }
+    const accountName = selectedAccount.name;
     const year = Number(form.get("year"));
     const currency = String(form.get("currency") ?? "MXN");
     const occurredAt = new Date().toISOString();
@@ -294,7 +307,7 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       organizationId: "revenue-pilot",
       companyId: companyName.toLowerCase().replace(/\s+/g, "-"),
       companyName,
-      accountId: accountName.toLowerCase().replace(/\s+/g, "-"),
+      accountId: selectedAccount.id,
       accountName,
       year,
       currency,
@@ -320,9 +333,10 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
   }
 
   function navigate(module: RevenueModule) {
-    if (module === "inicio") { setActive("inicio"); setCreating(false); }
-    else if (module === "monitoreo" && !selected) window.location.assign("/monitoring");
-    else setActive(module);
+    // El menú lateral es persistente: cualquier destino debe cerrar el formulario
+    // transitorio de creación para no dejar el contenido desfasado del módulo activo.
+    setCreating(false);
+    setActive(module);
   }
 
   const syntheticPlan =
@@ -353,16 +367,16 @@ export default function RevenuePlatform({ identity }: { identity: RevenueIdentit
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
-      active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => window.location.assign("/monitoring")} /> :
+      active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => setActive("monitoreo")} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeMarketing} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
-      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} growth={state.growth} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
+      active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
-      active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <NoPlan onCreate={startCreate} /> :
+      active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
       <AdministrationModule plan={selected} onChanged={loadHome} />}
     </Shell>
   );
@@ -373,17 +387,22 @@ function NoPlan({ onCreate }: { onCreate: () => void }) {
 }
 
 function CreatePlanModule({ busy, onSubmit, onCancel }: { busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
-  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Compañía, cuenta, año y moneda acompañarán cada cálculo, decisión y versión." /><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required placeholder="Ej. Liverpool" /></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
+  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El Plan conservará su identificador y sus dimensiones." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con una cuenta del universo para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Identificador de cuenta<input name="accountId" list="revenue-account-id-options" placeholder="Opcional: UMX-008" /><datalist id="revenue-account-id-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
 function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {
   const [assignments, setAssignments] = useState<Array<Record<string,string>>>([]);
+  const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; company: string; year: number }>>([]);
+  const [targetPlanId, setTargetPlanId] = useState(plan?.id ?? "");
   const [message, setMessage] = useState("");
   const load = useCallback(async () => {
-    if (!plan) return;
-    const response = await fetch(`/api/admin/access?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
-    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; error?: string };
-    if (response.ok && body.ok) setAssignments(body.assignments ?? []);
+    const selectedPlanId = plan?.id ?? "";
+    const response = await fetch(selectedPlanId ? `/api/admin/access?planId=${encodeURIComponent(selectedPlanId)}` : "/api/admin/access", { cache: "no-store" });
+    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; company: string; year: number }>; error?: string };
+    if (response.ok && body.ok) {
+      setAssignments(body.assignments ?? body.users ?? []);
+      setAdminPlans(body.plans ?? []);
+    }
     else setMessage(body.error ?? "No pudimos recuperar los accesos.");
   }, [plan]);
   // The effect initiates an asynchronous request; the request callbacks update the view state.
@@ -391,28 +410,34 @@ function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChange
   useEffect(() => { void load(); }, [load]);
   async function grant(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!plan) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const selectedPlanId = plan?.id ?? String(form.get("planId") ?? targetPlanId);
+    const capability = String(form.get("capability") ?? "");
     const response = await fetch("/api/admin/access", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ planId: plan.id, email: form.get("email"), displayName: form.get("displayName"), capability: form.get("capability") }),
+      body: JSON.stringify({ planId: selectedPlanId, email: form.get("email"), displayName: form.get("displayName"), capability }),
     });
     const body = await response.json() as { ok: boolean; error?: string };
     setMessage(response.ok && body.ok ? "Acceso concedido para esta cuenta." : body.error ?? "No pudimos guardar el acceso.");
     if (response.ok && body.ok) { formElement.reset(); await load(); await onChanged(); }
   }
-  return <div className="module-page"><ModuleHead eyebrow="Administración" title="Asignaciones por Plan y cuenta" description="Concede únicamente aportación, integración, revisión, aprobación o consulta financiera. Cada permiso queda limitado al Plan activo." />
-    {!plan ? <EmptyAnswer title="Selecciona primero una cuenta" copy="Abre un Plan desde Inicio y vuelve a Administración para asignar a las personas correctas." /> : <>
-      <section className="plain-note"><b>{plan.accountName} · {plan.year}</b><p>Los administradores configuran acceso; no obtienen autoridad comercial por ese hecho.</p></section>
+  const activePlan = plan ?? adminPlans.find((item) => item.id === targetPlanId);
+  const activeAccountName = plan?.accountName ?? adminPlans.find((item) => item.id === targetPlanId)?.account ?? "";
+  return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Usuarios, roles y configuración de REVENUE" description="Administra personas, responsables, cuentas y permisos. Monitoreo es transversal; Construcción sólo corresponde al responsable del Plan y a Administración." />
+    <section className="admin-foundation"><article><b>Cuentas administrables</b><p>{adminPlans.length || (plan ? 1 : 0)} Planes disponibles para asignar.</p></article><article><b>Regla de acceso</b><p>Monitoreo: cualquier usuario autenticado. Construcción: responsable o administrador.</p></article><article><b>Responsabilidad</b><p>{activePlan ? `${activeAccountName} · ${activePlan.year}` : "Selecciona una cuenta para gestionar su equipo."}</p></article></section>
+    {(!plan && adminPlans.length > 0) && <label className="admin-plan-picker">Cuenta / Plan<select value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona una cuenta</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
+    {(plan || targetPlanId) ? <>
+      {activePlan && <section className="plain-note"><b>{activeAccountName} · {plan?.companyName ?? adminPlans.find((item) => item.id === targetPlanId)?.company ?? ""} · {activePlan.year}</b><p>El administrador concede capacidades concretas para esta cuenta. Ser administrador no sustituye la revisión o aprobación comercial.</p></section>}
       <form className="contribution-builder access-form" onSubmit={grant}>
+        {!plan && <label>Plan destino<select name="planId" required value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
         <label>Nombre<input name="displayName" required placeholder="Nombre de la persona" /></label>
         <label>Correo del workspace<input name="email" type="email" required placeholder="persona@empresa.com" /></label>
-        <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option><option value="MARKETING_CONTRIBUTE">Aportar Marketing</option><option value="TRADE_CONTRIBUTE">Aportar Trade Marketing</option><option value="PLAN_INTEGRATE">Integrar Plan (KAM)</option><option value="REVIEW">Revisar comercialmente</option><option value="APPROVE">Aprobar comercialmente</option><option value="VIEW_FINANCIALS">Consultar Finanzas</option></select></label>
+        <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option><option value="MARKETING_CONTRIBUTE">Aportar Marketing</option><option value="TRADE_CONTRIBUTE">Aportar Trade Marketing</option><option value="PLAN_INTEGRATE">Construir e integrar Plan</option><option value="REVIEW">Revisar comercialmente</option><option value="APPROVE">Aprobar comercialmente</option><option value="VIEW_FINANCIALS">Consultar Finanzas</option></select></label>
         <button className="clay-primary">Conceder acceso</button>
       </form>
       {message && <section className="plain-note"><p>{message}</p></section>}
       <section className="contribution-register"><div className="section-title"><small>Acceso vigente</small><h2>Personas asignadas a esta cuenta</h2></div>{assignments.map((item, index) => <article key={`${item.email}:${item.capability}:${index}`}><div><b>{item.display_name}</b><span>{item.email}</span></div><div><strong>{String(item.capability).replaceAll("_"," ")}</strong><span>{item.business_function}</span></div><div><strong>{String(item.scope_type).startsWith("MONITOR_") ? String(item.scope_type).replace("MONITOR_", "Monitoreo · ") : "Plan completo"}</strong><span>{String(item.scope_id)}</span></div></article>)}</section>
-    </>}
+    </> : <EmptyAnswer title="No hay cuentas cargadas" copy="Crea el primer Plan para que el administrador pueda asignar responsables y capacidades." />}
   </div>;
 }

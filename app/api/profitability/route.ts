@@ -70,6 +70,24 @@ async function canonicalRows(planId:string, ownerId:string, requirementId:string
   return (JSON.parse(await object.text()) as {rows:Array<Record<string,string|number>>}).rows;
 }
 
+async function optionalCanonicalRows(planId: string, ownerId: string, requirementId: string) {
+  try { return await canonicalRows(planId, ownerId, requirementId); } catch { return []; }
+}
+
+function sideDifference(plan: ReturnType<typeof pnl>, prior: ReturnType<typeof pnl>) {
+  return {
+    grossSales: Number((plan.grossSales - prior.grossSales).toFixed(2)),
+    deductions: Number((plan.deductions - prior.deductions).toFixed(2)),
+    netSales: Number((plan.netSales - prior.netSales).toFixed(2)),
+    cogs: Number((plan.cogs - prior.cogs).toFixed(2)),
+    grossMargin: Number((plan.grossMargin - prior.grossMargin).toFixed(2)),
+    investment: Number((plan.investment - prior.investment).toFixed(2)),
+    contribution: Number((plan.contribution - prior.contribution).toFixed(2)),
+    grossMarginRate: null,
+    contributionRate: null,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
@@ -128,6 +146,9 @@ export async function POST(request: Request) {
       ).bind(planId,ownerId).first<{result_json:string}>();
       if(!growthRow) throw new Error("Falta Crecimiento reconciliado");
       const growth=JSON.parse(growthRow.result_json) as {activities:Array<{id:string;accountId:string;skuId:string;period:string}>};
+      const planYear = Number(String(source.lines[0]?.period ?? "").slice(0, 4));
+      const priorYear = Number.isFinite(planYear) ? planYear - 1 : null;
+      const history = await optionalCanonicalRows(planId, ownerId, "sales-history");
       const expectedActivities=new Set(growth.activities.map((a)=>`${a.id}|${a.accountId}|${a.skuId}|${a.period}`));
       const receivedActivities=new Set(investments.map((a)=>`${a.activity_id}|${a.account_id}|${a.sku_id}|${a.period}`));
       const missing=[...expectedActivities].filter((key)=>!receivedActivities.has(key));
@@ -174,13 +195,28 @@ export async function POST(request: Request) {
           contributionRate:netSales===0?null:Number((contribution/netSales).toFixed(4))};
       };
       const comparatorAnnual=annual("comparator"),planAnnual=annual("plan");
+      const priorParts = priorYear === null ? [] : history.filter((row) => String(row.period ?? "").startsWith(`${priorYear}-`)).map((row) => {
+        const condition=conditions.filter((item)=>item.account_id===row.account_id&&item.sku_id===row.sku_id&&String(item.valid_from)<=String(row.period)).sort((a,b)=>String(b.valid_from).localeCompare(String(a.valid_from)))[0];
+        const cost=costs.filter((item)=>item.sku_id===row.sku_id&&String(item.valid_from)<=String(row.period)).sort((a,b)=>String(b.valid_from).localeCompare(String(a.valid_from)))[0];
+        if (!condition || !cost) return null;
+        const rates=["discount_rate","rebate_rate","returns_rate","other_deduction_rate"].map((field)=>Number(condition[field]));
+        const deductionRate=rates.reduce((sum,value)=>sum+value,0);
+        const grossSales=Number(row.value ?? 0), units=Number(row.units ?? 0), deductions=Number((grossSales*deductionRate).toFixed(2));
+        const netSales=Number((grossSales-deductions).toFixed(2)), cogs=Number((units*Number(cost.unit_cost)).toFixed(2)), grossMargin=Number((netSales-cogs).toFixed(2));
+        return { grossSales, deductions, netSales, cogs, grossMargin, investment: 0, contribution: grossMargin, grossMarginRate: netSales === 0 ? null : Number((grossMargin/netSales).toFixed(4)), contributionRate: netSales === 0 ? null : Number((grossMargin/netSales).toFixed(4)) };
+      }).filter((part): part is NonNullable<typeof part> => Boolean(part));
+      const priorYearAnnual = priorParts.length ? priorParts.reduce((total, part) => ({
+        grossSales: total.grossSales + part.grossSales, deductions: total.deductions + part.deductions, netSales: total.netSales + part.netSales,
+        cogs: total.cogs + part.cogs, grossMargin: total.grossMargin + part.grossMargin, investment: 0, contribution: total.contribution + part.contribution,
+        grossMarginRate: null, contributionRate: null,
+      }), { grossSales: 0, deductions: 0, netSales: 0, cogs: 0, grossMargin: 0, investment: 0, contribution: 0, grossMarginRate: null, contributionRate: null }) : null;
       const result={dataClassification:"USER_PROVIDED",comparator:{id:"APPROVED_BASELINE_VALUE",name:"Valor del baseline aprobado",explanation:"Baseline aprobado con precios, condiciones y costos vigentes; sin inversión incremental."},
         parameters:{id:"COMMERCIAL_CONDITIONS_AND_COSTS",version:"1.0.0",
           deductionRate:planAnnual.grossSales===0?0:Number((planAnnual.deductions/planAnnual.grossSales).toFixed(4)),
           cogsRateOnNetSales:planAnnual.netSales===0?0:Number((planAnnual.cogs/planAnnual.netSales).toFixed(4)),
           investmentRateOnIncrementalGross:0,corporatePolicy:true,
           explanation:"Condiciones comerciales, costos e inversiones provenientes de archivos aprobados."},
-        currency:source.currency,lines:realLines,comparatorAnnual,planAnnual,
+        currency:source.currency,lines:realLines,priorYear,priorYearAnnual,priorYearVariance:priorYearAnnual ? sideDifference(planAnnual, priorYearAnnual) : null,comparatorAnnual,planAnnual,
         variance:{netSales:Number((planAnnual.netSales-comparatorAnnual.netSales).toFixed(2)),grossMargin:Number((planAnnual.grossMargin-comparatorAnnual.grossMargin).toFixed(2)),contribution:Number((planAnnual.contribution-comparatorAnnual.contribution).toFixed(2))},
         controls:{planReconciled:planAnnual.contribution===Number((planAnnual.netSales-planAnnual.cogs-planAnnual.investment).toFixed(2)),comparatorReconciled:comparatorAnnual.contribution===Number((comparatorAnnual.netSales-comparatorAnnual.cogs).toFixed(2)),corporatePolicyApproved:true}};
       const now=new Date().toISOString();
@@ -210,6 +246,11 @@ export async function POST(request: Request) {
       Number(lines.reduce((total, line) => total + Number(line[side][field] ?? 0), 0).toFixed(2));
     const comparatorAnnual = pnl(sum("comparator", "grossSales"), sum("comparator", "investment"));
     const planAnnual = pnl(sum("plan", "grossSales"), sum("plan", "investment"));
+    const planYear = Number(String(source.lines[0]?.period ?? "").slice(0, 4));
+    const priorYear = Number.isFinite(planYear) ? planYear - 1 : null;
+    const history = priorYear === null ? [] : await optionalCanonicalRows(planId, ownerId, "sales-history");
+    const priorGrossSales = history.filter((row) => String(row.period ?? "").startsWith(`${priorYear}-`)).reduce((total, row) => total + Number(row.value ?? 0), 0);
+    const priorYearAnnual = priorGrossSales > 0 ? pnl(priorGrossSales, 0) : null;
     const result = {
       dataClassification: "SYNTHETIC_NON_COMMERCIAL",
       comparator: {
@@ -220,6 +261,9 @@ export async function POST(request: Request) {
       parameters: SYNTHETIC_PARAMETERS,
       currency: source.currency,
       lines,
+      priorYear,
+      priorYearAnnual,
+      priorYearVariance: priorYearAnnual ? sideDifference(planAnnual, priorYearAnnual) : null,
       comparatorAnnual,
       planAnnual,
       variance: {

@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     byPeriod: aggregateByPeriod(rows),
     matrix: createAlfaTurmixBillingMatrix(rows),
     rows: sample,
+    exportRows: rows,
     rowCount: rows.length,
     sampleLimit: 240,
   });

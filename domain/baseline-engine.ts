@@ -6,6 +6,7 @@ export interface BaselineLine {
   skuId: string;
   period: string;
   calculatedUnits: number;
+  observedUnits: number[];
   confidence: number;
 }
 
@@ -108,6 +109,7 @@ function calculateBaseline(input: {
         skuId,
         period: `${input.targetYear}-${month}`,
         calculatedUnits: Math.round(average),
+        observedUnits: values,
         confidence: Number(Math.max(0.5, Math.min(0.98, 1 - spread)).toFixed(2)),
       };
     })

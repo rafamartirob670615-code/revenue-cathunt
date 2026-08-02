@@ -10,6 +10,7 @@ export const ASSIGNABLE_CAPABILITIES = [
   "REVIEW",
   "APPROVE",
   "VIEW_FINANCIALS",
+  "ADMINISTER_ACCESS",
 ] as const satisfies readonly Capability[];
 
 const LOCAL_DEMO_EMAIL = "pilot@revenue.local";
@@ -114,10 +115,11 @@ export async function resolveRevenueIdentity(request: Request): Promise<RevenueI
      WHERE lower(json_extract(aggregate_json,'$.versions[0].createdBy'))=lower(?) LIMIT 1`,
   ).bind(actor.email).first<{ owned: number }>();
   if (owned || actor.email === LOCAL_DEMO_EMAIL) {
-    for (const capability of ["PLAN_CREATE", "PLAN_INTEGRATE", "BASELINE_REVIEW", "MONITOR", "ADMINISTER_ACCESS"] as Capability[]) {
+    for (const capability of ["PLAN_CREATE", "PLAN_INTEGRATE", "BASELINE_REVIEW", "MONITOR"] as Capability[]) {
       if (!capabilities.includes(capability)) capabilities.push(capability);
     }
   }
+  if (actor.email === LOCAL_DEMO_EMAIL && !capabilities.includes("ADMINISTER_ACCESS")) capabilities.push("ADMINISTER_ACCESS");
   return {
     displayName: actor.displayName,
     email: actor.email,
