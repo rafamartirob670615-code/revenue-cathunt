@@ -6,7 +6,16 @@ import { sites } from "./build/sites-vite-plugin";
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
-const { d1, r2 } = hostingConfig;
+// Real Cloudflare D1 database for the CatHunt deploy (created via `wrangler d1 create`).
+// R2 is intentionally disabled here: it requires a payment method on file even on the
+// free tier, and the Alfa Turmix monitoring view (the one in production use) doesn't
+// read from R2 — only the "Crear Plan anual" builder flow does, and that's not reachable
+// without a role assignment in this deploy yet.
+const CATHUNT_D1_DATABASE_ID = "3e6c8c71-1a53-43b1-9d07-1974fc3dbbf7";
+const CATHUNT_D1_DATABASE_NAME = "revenue-planning-db";
+
+const { d1, r2: hostingR2 } = hostingConfig;
+const r2 = process.env.CATHUNT_ENABLE_R2 ? hostingR2 : null;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -18,8 +27,8 @@ const localBindingConfig = {
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: process.env.CATHUNT_DEPLOY ? CATHUNT_D1_DATABASE_NAME : "site-creator-d1",
+          database_id: process.env.CATHUNT_DEPLOY ? CATHUNT_D1_DATABASE_ID : SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
         },
       ]
     : [],

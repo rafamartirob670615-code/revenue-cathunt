@@ -15,11 +15,16 @@ export const ASSIGNABLE_CAPABILITIES = [
 
 const LOCAL_DEMO_EMAIL = "pilot@revenue.local";
 
+// Hosts that get the demo pilot identity when there's no `oai-authenticated-user-email`
+// header (that header only exists behind OpenAI's own control plane). Includes the
+// CatHunt Cloudflare deploy alongside localhost until a real login is built for it.
+const DEMO_IDENTITY_HOSTS = ["localhost", "127.0.0.1", "::1", "revenue-planning-app.rafamartirob670615.workers.dev"];
+
 export function authenticatedEmail(request: Request): string | undefined {
   const header = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
   if (header) return header;
   const host = new URL(request.url).hostname;
-  return ["localhost", "127.0.0.1", "::1"].includes(host) ? LOCAL_DEMO_EMAIL : undefined;
+  return DEMO_IDENTITY_HOSTS.includes(host) ? LOCAL_DEMO_EMAIL : undefined;
 }
 
 export type AssignableCapability = (typeof ASSIGNABLE_CAPABILITIES)[number];
