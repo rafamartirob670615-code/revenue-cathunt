@@ -226,13 +226,16 @@ export async function POST(request: Request) {
         cogs: total.cogs + part.cogs, grossMargin: total.grossMargin + part.grossMargin, investment: 0, contribution: total.contribution + part.contribution,
         grossMarginRate: null, contributionRate: null,
       }), { grossSales: 0, deductions: 0, netSales: 0, cogs: 0, grossMargin: 0, investment: 0, contribution: 0, grossMarginRate: null, contributionRate: null }) : null;
+      const priorUnits = priorYear === null ? null : history.filter((row) => String(row.period ?? "").startsWith(`${priorYear}-`)).reduce((sum, row) => sum + Number(row.units ?? 0), 0);
+      const actualUnits = actualRows.filter((row) => String(row.period ?? "").startsWith(`${planYear}-`)).reduce((sum, row) => sum + Number(row.actual_units ?? 0), 0);
+      const planUnits = source.lines.reduce((sum, line) => sum + line.planUnits, 0);
       const result={dataClassification:"USER_PROVIDED",comparator:{id:"APPROVED_BASELINE_VALUE",name:"Valor del baseline aprobado",explanation:"Baseline aprobado con precios, condiciones y costos vigentes; sin inversión incremental."},
         parameters:{id:"COMMERCIAL_CONDITIONS_AND_COSTS",version:"1.0.0",
           deductionRate:planAnnual.grossSales===0?0:Number((planAnnual.deductions/planAnnual.grossSales).toFixed(4)),
           cogsRateOnNetSales:planAnnual.netSales===0?0:Number((planAnnual.cogs/planAnnual.netSales).toFixed(4)),
           investmentRateOnIncrementalGross:0,corporatePolicy:true,
           explanation:"Condiciones comerciales, costos e inversiones provenientes de archivos aprobados."},
-        currency:source.currency,lines:realLines,priorYear,priorYearAnnual,priorYearVariance:priorYearAnnual ? sideDifference(planAnnual, priorYearAnnual) : null,actualYear: actualYearAnnual ? planYear : null,actualAnnual: actualYearAnnual,actualVariance: actualYearAnnual ? sideDifference(actualYearAnnual, planAnnual) : null,comparatorAnnual,planAnnual,
+        currency:source.currency,lines:realLines,priorYear,priorYearAnnual,priorYearVariance:priorYearAnnual ? sideDifference(planAnnual, priorYearAnnual) : null,actualYear: actualYearAnnual ? planYear : null,actualAnnual: actualYearAnnual,actualVariance: actualYearAnnual ? sideDifference(actualYearAnnual, planAnnual) : null,unitComparison:{prior:priorUnits,actual:actualRows.length ? actualUnits : null,plan:planUnits,planVsPrior:priorUnits === null ? null : planUnits-priorUnits,actualVsPlan:actualRows.length ? actualUnits-planUnits : null},comparatorAnnual,planAnnual,
         variance:{netSales:Number((planAnnual.netSales-comparatorAnnual.netSales).toFixed(2)),grossMargin:Number((planAnnual.grossMargin-comparatorAnnual.grossMargin).toFixed(2)),contribution:Number((planAnnual.contribution-comparatorAnnual.contribution).toFixed(2))},
         controls:{planReconciled:planAnnual.contribution===Number((planAnnual.netSales-planAnnual.cogs-planAnnual.investment).toFixed(2)),comparatorReconciled:comparatorAnnual.contribution===Number((comparatorAnnual.netSales-comparatorAnnual.cogs).toFixed(2)),corporatePolicyApproved:true}};
       const now=new Date().toISOString();
@@ -270,6 +273,9 @@ export async function POST(request: Request) {
     const actualRows = await optionalCanonicalRows(planId, ownerId, "actual-sales");
     const actualGrossSales = actualRows.filter((row) => String(row.period ?? "").startsWith(`${planYear}-`)).reduce((total, row) => total + Number(row.actual_value ?? 0), 0);
     const actualAnnual = actualGrossSales > 0 ? pnl(actualGrossSales, 0) : null;
+    const priorUnits = priorYear === null ? null : history.filter((row) => String(row.period ?? "").startsWith(`${priorYear}-`)).reduce((sum, row) => sum + Number(row.units ?? 0), 0);
+    const actualUnits = actualRows.filter((row) => String(row.period ?? "").startsWith(`${planYear}-`)).reduce((sum, row) => sum + Number(row.actual_units ?? 0), 0);
+    const planUnits = source.lines.reduce((sum, line) => sum + line.planUnits, 0);
     const result = {
       dataClassification: "SYNTHETIC_NON_COMMERCIAL",
       comparator: {
@@ -286,6 +292,7 @@ export async function POST(request: Request) {
       actualYear: actualAnnual ? planYear : null,
       actualAnnual,
       actualVariance: actualAnnual ? sideDifference(actualAnnual, planAnnual) : null,
+      unitComparison: { prior: priorUnits, actual: actualRows.length ? actualUnits : null, plan: planUnits, planVsPrior: priorUnits === null ? null : planUnits - priorUnits, actualVsPlan: actualRows.length ? actualUnits - planUnits : null },
       comparatorAnnual,
       planAnnual,
       variance: {

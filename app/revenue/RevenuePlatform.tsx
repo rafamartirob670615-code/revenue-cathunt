@@ -55,6 +55,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
 
   const loadHome = useCallback(async () => {
@@ -282,6 +283,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       const body = await response.json() as { ok: boolean; result?: { version: Plan["versions"][number] }; error?: string };
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setSelected({ ...selected, versions: selected.versions.map((item) => item.id === body.result?.version.id ? body.result.version : item) });
+      setNotice(`Versión V${body.result.version.number} guardada y enviada a revisión. Puedes seguir consultándola en Seguimiento.`);
       setActive("monitoreo");
     } catch (cause) { setError(friendly(cause instanceof Error ? cause.message : "")); }
     finally { setBusy(""); }
@@ -368,6 +370,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
   return (
     <Shell active={active} plan={selected} identity={effectiveIdentity} completed={completed} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
+      {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
       active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => setActive("monitoreo")} /> :
@@ -390,7 +393,7 @@ function NoPlan({ onCreate }: { onCreate: () => void }) {
 }
 
 function CreatePlanModule({ busy, onSubmit, onCancel }: { busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
-  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El Plan conservará su identificador y sus dimensiones." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con una cuenta del universo para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Identificador de cuenta<input name="accountId" list="revenue-account-id-options" placeholder="Opcional: UMX-008" /><datalist id="revenue-account-id-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
+  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con una cuenta del universo para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
 function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {

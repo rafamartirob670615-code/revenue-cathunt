@@ -62,7 +62,7 @@ export type ReceivedFile = {
 export type BaselineResult = {
   targetYear: number;
   dataClassification: "SYNTHETIC_NON_COMMERCIAL" | "USER_PROVIDED";
-  lines: Array<{ accountId: string; skuId: string; period: string; observedAverageUnits: number; calculatedUnits: number; observedUnits?: number[]; confidence: number }>;
+  lines: Array<{ accountId: string; skuId: string; period: string; observedAverageUnits: number; calculatedUnits: number; observedAverageValue: number; calculatedValue: number; observedUnits?: number[]; confidence: number }>;
   annualUnits: number;
   historyPeriods: number;
   explanation: string;
@@ -143,6 +143,7 @@ export type ProfitabilityResult = {
   actualYear: number | null;
   actualAnnual: FinancialSide | null;
   actualVariance: FinancialSide | null;
+  unitComparison: { prior: number | null; actual: number | null; plan: number; planVsPrior: number | null; actualVsPlan: number | null };
   controls: { planReconciled: boolean; comparatorReconciled: boolean };
 };
 

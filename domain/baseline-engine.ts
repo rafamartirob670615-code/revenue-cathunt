@@ -6,6 +6,8 @@ export interface BaselineLine {
   skuId: string;
   period: string;
   observedAverageUnits: number;
+  observedAverageValue: number;
+  calculatedValue: number;
   calculatedUnits: number;
   observedUnits: number[];
   confidence: number;
@@ -84,7 +86,7 @@ function calculateBaseline(input: {
     activityImpact.set(key, (activityImpact.get(key) ?? 0) + units);
   }
 
-  const observations = new Map<string, number[]>();
+  const observations = new Map<string, { units: number[]; values: number[] }>();
   const periods = new Set<string>();
   for (const row of sales) {
     const units = Number(row.units);
@@ -94,16 +96,20 @@ function calculateBaseline(input: {
     const key = `${row.account_id}|${row.sku_id}|${month}`;
     const activityUnits = activityImpact.get(`${row.account_id}|${row.sku_id}|${row.period}`) ?? 0;
     const recurringUnits = Math.max(0, units - activityUnits);
-    observations.set(key, [...(observations.get(key) ?? []), recurringUnits]);
+    const current = observations.get(key) ?? { units: [], values: [] };
+    current.units.push(recurringUnits);
+    current.values.push(Number(row.value ?? 0));
+    observations.set(key, current);
     periods.add(row.period);
   }
 
   const lines = [...observations.entries()]
     .map(([key, values]) => {
       const [accountId, skuId, month] = key.split("|");
-      const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-      const spread = values.length > 1
-        ? Math.abs(Math.max(...values) - Math.min(...values)) / Math.max(average, 1)
+      const average = values.units.reduce((sum, value) => sum + value, 0) / values.units.length;
+      const averageValue = values.values.reduce((sum, value) => sum + value, 0) / values.values.length;
+      const spread = values.units.length > 1
+        ? Math.abs(Math.max(...values.units) - Math.min(...values.units)) / Math.max(average, 1)
         : 0.25;
       return {
         accountId,
@@ -111,7 +117,9 @@ function calculateBaseline(input: {
         period: `${input.targetYear}-${month}`,
         observedAverageUnits: Number(average.toFixed(2)),
         calculatedUnits: Math.round(average),
-        observedUnits: values,
+        observedAverageValue: Number(averageValue.toFixed(2)),
+        calculatedValue: Number((average === 0 ? 0 : averageValue * (Math.round(average) / average)).toFixed(2)),
+        observedUnits: values.units,
         confidence: Number(Math.max(0.5, Math.min(0.98, 1 - spread)).toFixed(2)),
       };
     })

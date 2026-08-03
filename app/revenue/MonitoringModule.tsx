@@ -5,7 +5,7 @@ import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
 type MonitorData = {
   plan: { year: number; currency: string; status: string };
-  result: null | { currency: string; lines: Array<{ period: string; planValue: number }> };
+  result: null | { currency: string; lines: Array<{ period: string; skuId: string; baselineUnits: number; planUnits: number; unitPrice: number; planValue: number }> };
   actuals: { ready: boolean; cutoffDate: string | null; months: Record<string, { value: number }>; includedRows: number };
   quota: { ready: boolean; months: Record<string, { value: number }> };
   priorYear: { year: number | null; months: Record<string, { value: number }> };
@@ -19,6 +19,12 @@ type BillingRow = {
   quotaValue: number | null; actualValue: number | null; varianceValue: number | null;
   territory: string; channel: string; category: string; segment: string;
 };
+
+function BuildingBlocksWaterfall({ result, growth, currency }: { result: NonNullable<MonitorData["result"]>; growth: MonitorData["growth"]; currency: string }) {
+  const blocks = (growth?.activities ?? []).map((activity) => ({ ...activity, value: result.lines.filter((line) => line.period === activity.period && line.skuId === activity.skuId).reduce((sum, line) => sum + activity.netUnits * (line.planValue / Math.max(line.planUnits, 1)), 0) }));
+  const max = Math.max(...blocks.map((block) => Math.abs(block.value)), 1);
+  return <section className="building-blocks-visual"><header className="section-title"><small>Building blocks del seguimiento</small><h2>Eventos por valor monetario</h2><p>La vista puente conserva la lógica del Plan y permite leer el aporte de cada evento sin ocupar una tabla extensa.</p></header><div className="waterfall-track"><div className="waterfall-start"><b>Base</b><strong>{formatMoney(result.lines.reduce((sum, line) => sum + line.baselineUnits * line.unitPrice, 0), currency)}</strong></div>{blocks.map((block) => <article className={block.value < 0 ? "negative" : "positive"} key={block.id}><span style={{ height:`${Math.max(12, Math.round(Math.abs(block.value) / max * 100))}%` }} /><b>{block.name}</b><small>{formatMoney(block.value, currency)}</small></article>)}<div className="waterfall-total"><b>Plan</b><strong>{formatMoney(result.lines.reduce((sum, line) => sum + line.planValue, 0), currency)}</strong></div></div><div className="building-block-events">{blocks.map((block) => <span key={`${block.id}-event`}><b>{block.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</b> · {block.name} · {block.period} · {formatMoney(block.value, currency)}</span>)}</div></section>;
+}
 
 type Action = {
   id: string; period: string; variance_value: number; variance_rate: number | null;
@@ -139,7 +145,7 @@ export default function MonitoringModule({ planId }: { planId: string }) {
     const header = ["Territorio","Cuenta","Canal","Categoría","Segmento","Producto","Periodo","Plan","Cuota","Venta real","Variación"];
     const rows = billingFiltered.map((row) => [row.territory || "", row.accountId, row.channel || "", row.category || "", row.segment || "", row.skuId, row.period, row.planValue, row.quotaValue ?? "", row.actualValue ?? "", row.varianceValue ?? ""]);
     const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"','""')}"`).join(",")).join("\n");
-    const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8" })); link.download = `REVENUE_Seguimiento_Billing_${planId}.csv`; link.click(); URL.revokeObjectURL(link.href);
+    const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type:"application/vnd.ms-excel;charset=utf-8" })); link.download = `REVENUE_Seguimiento_Billing_${planId}.xls`; link.click(); URL.revokeObjectURL(link.href);
   }
 
   return <div className="module-page">
@@ -152,7 +158,8 @@ export default function MonitoringModule({ planId }: { planId: string }) {
     </section>
     <section className="paper-metrics"><Metric label="Plan comparable" value={formatMoney(planYtd, currency)} note="hasta el corte" /><Metric label="Venta real" value={data.actuals.ready ? formatMoney(actualYtd, currency) : "Pendiente"} note={data.actuals.cutoffDate ?? "sin corte"} /><Metric label="Variación" value={planYtd ? `${((actualYtd / planYtd - 1) * 100).toFixed(1)}%` : "N/D"} note="Actual vs. Plan" tone={actualYtd < planYtd ? "warn" : "good"} /><Metric label="Desviaciones" value={String(deviations.length)} note="umbral operativo 5%" /></section>
     <section className="billing-matrix"><div className="section-title"><small>Documento oficial de seguimiento</small><h2>Billing File · Plan, cuota, real y variación</h2><p>La misma estructura mensual del Plan oficial, con fuentes faltantes visibles como —.</p></div><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Métrica</th>{officialColumns.map((column) => <th key={column.key} className={column.key.startsWith("Q") || column.key === "YTD" ? "summary-col" : ""}>{column.label}</th>)}</tr></thead><tbody>{([['Plan','plan'],['Cuota','quota'],['Venta real','actual'],['Variación','variance']] as const).map(([label, metric]) => <tr className={`matrix-row ${metric === "variance" ? "percent-row" : ""}`} key={metric}><th>{label}</th>{officialColumns.map((column) => <td key={column.key} className={column.key.startsWith("Q") || column.key === "YTD" ? "summary-col" : ""}>{formatMoney(matrixValue(metric, column.key), currency)}</td>)}</tr>)}</tbody></table></div></section>
-    {data.growth?.activities?.length ? <section className="activity-sheet"><header className="section-title"><small>Building blocks ejecutables</small><h2>Actividades que explican el Plan</h2></header>{data.growth.activities.map((activity) => <article key={activity.id}><div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"} · {activity.period} · {activity.skuId}</small><b>{activity.name}</b><span>{activity.evidence}</span></div><div><span>Bruto {activity.grossUnits.toLocaleString("es-MX")}</span><strong>Neto +{activity.netUnits.toLocaleString("es-MX")}</strong></div></article>)}</section> : null}
+    <div className="billing-actions"><button className="paper-button" onClick={() => window.print()}>Imprimir Billing</button><button className="clay-primary" onClick={exportBilling}>Descargar Excel</button></div>
+    {data.growth?.activities?.length && data.result ? <BuildingBlocksWaterfall result={data.result} growth={data.growth} currency={currency} /> : null}
     <section className="billing-explorer">
       <div className="section-title"><small>Vista de negocio completo</small><h2>Billing consolidado</h2><p>Comienza con todos los canales y desciende por territorio, cuenta, canal, categoría, segmento, producto y periodo.</p><div><button className="paper-button" onClick={() => window.print()}>Imprimir Billing</button> <button className="clay-primary" onClick={exportBilling}>Descargar Excel/CSV</button></div></div>
       <div className="billing-filters">{billingDimensions.map(([key, label]) => {

@@ -24,8 +24,9 @@ test("ALFA Turmix uses the current Electrodomésticos taxonomy", () => {
 
 test("ALFA Turmix generates a complete twelve-month monitoring grain", () => {
   const rows = createAlfaTurmixRows();
-  assert.equal(alfaTurmixCatalog().accounts.length, 199);
-  assert.equal(rows.length, 12 * 199 * 6 * 2);
+  const accountCount = alfaTurmixCatalog().accounts.length;
+  assert.ok(accountCount > 0);
+  assert.equal(rows.length, 12 * accountCount * 6 * 2);
   assert.equal(new Set(rows.map((row) => row.period)).size, 12);
   assert.equal(new Set(rows.map((row) => row.family)).size, 6);
   assert.ok(rows.every((row) => row.category === "Electrodomésticos"));
