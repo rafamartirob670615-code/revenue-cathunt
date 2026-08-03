@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
+import { ALFA_UNIVERSE_ACCOUNTS } from "../../domain/alfa-turmix-universe";
 import type { BaselineResult, BaselineReview, Contribution, GrowthResult, PlanResult, ProfitabilityResult, ReceivedFile } from "./model";
 import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
@@ -52,10 +53,11 @@ export function ContextModule({ plan }: { plan: Plan }) {
 }
 
 export function InformationModule({
-  files, accepted, systemReady, busy, onUpload, onAccept,
+  files, accepted, systemReady, busy, onUpload, onGuidedCapture, onAccept,
 }: {
   files: ReceivedFile[]; accepted: boolean; systemReady: boolean; busy: string;
   onUpload: (requirementId: string, file?: File) => void; onAccept: () => void;
+  onGuidedCapture: (requirementId: string, values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) => void;
 }) {
   const [showGuide, setShowGuide] = useState(false);
   const [draftSource, setDraftSource] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export function InformationModule({
         </article>;
       })}
     </section>
-    {draftSource && <section className="plain-note draft-source"><b>Captura guiada · {PILOT_INPUT_REQUIREMENTS.find((item) => item.id === draftSource)?.name}</b><p>Registra primero una muestra mínima. Al terminar podrás validar la estructura antes de incorporarla al cálculo.</p><label>Cuenta<input placeholder="Cuenta existente" /></label><label>Producto<input placeholder="SKU o producto" /></label><label>Periodo<input type="month" /></label><label>Valor o unidades<input type="number" min="0" step=".01" /></label><div><button type="button" className="paper-button" onClick={() => setDraftSource(null)}>Cancelar</button><button type="button" className="clay-primary" onClick={() => setDraftSource(null)}>Terminar y validar muestra</button></div></section>}
+    {draftSource && <GuidedCaptureForm requirementId={draftSource} onCancel={() => setDraftSource(null)} onSubmit={(values) => { onGuidedCapture(draftSource, values); setDraftSource(null); }} />}
     <details className="paper-detail"><summary>Fuentes complementarias</summary><div className="source-board compact">
       {PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "CONDITIONAL").map((requirement) => {
         const received = files.find((file) => file.requirementId === requirement.id);
@@ -87,6 +89,11 @@ export function InformationModule({
     {!accepted && !systemReady && <section className="plain-note"><b>Demo sintética oficial</b><p>Carga directamente los 11 archivos desde <code>outputs/demo_sintetica_oficial/inputs/</code>. La antigua acción “Usar prueba guiada” no genera ni sustituye fuentes.</p></section>}
     {accepted && <section className="answer-card good"><div><small>Resultado</small><h2>Información aceptada</h2><p>Los datasets canónicos ya pueden alimentar los cálculos de este Plan.</p></div><span>Listo</span></section>}
   </div>;
+}
+
+function GuidedCaptureForm({ requirementId, onCancel, onSubmit }: { requirementId: string; onCancel: () => void; onSubmit: (values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) => void }) {
+  const requirement = PILOT_INPUT_REQUIREMENTS.find((item) => item.id === requirementId);
+  return <section className="plain-note draft-source"><b>Captura guiada · {requirement?.name}</b><p>Registra una fila mínima. REVENUE la convierte al formato de la fuente, la valida y la guarda junto con el Plan.</p><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onSubmit({ account: String(form.get("account") ?? "").trim(), product: String(form.get("product") ?? "").trim(), period: String(form.get("period") ?? "").trim(), units: String(form.get("units") ?? "0").trim(), value: String(form.get("value") ?? "0").trim(), currency: String(form.get("currency") ?? "MXN").trim(), evidence: String(form.get("evidence") ?? "Captura guiada").trim() }); }}><label>Cuenta<input name="account" required list="guided-account-options" placeholder="Cuenta existente" /><datalist id="guided-account-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.name}>{account.id}</option>)}</datalist></label><label>Producto<input name="product" required placeholder="SKU o producto" /></label><label>Periodo<input name="period" required type="month" /></label><label>Unidades<input name="units" required type="number" min="0" step=".01" defaultValue="0" /></label><label>Valor<input name="value" required type="number" min="0" step=".01" defaultValue="0" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><label className="wide">Evidencia<textarea name="evidence" defaultValue="Captura guiada" /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button type="submit" className="clay-primary">Terminar y validar muestra</button></div></form></section>;
 }
 
 export function BaselineModule({ baseline, review, ready, busy, onCalculate, onApprove }: { baseline: BaselineResult | null; review: BaselineReview | null; ready: boolean; busy: string; onCalculate: () => void; onApprove: () => void }) {

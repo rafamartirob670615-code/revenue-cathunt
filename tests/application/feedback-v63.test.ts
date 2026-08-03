@@ -13,6 +13,8 @@ test("feedback v63: Monitoreo conserva Shell, alcance y exportación", async () 
   assert.match(monitor, /Todas las cuentas/);
   assert.match(monitor, /window\.print/);
   assert.match(monitor, /download/);
+  assert.match(monitor, /bookType: "xlsx"/);
+  assert.match(monitor, /\.xlsx/);
 });
 
 test("feedback v63: cuenta existente, archivos y bloqueo Product Cost son visibles", async () => {
@@ -27,6 +29,8 @@ test("feedback v63: cuenta existente, archivos y bloqueo Product Cost son visibl
   assert.match(modules, /Subir Product Cost/);
   assert.match(modules, /Building blocks reconciliados/);
   assert.match(modules, /Documento oficial actualizado/);
+  assert.match(modules, /Registra una fila mínima/);
+  assert.match(platform, /async function guidedCapture/);
 });
 
 test("decisiones aclaradas: Billing oficial y P&L comparativo", async () => {

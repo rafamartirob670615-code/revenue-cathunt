@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import type { Plan } from "../../domain/types";
+import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
 import MonitoringModule from "./MonitoringModule";
 import Shell from "./Shell";
 import HomeModule from "./HomeModule";
@@ -173,6 +175,66 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       setError(friendly(cause instanceof Error ? cause.message : ""));
     } finally {
       setBusy("");
+    }
+  }
+
+  async function guidedCapture(requirementId: string, values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) {
+    const requirement = PILOT_INPUT_REQUIREMENTS.find((item) => item.id === requirementId);
+    if (!selected || !requirement) return;
+    const number = (value: string) => value || "0";
+    const row: Record<string, string> = {
+      account_id: values.account,
+      sku_id: values.product,
+      period: values.period,
+      units: number(values.units),
+      value: number(values.value),
+      currency: values.currency,
+      source_type: "ACCOUNT_PRODUCT",
+      source_code: values.product,
+      canonical_id: values.product,
+      canonical_name: values.product,
+      source_unit: "UNIDAD",
+      base_unit: "UNIDAD",
+      conversion_factor: "1",
+      valid_from: values.period,
+      price: number(values.value),
+      price_type: "NET",
+      activity_id: `GUIADA-${requirementId}`,
+      activity_name: "Captura guiada",
+      activity_type: requirementId === "marketing-plan" ? "BRAND_ACTIVITY" : "EXECUTION",
+      start_period: values.period,
+      end_period: values.period,
+      corporate_gross_units: number(values.units),
+      allocation_share: "1",
+      cannibalization_units: "0",
+      halo_units: "0",
+      pull_forward_units: "0",
+      interaction_units: "0",
+      evidence: values.evidence || "Captura guiada",
+      discount_rate: "0",
+      rebate_rate: "0",
+      returns_rate: "0",
+      other_deduction_rate: "0",
+      unit_cost: number(values.value),
+      period_cutoff: values.period,
+      cutoff_date: `${values.period}-01`,
+      actual_units: number(values.units),
+      actual_value: number(values.value),
+      quota_value: number(values.value),
+      investment_value: "0",
+    };
+    const headers = [...requirement.requiredFields];
+    const rows = [headers, headers.map((header) => row[header] ?? "")];
+    const excelRequirement = new Set(["marketing-plan", "trade-marketing-plan", "commercial-conditions", "product-costs", "activity-investments", "sales-quota", "actual-sales"]);
+    if (excelRequirement.has(requirementId)) {
+      const sheet = XLSX.utils.aoa_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, "Captura guiada");
+      const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      await upload(requirementId, new File([bytes], `CAPTURA_GUIADA_${requirementId}.xlsx`, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    } else {
+      const csv = rows.map((line) => line.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+      await upload(requirementId, new File([csv], `CAPTURA_GUIADA_${requirementId}.csv`, { type: "text/csv;charset=utf-8" }));
     }
   }
 
@@ -375,7 +437,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
       active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => setActive("monitoreo")} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
-      active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
+      active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeMarketing} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
