@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --paper:#f6f3ed; --card:#fff; --ink:#1d1b18; --muted:#746d62;
-  --line:#e2dbcf; --clay:#b5502f; --clay-dark:#873820; --clay-soft:#f3e5dc;
-  --green:#386347; --green-soft:#e5efe7; --amber:#82631a; --amber-soft:#f5edda;
+  --paper:#f7f4ee; --card:#ffffff; --ink:#1c1a17; --muted:#7a7264;
+  --line:#e4ddd0; --clay:#b5502f; --clay-dark:#873820; --clay-soft:#f0ded4;
+  --green:#3f6b4a; --green-soft:#e2ede4; --amber:#9c7a1f; --amber-soft:#f3ecd8;
   --red:#a13e34; --red-soft:#f5e1de;
 }
 
 *{box-sizing:border-box}
 html,body{min-height:100%}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-geist),Arial,sans-serif}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-geist),ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed}
 
 .revenue-platform{display:grid;grid-template-columns:292px minmax(0,1fr);min-height:100vh}
