@@ -15,16 +15,13 @@ export const ASSIGNABLE_CAPABILITIES = [
 
 const LOCAL_DEMO_EMAIL = "pilot@revenue.local";
 
-// Hosts that get the demo pilot identity when there's no `oai-authenticated-user-email`
-// header (that header only exists behind OpenAI's own control plane). Includes the
-// CatHunt Cloudflare deploy alongside localhost until a real login is built for it.
-const DEMO_IDENTITY_HOSTS = ["localhost", "127.0.0.1", "::1", "revenue-planning-app.rafamartirob670615.workers.dev"];
+// REVENUE is currently a synthetic, non-commercial pilot. Its public mode must not
+// depend on a browser-specific identity header or on ChatGPT's private hosting layer.
+// A real login can replace this adapter before non-synthetic data is exposed.
 
 export function authenticatedEmail(request: Request): string | undefined {
-  const header = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase();
-  if (header) return header;
-  const host = new URL(request.url).hostname;
-  return DEMO_IDENTITY_HOSTS.includes(host) ? LOCAL_DEMO_EMAIL : undefined;
+  void request;
+  return LOCAL_DEMO_EMAIL;
 }
 
 export type AssignableCapability = (typeof ASSIGNABLE_CAPABILITIES)[number];
@@ -38,12 +35,7 @@ export function database(): D1DatabaseLike {
 export function requestIdentity(request: Request) {
   const email = authenticatedEmail(request);
   if (!email) throw new Error("Autenticación requerida");
-  const encoded = request.headers.get("oai-authenticated-user-full-name");
-  const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
-  let displayName = email === LOCAL_DEMO_EMAIL ? "Usuario demo Nubelia" : email;
-  if (encoded && encoding === "percent-encoded-utf-8") {
-    try { displayName = decodeURIComponent(encoded); } catch { /* email is the safe fallback */ }
-  }
+  const displayName = email === LOCAL_DEMO_EMAIL ? "Usuario piloto" : email;
   return { id: `user:${email}`, email, displayName };
 }
 

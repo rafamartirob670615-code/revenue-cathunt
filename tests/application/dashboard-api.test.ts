@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("el dashboard usa identidad y estado persistido, no cifras demostrativas", async () => {
   const source = await readFile(new URL("../../app/api/dashboard/route.ts", import.meta.url), "utf8");
-  assert.match(source, /oai-authenticated-user-email/);
+  assert.match(source, /authenticatedEmail/);
   assert.match(source, /plan_aggregates/);
   assert.match(source, /input_package_files/);
   assert.match(source, /input_package_reviews/);

@@ -35,19 +35,13 @@ function database(): D1DatabaseLike {
 }
 
 function authenticatedEmail(request: Request) {
-  // Production identity is supplied by oai-authenticated-user-email; localhost uses the demo account.
+  // The standalone pilot uses the same browser-agnostic identity adapter as every API route.
   return resolveAuthenticatedEmail(request);
 }
 
 function displayName(request: Request) {
-  const value = request.headers.get("oai-authenticated-user-full-name");
-  const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
-  if (!value || encoding !== "percent-encoded-utf-8") return undefined;
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return undefined;
-  }
+  void request;
+  return "Usuario piloto";
 }
 
 function deriveStage(

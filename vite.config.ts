@@ -11,7 +11,7 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
 // free tier, and the Alfa Turmix monitoring view (the one in production use) doesn't
 // read from R2 — only the "Crear Plan anual" builder flow does, and that's not reachable
 // without a role assignment in this deploy yet.
-const CATHUNT_D1_DATABASE_ID = "3e6c8c71-1a53-43b1-9d07-1974fc3dbbf7";
+const CATHUNT_D1_DATABASE_ID = "9bfb409a-3ec6-4876-8ceb-3f5d97e4439b";
 const CATHUNT_D1_DATABASE_NAME = "revenue-planning-db";
 
 const { d1, r2: hostingR2 } = hostingConfig;
