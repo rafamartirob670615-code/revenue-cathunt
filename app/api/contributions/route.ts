@@ -1,6 +1,7 @@
-import { accessError, authorizePlan, database, ensureUser, requestIdentity } from "../_access.ts";
+import { accessError, authorizePlan, ensureUser, requestIdentity } from "../_access.ts";
+import { database } from "../_infrastructure.ts";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 type ContributionInput = {
   planId?: string;

@@ -1,31 +1,12 @@
-import { env } from "cloudflare:workers";
 import {
   calculateBaselineFromAcceptedPackage,
   calculateBaselineFromCanonicalSales,
 } from "../../../domain/baseline-engine.ts";
 import type { CanonicalSalesRow } from "../../../domain/excel-intake.ts";
-import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 import { authorizePlan } from "../_access.ts";
+import { database, files } from "../_infrastructure.ts";
 
-export const runtime = "edge";
-
-interface StoredObject {
-  text(): Promise<string>;
-}
-
-interface R2BucketLike {
-  get(key: string): Promise<StoredObject | null>;
-}
-
-function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia no disponible");
-  return env.DB as unknown as D1DatabaseLike;
-}
-
-function files(): R2BucketLike {
-  if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
-  return env.FILES as unknown as R2BucketLike;
-}
+export const runtime = "nodejs";
 
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos calcular el baseline";

@@ -154,7 +154,11 @@ function fieldForHeader(header: unknown): SalesField | undefined {
   );
 }
 
-function findHeader(rows: WorkbookCell[][]) {
+function findHeader(rows: WorkbookCell[][]): {
+  index: number;
+  score: number;
+  mapping: Partial<Record<SalesField, number>>;
+} | null {
   let best: { index: number; score: number; mapping: Partial<Record<SalesField, number>> } | null = null;
   rows.slice(0, 30).forEach((row, index) => {
     const mapping: Partial<Record<SalesField, number>> = {};
@@ -175,7 +179,11 @@ function activityFieldForHeader(header: unknown): ActivityField | undefined {
   );
 }
 
-function findActivityHeader(rows: WorkbookCell[][]) {
+function findActivityHeader(rows: WorkbookCell[][]): {
+  index: number;
+  score: number;
+  mapping: Partial<Record<ActivityField, number>>;
+} | null {
   let best: { index: number; score: number; mapping: Partial<Record<ActivityField, number>> } | null = null;
   rows.slice(0, 30).forEach((row, index) => {
     const mapping: Partial<Record<ActivityField, number>> = {};
@@ -455,7 +463,10 @@ const financialAliases: Record<string, string[]> = {
 
 export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: FinancialRequirement) {
   const fields = [...FINANCIAL_FIELDS[requirement]];
-  const candidates = sheets.map((sheet) => {
+  const candidates = sheets.map((sheet): {
+    sheet: WorkbookSheet;
+    header: { index: number; score: number; indexes: Record<string, number> } | null;
+  } => {
     let best: { index: number; score: number; indexes: Record<string, number> } | null = null;
     sheet.rows.slice(0, 30).forEach((row, index) => {
       const indexes: Record<string, number> = {};

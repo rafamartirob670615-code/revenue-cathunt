@@ -1,8 +1,6 @@
-import { env } from "cloudflare:workers";
 import {
-  D1PlanRepository,
-  type D1DatabaseLike,
-} from "../../../application/d1-repository.ts";
+  SqlPlanRepository,
+} from "../../../application/sql-repository.ts";
 import {
   PlanService,
   type CalculationInput,
@@ -10,19 +8,14 @@ import {
 } from "../../../application/plan-service.ts";
 import type { Approval, Plan } from "../../../domain/types.ts";
 import { authorizePlan, authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
+import { database } from "../_infrastructure.ts";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 function service(): PlanService {
-  if (!env.DB) throw new Error("Persistencia de Plan no disponible");
   return new PlanService(
-    new D1PlanRepository(env.DB as unknown as D1DatabaseLike),
+    new SqlPlanRepository(database()),
   );
-}
-
-function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia de Plan no disponible");
-  return env.DB as unknown as D1DatabaseLike;
 }
 
 function authenticatedEmail(request: Request): string | undefined {
@@ -68,8 +61,8 @@ export async function GET(request: Request): Promise<Response> {
          JOIN organization_memberships om ON om.id = aa.membership_id AND om.status = 'ACTIVE'
          JOIN users u ON u.id = om.user_id
          WHERE lower(u.email) = lower(?)
-           AND datetime(aa.valid_from) <= datetime('now')
-           AND (aa.valid_until IS NULL OR datetime(aa.valid_until) >= datetime('now'))`,
+           AND aa.valid_from::timestamptz <= now()
+           AND (aa.valid_until IS NULL OR aa.valid_until::timestamptz >= now())`,
       ).bind(email).run<{ aggregate_json: string }>();
       const byId = new Map(owned.map((plan) => [plan.id, plan]));
       for (const row of assignedRows.results ?? []) {

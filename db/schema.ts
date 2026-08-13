@@ -1,6 +1,8 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, pgSchema, real, text, uniqueIndex } from "drizzle-orm/pg-core";
 
-export const users = sqliteTable(
+const revenue = pgSchema("revenue");
+
+export const users = revenue.table(
   "users",
   {
     id: text("id").primaryKey(),
@@ -13,7 +15,7 @@ export const users = sqliteTable(
   (table) => [uniqueIndex("user_email_uq").on(table.email)],
 );
 
-export const organizationMemberships = sqliteTable(
+export const organizationMemberships = revenue.table(
   "organization_memberships",
   {
     id: text("id").primaryKey(),
@@ -34,7 +36,7 @@ export const organizationMemberships = sqliteTable(
   ],
 );
 
-export const accessAssignments = sqliteTable(
+export const accessAssignments = revenue.table(
   "access_assignments",
   {
     id: text("id").primaryKey(),
@@ -58,7 +60,7 @@ export const accessAssignments = sqliteTable(
   ],
 );
 
-export const planContributions = sqliteTable(
+export const planContributions = revenue.table(
   "plan_contributions",
   {
     id: text("id").primaryKey(),
@@ -93,7 +95,7 @@ export const planContributions = sqliteTable(
   ],
 );
 
-export const plans = sqliteTable(
+export const plans = revenue.table(
   "plans",
   {
     id: text("id").primaryKey(),
@@ -113,7 +115,7 @@ export const plans = sqliteTable(
   ],
 );
 
-export const planVersions = sqliteTable(
+export const planVersions = revenue.table(
   "plan_versions",
   {
     id: text("id").primaryKey(),
@@ -132,7 +134,7 @@ export const planVersions = sqliteTable(
   ],
 );
 
-export const planLines = sqliteTable(
+export const planLines = revenue.table(
   "plan_lines",
   {
     id: text("id").primaryKey(),
@@ -155,7 +157,7 @@ export const planLines = sqliteTable(
   ],
 );
 
-export const baselineResults = sqliteTable("baseline_results", {
+export const baselineResults = revenue.table("baseline_results", {
   id: text("id").primaryKey(),
   versionId: text("version_id").notNull().references(() => planVersions.id),
   accountId: text("account_id").notNull(),
@@ -171,7 +173,7 @@ export const baselineResults = sqliteTable("baseline_results", {
   evidenceJson: text("evidence_json").notNull(),
 });
 
-export const buildingBlockDefinitions = sqliteTable(
+export const buildingBlockDefinitions = revenue.table(
   "building_block_definitions",
   {
     id: text("id").primaryKey(),
@@ -180,15 +182,15 @@ export const buildingBlockDefinitions = sqliteTable(
     family: text("family").notNull(),
     economicTreatment: text("economic_treatment").notNull(),
     ownerFunction: text("owner_function").notNull(),
-    requiresEvidence: integer("requires_evidence", { mode: "boolean" }).notNull(),
-    requiresApproval: integer("requires_approval", { mode: "boolean" }).notNull(),
-    active: integer("active", { mode: "boolean" }).notNull(),
+    requiresEvidence: integer("requires_evidence").notNull(),
+    requiresApproval: integer("requires_approval").notNull(),
+    active: integer("active").notNull(),
     version: integer("version").notNull(),
   },
   (table) => [uniqueIndex("building_block_code_version_uq").on(table.code, table.version)],
 );
 
-export const activities = sqliteTable(
+export const activities = revenue.table(
   "activities",
   {
     id: text("id").primaryKey(),
@@ -199,7 +201,7 @@ export const activities = sqliteTable(
     name: text("name").notNull(),
     status: text("status").notNull(),
     parentActivityId: text("parent_activity_id"),
-    includesChildren: integer("includes_children", { mode: "boolean" }),
+    includesChildren: integer("includes_children"),
     baselineInclusionKey: text("baseline_inclusion_key"),
     ownerId: text("owner_id").notNull(),
     evidenceJson: text("evidence_json").notNull(),
@@ -213,7 +215,7 @@ export const activities = sqliteTable(
   ],
 );
 
-export const incrementLedger = sqliteTable(
+export const incrementLedger = revenue.table(
   "increment_ledger",
   {
     id: text("id").primaryKey(),
@@ -245,7 +247,7 @@ export const incrementLedger = sqliteTable(
   ],
 );
 
-export const interactions = sqliteTable("interactions", {
+export const interactions = revenue.table("interactions", {
   id: text("id").primaryKey(),
   versionId: text("version_id").notNull().references(() => planVersions.id),
   activityAId: text("activity_a_id").notNull().references(() => activities.id),
@@ -259,7 +261,7 @@ export const interactions = sqliteTable("interactions", {
   approvedBy: text("approved_by"),
 });
 
-export const overrides = sqliteTable("overrides", {
+export const overrides = revenue.table("overrides", {
   id: text("id").primaryKey(),
   versionId: text("version_id").notNull().references(() => planVersions.id),
   kind: text("kind").notNull(),
@@ -274,7 +276,7 @@ export const overrides = sqliteTable("overrides", {
   approvedAt: text("approved_at"),
 });
 
-export const validations = sqliteTable("validations", {
+export const validations = revenue.table("validations", {
   id: text("id").primaryKey(),
   versionId: text("version_id").notNull().references(() => planVersions.id),
   code: text("code").notNull(),
@@ -284,7 +286,7 @@ export const validations = sqliteTable("validations", {
   lineKeyJson: text("line_key_json"),
 });
 
-export const approvals = sqliteTable("approvals", {
+export const approvals = revenue.table("approvals", {
   id: text("id").primaryKey(),
   versionId: text("version_id").notNull().references(() => planVersions.id),
   stage: text("stage").notNull(),
@@ -294,14 +296,14 @@ export const approvals = sqliteTable("approvals", {
   comment: text("comment"),
 });
 
-export const planAggregates = sqliteTable("plan_aggregates", {
+export const planAggregates = revenue.table("plan_aggregates", {
   planId: text("plan_id").primaryKey(),
   revision: integer("revision").notNull(),
   aggregateJson: text("aggregate_json").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
 
-export const commandReceipts = sqliteTable("command_receipts", {
+export const commandReceipts = revenue.table("command_receipts", {
   commandId: text("command_id").primaryKey(),
   planId: text("plan_id").notNull(),
   commandType: text("command_type").notNull(),
@@ -309,7 +311,7 @@ export const commandReceipts = sqliteTable("command_receipts", {
   createdAt: text("created_at").notNull(),
 });
 
-export const versionSnapshots = sqliteTable(
+export const versionSnapshots = revenue.table(
   "version_snapshots",
   {
     versionId: text("version_id").primaryKey(),
@@ -321,7 +323,7 @@ export const versionSnapshots = sqliteTable(
   (table) => [index("version_snapshot_plan_idx").on(table.planId)],
 );
 
-export const inputPackageFiles = sqliteTable(
+export const inputPackageFiles = revenue.table(
   "input_package_files",
   {
     id: text("id").primaryKey(),
@@ -345,7 +347,7 @@ export const inputPackageFiles = sqliteTable(
   ],
 );
 
-export const inputPackageReviews = sqliteTable("input_package_reviews", {
+export const inputPackageReviews = revenue.table("input_package_reviews", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
   contractVersion: text("contract_version").notNull(),
@@ -354,7 +356,7 @@ export const inputPackageReviews = sqliteTable("input_package_reviews", {
   acceptedAt: text("accepted_at").notNull(),
 });
 
-export const canonicalDatasets = sqliteTable(
+export const canonicalDatasets = revenue.table(
   "canonical_datasets",
   {
     id: text("id").primaryKey(),
@@ -377,7 +379,7 @@ export const canonicalDatasets = sqliteTable(
   ],
 );
 
-export const baselineCalculations = sqliteTable("baseline_calculations", {
+export const baselineCalculations = revenue.table("baseline_calculations", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
   resultJson: text("result_json").notNull(),
@@ -386,7 +388,7 @@ export const baselineCalculations = sqliteTable("baseline_calculations", {
   calculatedAt: text("calculated_at").notNull(),
 });
 
-export const baselineReviews = sqliteTable("baseline_reviews", {
+export const baselineReviews = revenue.table("baseline_reviews", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
   calculationCalculatedAt: text("calculation_calculated_at").notNull(),
@@ -398,7 +400,7 @@ export const baselineReviews = sqliteTable("baseline_reviews", {
   frozenAt: text("frozen_at"),
 });
 
-export const growthPlans = sqliteTable("growth_plans", {
+export const growthPlans = revenue.table("growth_plans", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
   resultJson: text("result_json").notNull(),
@@ -407,7 +409,7 @@ export const growthPlans = sqliteTable("growth_plans", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const planResults = sqliteTable("plan_results", {
+export const planResults = revenue.table("plan_results", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
   resultJson: text("result_json").notNull(),
@@ -416,7 +418,7 @@ export const planResults = sqliteTable("plan_results", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const financialResults = sqliteTable("financial_results", {
+export const financialResults = revenue.table("financial_results", {
   planId: text("plan_id").primaryKey(),
   ownerId: text("owner_id").notNull(),
   resultJson: text("result_json").notNull(),
@@ -425,7 +427,7 @@ export const financialResults = sqliteTable("financial_results", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const monitoringActions = sqliteTable(
+export const monitoringActions = revenue.table(
   "monitoring_actions",
   {
     id: text("id").primaryKey(),
@@ -438,7 +440,7 @@ export const monitoringActions = sqliteTable(
     actualValue: real("actual_value").notNull(),
     varianceValue: real("variance_value").notNull(),
     varianceRate: real("variance_rate"),
-    material: integer("material", { mode: "boolean" }).notNull(),
+    material: integer("material").notNull(),
     cause: text("cause").notNull(),
     evidence: text("evidence").notNull(),
     action: text("action").notNull(),

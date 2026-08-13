@@ -1,12 +1,10 @@
-// Recibe el token de un solo uso que genera el Hub. REVENUE usa D1 (Cloudflare)
-// como base propia, no Supabase — este endpoint valida el token por REST
-// directo a Supabase (fetch nativo, sin dependencias nuevas) usando las
-// variables SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (deben agregarse como
-// secretos del Worker con `wrangler secret put`, no existen todavía).
+// Recibe el token de un solo uso que genera el Hub. REVENUE y el Hub comparten
+// el backend CatHunt en Supabase. La validación REST es una compatibilidad
+// opcional y permanece inactiva mientras el Hub anuncie `sso_auth = false`.
 // REVENUE ya opera con una identidad pública fija (pilot@revenue.local, ver
 // app/api/_access.ts) — esto no cambia esa lógica, solo cierra el ciclo de
 // auditoría del SSO. Nunca bloquea el acceso si Supabase falla.
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

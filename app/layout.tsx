@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import "./globals.css";
 import LegalNotice from "./LegalNotice";
-
-const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "REVENUE | Crear Plan anual",
@@ -12,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body className={geist.variable}>{children}<LegalNotice /></body></html>;
+  return <html lang="es"><body>{children}<LegalNotice /></body></html>;
 }

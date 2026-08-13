@@ -1,9 +1,8 @@
-import { env } from "cloudflare:workers";
-import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
+import { database } from "../_infrastructure.ts";
 import type { Plan, PlanStatus } from "../../../domain/types.ts";
 import { authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 type DashboardStage =
   | "PREPARE_INFORMATION"
@@ -27,11 +26,6 @@ interface DashboardPlan {
   readyFiles: number;
   packageAccepted: boolean;
   updatedAt: string;
-}
-
-function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia no disponible");
-  return env.DB as unknown as D1DatabaseLike;
 }
 
 function authenticatedEmail(request: Request) {
@@ -121,14 +115,14 @@ export async function GET(request: Request) {
             WHERE fr.plan_id = pa.plan_id
           ), 0) AS profitability_count
         FROM plan_aggregates pa
-        WHERE json_extract(pa.aggregate_json, '$.versions[0].createdBy') = ?
+        WHERE pa.aggregate_json::jsonb #>> '{versions,0,createdBy}' = ?
            OR EXISTS (
              SELECT 1 FROM access_assignments aa
              JOIN organization_memberships om ON om.id = aa.membership_id AND om.status = 'ACTIVE'
              JOIN users u ON u.id = om.user_id
              WHERE aa.scope_type = 'PLAN' AND aa.scope_id = pa.plan_id AND lower(u.email) = lower(?)
-               AND datetime(aa.valid_from) <= datetime('now')
-               AND (aa.valid_until IS NULL OR datetime(aa.valid_until) >= datetime('now'))
+               AND aa.valid_from::timestamptz <= now()
+               AND (aa.valid_until IS NULL OR aa.valid_until::timestamptz >= now())
            )
         ORDER BY pa.updated_at DESC`,
       )

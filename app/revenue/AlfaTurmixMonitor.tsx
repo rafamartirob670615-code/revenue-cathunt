@@ -51,6 +51,7 @@ export default function AlfaTurmixMonitor() {
     setFilters((current) => ({ ...current, account: "Todos" }));
   }
   function exportBilling() {
+    if (!body) return;
     const header = ["Territorio","Cuenta","Agrupación","Canal","Subcanal","Familia","Producto","Periodo","Actual","Plan","Variación"];
     const rows = (body.exportRows ?? body.rows).map((row) => [row.territory,row.account,row.accountGroup,row.channel,row.subchannel,row.family,row.product,row.period,row.actualValue,row.acceptedPlanValue,row.actualValue - row.acceptedPlanValue]);
     const sheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
