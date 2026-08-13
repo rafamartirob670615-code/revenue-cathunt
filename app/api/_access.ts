@@ -1,5 +1,4 @@
-import { env } from "cloudflare:workers";
-import type { D1DatabaseLike } from "../../application/d1-repository.ts";
+import { database } from "./_infrastructure.ts";
 import type { Capability, BusinessFunction, RevenueIdentity } from "../revenue/access.ts";
 import type { Plan } from "../../domain/types.ts";
 
@@ -26,11 +25,6 @@ export function authenticatedEmail(request: Request): string | undefined {
 
 export type AssignableCapability = (typeof ASSIGNABLE_CAPABILITIES)[number];
 export type MonitoringAccessRule = { type: "ALL" | "ACCOUNT" | "TERRITORY" | "CHANNEL" | "FAMILY"; value?: string };
-
-export function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia no disponible");
-  return env.DB as unknown as D1DatabaseLike;
-}
 
 export function requestIdentity(request: Request) {
   const email = authenticatedEmail(request);
@@ -69,8 +63,8 @@ export async function planCapabilities(email: string, planId: string): Promise<C
      JOIN users u ON u.id = om.user_id
      WHERE lower(u.email) = lower(?) AND u.status = 'ACTIVE' AND om.status = 'ACTIVE'
        AND aa.scope_type = 'PLAN' AND aa.scope_id = ?
-       AND datetime(aa.valid_from) <= datetime('now')
-       AND (aa.valid_until IS NULL OR datetime(aa.valid_until) >= datetime('now'))`,
+       AND aa.valid_from::timestamptz <= now()
+       AND (aa.valid_until IS NULL OR aa.valid_until::timestamptz >= now())`,
   ).bind(email, planId).run<{ capability: Capability }>();
   return (result.results ?? []).map((row) => row.capability);
 }
@@ -102,14 +96,14 @@ export async function resolveRevenueIdentity(request: Request): Promise<RevenueI
      FROM organization_memberships om
      JOIN access_assignments aa ON aa.membership_id = om.id
      WHERE om.user_id = ? AND om.status = 'ACTIVE'
-       AND datetime(aa.valid_from) <= datetime('now')
-       AND (aa.valid_until IS NULL OR datetime(aa.valid_until) >= datetime('now'))`,
+       AND aa.valid_from::timestamptz <= now()
+       AND (aa.valid_until IS NULL OR aa.valid_until::timestamptz >= now())`,
   ).bind(actor.id).run<{ business_function: BusinessFunction; capability: Capability }>();
   const functions = [...new Set((rows.results ?? []).map((row) => row.business_function))];
   const capabilities = [...new Set((rows.results ?? []).map((row) => row.capability))];
   const owned = await database().prepare(
     `SELECT 1 AS owned FROM plan_aggregates
-     WHERE lower(json_extract(aggregate_json,'$.versions[0].createdBy'))=lower(?) LIMIT 1`,
+     WHERE lower(aggregate_json::jsonb #>> '{versions,0,createdBy}')=lower(?) LIMIT 1`,
   ).bind(actor.email).first<{ owned: number }>();
   if (owned || actor.email === LOCAL_DEMO_EMAIL) {
     for (const capability of ["PLAN_CREATE", "PLAN_INTEGRATE", "BASELINE_REVIEW", "MONITOR"] as Capability[]) {

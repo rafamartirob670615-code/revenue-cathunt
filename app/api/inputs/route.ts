@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import * as XLSX from "xlsx";
 import {
   canAcceptInputPackage,
@@ -12,24 +11,10 @@ import {
   analyzeFinancialWorkbook,
   type WorkbookCell,
 } from "../../../domain/excel-intake.ts";
-import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 import { authorizePlan } from "../_access.ts";
+import { database, files } from "../_infrastructure.ts";
 
-export const runtime = "edge";
-
-interface R2BucketLike {
-  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
-}
-
-function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia no disponible");
-  return env.DB as unknown as D1DatabaseLike;
-}
-
-function files(): R2BucketLike {
-  if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
-  return env.FILES as unknown as R2BucketLike;
-}
+export const runtime = "nodejs";
 
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos recibir el archivo";
@@ -219,7 +204,7 @@ export async function POST(request: Request) {
       const validation = validateCsvContent(requirementId, text);
       status = validation.status;
       issues = validation.issues;
-      summary = validation.summary;
+      summary = { ...validation.summary };
       missingFields = validation.issues
         .filter((issue) => issue.code === "MISSING_FIELDS")
         .flatMap((issue) =>

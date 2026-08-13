@@ -1,20 +1,8 @@
-import { env } from "cloudflare:workers";
-import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 import { authorizePlan } from "../_access.ts";
+import { database, files } from "../_infrastructure.ts";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 type DataClassification = "USER_PROVIDED" | "SYNTHETIC_NON_COMMERCIAL";
-interface R2ObjectLike { text(): Promise<string> }
-interface R2BucketLike { get(key: string): Promise<R2ObjectLike | null> }
-
-function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia no disponible");
-  return env.DB as unknown as D1DatabaseLike;
-}
-function files(): R2BucketLike {
-  if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
-  return env.FILES as unknown as R2BucketLike;
-}
 function responseError(error: unknown) {
   const message = error instanceof Error ? error.message : "No pudimos preparar el crecimiento";
   const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;

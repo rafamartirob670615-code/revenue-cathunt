@@ -6,26 +6,26 @@ import type {
   VersionSnapshot,
 } from "./repository.ts";
 
-interface D1Result<T> {
+interface SqlResult<T> {
   results?: T[];
   meta?: { changes?: number };
 }
 
-interface D1Statement {
-  bind(...values: unknown[]): D1Statement;
+interface SqlStatement {
+  bind(...values: unknown[]): SqlStatement;
   first<T>(): Promise<T | null>;
-  run<T>(): Promise<D1Result<T>>;
+  run<T>(): Promise<SqlResult<T>>;
 }
 
-export interface D1DatabaseLike {
-  prepare(sql: string): D1Statement;
-  batch<T = unknown>(statements: D1Statement[]): Promise<D1Result<T>[]>;
+export interface SqlDatabaseLike {
+  prepare(sql: string): SqlStatement;
+  batch<T = unknown>(statements: SqlStatement[]): Promise<SqlResult<T>[]>;
 }
 
-export class D1PlanRepository implements PlanRepository {
-  private readonly db: D1DatabaseLike;
+export class SqlPlanRepository implements PlanRepository {
+  private readonly db: SqlDatabaseLike;
 
-  constructor(db: D1DatabaseLike) {
+  constructor(db: SqlDatabaseLike) {
     this.db = db;
   }
 
@@ -42,7 +42,7 @@ export class D1PlanRepository implements PlanRepository {
   async listByCreator(creatorId: string): Promise<StoredPlan[]> {
     const rows = await this.db
       .prepare(
-        "SELECT aggregate_json, revision FROM plan_aggregates WHERE json_extract(aggregate_json, '$.versions[0].createdBy') = ? ORDER BY updated_at DESC",
+        "SELECT aggregate_json, revision FROM plan_aggregates WHERE aggregate_json::jsonb #>> '{versions,0,createdBy}' = ? ORDER BY updated_at DESC",
       )
       .bind(creatorId)
       .run<{ aggregate_json: string; revision: number }>();

@@ -3,14 +3,14 @@ import {
   accessError,
   ASSIGNABLE_CAPABILITIES,
   authorizePlan,
-  database,
   ensureUser,
   planRecord,
   requestIdentity,
   type AssignableCapability,
 } from "../../_access.ts";
+import { database } from "../../_infrastructure.ts";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const FUNCTION_BY_CAPABILITY: Record<AssignableCapability, BusinessFunction> = {
   MARKETING_CONTRIBUTE: "MARKETING",

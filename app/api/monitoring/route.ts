@@ -1,22 +1,7 @@
-import { env } from "cloudflare:workers";
-import type { D1DatabaseLike } from "../../../application/d1-repository.ts";
 import { planRecord, requestIdentity } from "../_access.ts";
+import { database, files } from "../_infrastructure.ts";
 
-export const runtime = "edge";
-
-interface R2BucketLike {
-  get(key: string): Promise<{ text(): Promise<string> } | null>;
-}
-
-function database(): D1DatabaseLike {
-  if (!env.DB) throw new Error("Persistencia no disponible");
-  return env.DB as unknown as D1DatabaseLike;
-}
-
-function files(): R2BucketLike {
-  if (!env.FILES) throw new Error("Almacenamiento de archivos no disponible");
-  return env.FILES as unknown as R2BucketLike;
-}
+export const runtime = "nodejs";
 
 async function canonicalRows(planId: string, ownerId: string, requirementId: string) {
   const dataset = await database().prepare(
