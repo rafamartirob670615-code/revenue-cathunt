@@ -26,7 +26,7 @@ test("rechaza un export con contract_version distinto de activity_export_v1", ()
   );
 });
 
-test("convierte el export de PROMOCIÓN V3 al CSV de actividades que espera el motor de baseline", () => {
+test("convierte el export de PROMOCIÓN al CSV de actividades que espera el motor de baseline", () => {
   const csv = activitiesCsvFromPromocionExport(loadFixture());
   const lines = csv.split("\n");
   assert.equal(lines[0], "activity_id,activity_type,account_id,sku_id,start_period,end_period,impact_units");
@@ -63,7 +63,7 @@ test("ignora actividades sin account_id en vez de fallar toda la conversión", (
   assert.equal(csv.split("\n").length, 1); // solo el encabezado
 });
 
-test("integración de punta a punta: el export sintético de PROMOCIÓN V3 desimpacta la base de REVENUE", () => {
+test("integración de punta a punta: el export sintético de PROMOCIÓN desimpacta la base de REVENUE", () => {
   const activitiesCsv = activitiesCsvFromPromocionExport(loadFixture());
 
   const salesCsv = [

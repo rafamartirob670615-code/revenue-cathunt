@@ -1,10 +1,10 @@
 /**
- * Importador del contrato `activity_export_v1` de PROMOCIÓN V3.
+ * Importador del contrato `activity_export_v1` de PROMOCIÓN.
  *
- * PROMOCIÓN V3 exporta eventos comerciales cerrados (FAM/FAP) aprobados,
+ * PROMOCIÓN exporta eventos comerciales cerrados (FAM/FAP) aprobados,
  * versionados y con `allocationStatus = ALLOCATED` — ver
- * `PROMOCION V3/docs/FASE_6_IMPORTADORES_ACTUALS_Y_EXPORT_REVENUE_V1.md` y
- * la función `buildRevenueActivityExport()` en `PROMOCION V3/index.html`.
+ * `PROMOCION/docs/FASE_6_IMPORTADORES_ACTUALS_Y_EXPORT_REVENUE_V1.md` y
+ * la función `buildRevenueActivityExport()` en `PROMOCION/index.html`.
  *
  * Este módulo convierte ese export al formato de `activitiesCsv` que espera
  * `calculateBaselineFromAcceptedPackage` en `baseline-engine.ts`
@@ -13,12 +13,12 @@
  * que cierra.
  *
  * BRECHA DE CONTRATO CONOCIDA (documentada aquí a propósito, no oculta):
- * el export real de PROMOCIÓN V3 (`buildRevenueActivityExport`) hoy solo
+ * el export real de PROMOCIÓN (`buildRevenueActivityExport`) hoy solo
  * lleva montos (`planned_investment`, `planned_result`), no unidades. El
  * motor de baseline de REVENUE necesita `impact_units` (unidades), no
- * dinero. Para producción, PROMOCIÓN V3 debe agregar un campo de unidades
+ * dinero. Para producción, PROMOCIÓN debe agregar un campo de unidades
  * (`impact_units` o `units`) a cada actividad exportada — hoy no existe.
- * Mientras ese campo no exista del lado de PROMOCIÓN V3, este importador:
+ * Mientras ese campo no exista del lado de PROMOCIÓN, este importador:
  *   - Si la actividad trae `impact_units` o `units`, los usa directamente.
  *   - Si no, lanza un error explícito en vez de inventar un número
  *     (nunca convierte dinero a unidades con un precio supuesto).
@@ -51,7 +51,7 @@ function csvEscape(value: string): string {
 }
 
 /**
- * Convierte un export `activity_export_v1` de PROMOCIÓN V3 en el texto CSV
+ * Convierte un export `activity_export_v1` de PROMOCIÓN en el texto CSV
  * de actividades que `calculateBaselineFromAcceptedPackage` espera como
  * `activitiesCsv`.
  *
@@ -82,7 +82,7 @@ export function activitiesCsvFromPromocionExport(
     if (units === undefined || units === null) {
       throw new Error(
         `La actividad ${activity.activity_id} no trae unidades (impact_units/units). ` +
-          "PROMOCIÓN V3 debe exportar unidades, no solo montos, antes de usarse en producción.",
+          "PROMOCIÓN debe exportar unidades, no solo montos, antes de usarse en producción.",
       );
     }
     if (!Number.isFinite(units) || units < 0) {
@@ -96,7 +96,7 @@ export function activitiesCsvFromPromocionExport(
       rows.push(
         [
           csvEscape(activity.activity_id),
-          csvEscape(activity.activity_type ?? "PROMOCION_V3"),
+          csvEscape(activity.activity_type ?? "PROMOCION"),
           csvEscape(activity.account_id),
           csvEscape(skuId),
           csvEscape(activity.month),

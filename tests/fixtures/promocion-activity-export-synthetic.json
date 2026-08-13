@@ -3,7 +3,7 @@
   "generated_at": "2026-12-15T00:00:00.000Z",
   "source_system": "PROMOCION_LOCAL",
   "status": "READY",
-  "_nota": "Fixture sintética para pruebas de integración REVENUE <- PROMOCIÓN V3. No representa datos comerciales reales. Forma alineada a buildRevenueActivityExport() en PROMOCION V3/index.html (2026-08-11): incluye impact_units, ya construido con el evento (actualUnits si el evento cerró, si no plannedUnits).",
+  "_nota": "Fixture sintética para pruebas de integración REVENUE <- PROMOCIÓN. No representa datos comerciales reales. Forma alineada a buildRevenueActivityExport() en PROMOCION/index.html (2026-08-11): incluye impact_units, ya construido con el evento (actualUnits si el evento cerró, si no plannedUnits).",
   "activities": [
     {
       "activity_id": "EV-2026-014",
