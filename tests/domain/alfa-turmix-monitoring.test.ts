@@ -10,6 +10,11 @@ import {
   summarizeAlfaTurmixRows,
 } from "../../domain/alfa-turmix-monitoring.ts";
 
+const accounts = [
+  { id: "UCM-TEST-1", name: "Cuenta sintética", group: "Grupo sintético", territory: "Norte", channel: "Retail Moderno", subchannel: "General" },
+  { id: "UCM-TEST-2", name: "Cuenta sintética 2", group: "(Individual)", territory: "Centro", channel: "Especialistas", subchannel: "General" },
+] as const;
+
 test("ALFA Turmix uses the current Electrodomésticos taxonomy", () => {
   assert.deepEqual([...ALFA_FAMILIES], [
     "Complementos de cocina",
@@ -23,8 +28,8 @@ test("ALFA Turmix uses the current Electrodomésticos taxonomy", () => {
 });
 
 test("ALFA Turmix generates a complete twelve-month monitoring grain", () => {
-  const rows = createAlfaTurmixRows();
-  const accountCount = alfaTurmixCatalog().accounts.length;
+  const rows = createAlfaTurmixRows(accounts);
+  const accountCount = alfaTurmixCatalog(accounts).accounts.length;
   assert.ok(accountCount > 0);
   assert.equal(rows.length, 12 * accountCount * 6 * 2);
   assert.equal(new Set(rows.map((row) => row.period)).size, 12);
@@ -34,7 +39,7 @@ test("ALFA Turmix generates a complete twelve-month monitoring grain", () => {
 });
 
 test("ALFA Turmix filters and reconciles plan, actual and year-ago", () => {
-  const rows = createAlfaTurmixRows();
+  const rows = createAlfaTurmixRows(accounts);
   const filtered = filterAlfaTurmixRows(rows, { family: "Licuadoras", territory: "Centro" });
   assert.equal(filtered.length, 12 * 2 * new Set(rows.filter((row) => row.territory === "Centro").map((row) => row.account)).size);
   const summary = summarizeAlfaTurmixRows(filtered);
@@ -45,7 +50,7 @@ test("ALFA Turmix filters and reconciles plan, actual and year-ago", () => {
 });
 
 test("the Billing matrix keeps the Excel reading pattern", () => {
-  const matrix = createAlfaTurmixBillingMatrix(createAlfaTurmixRows());
+  const matrix = createAlfaTurmixBillingMatrix(createAlfaTurmixRows(accounts));
   assert.equal(matrix.length, 7);
   assert.equal(matrix[0].label, "Complementos de cocina");
   assert.equal(matrix.at(-1)?.label, "TOTAL ELECTRODOMÉSTICOS");

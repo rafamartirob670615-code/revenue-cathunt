@@ -1,9 +1,16 @@
-import { ALFA_UNIVERSE_ACCOUNTS } from "./alfa-turmix-universe.ts";
-
 export const ALFA_TURMIX_DATASET = "ALFA_TURMIX_SINTETICO_NO_COMERCIAL" as const;
 export const ALFA_TURMIX_LABEL = "ALFA Turmix · Datos sintéticos no comerciales" as const;
 export const ALFA_TURMIX_YEAR = 2027;
-export const ALFA_UNIVERSE_SOURCE = "universe_master.csv (199 cuentas)";
+export const ALFA_UNIVERSE_SOURCE = "CANÓNICOS · public.cuentas";
+
+export type AlfaUniverseAccount = {
+  id: string;
+  name: string;
+  group: string;
+  territory: string;
+  channel: string;
+  subchannel: string;
+};
 
 export const ALFA_FAMILIES = [
   "Complementos de cocina",
@@ -43,8 +50,6 @@ export type AlfaBillingFilters = Partial<Pick<AlfaBillingRow,
   "subchannel" | "category" | "family" | "product"
 >>;
 
-const accounts = ALFA_UNIVERSE_ACCOUNTS;
-const territories = [...new Set(accounts.map((account) => account.territory))].sort((a, b) => a.localeCompare(b, "es"));
 const products: Record<AlfaFamily, Array<{ name: string; base: number; price: number }>> = {
   "Complementos de cocina": [{ name: "Accesorios Cocina A", base: 420, price: 780 }, { name: "Accesorios Cocina B", base: 310, price: 540 }],
   "Café y Bebidas": [{ name: "Cafetera Turmix", base: 360, price: 1450 }, { name: "Hervidor Turmix", base: 285, price: 890 }],
@@ -63,7 +68,7 @@ function stableAdjustment(seed: number) {
   return 1 + ((seed % 7) - 3) / 100;
 }
 
-export function createAlfaTurmixRows(): AlfaBillingRow[] {
+export function createAlfaTurmixRows(accounts: readonly AlfaUniverseAccount[]): AlfaBillingRow[] {
   const rows: AlfaBillingRow[] = [];
   let seed = 0;
   for (let month = 1; month <= 12; month += 1) {
@@ -121,7 +126,9 @@ export function alfaTurmixOptions(rows: AlfaBillingRow[], key: keyof AlfaBilling
   return [...new Set(rows.map((row) => String(row[key])))].sort((a, b) => a.localeCompare(b, "es"));
 }
 
-export function alfaTurmixCatalog() {
+export function alfaTurmixCatalog(accounts: readonly AlfaUniverseAccount[]) {
+  const territories = [...new Set(accounts.map((account) => account.territory))]
+    .sort((a, b) => a.localeCompare(b, "es"));
   return {
     dataset: ALFA_TURMIX_DATASET,
     label: ALFA_TURMIX_LABEL,

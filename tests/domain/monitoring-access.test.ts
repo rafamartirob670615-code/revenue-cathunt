@@ -4,7 +4,9 @@ import { createAlfaTurmixRows } from "../../domain/alfa-turmix-monitoring.ts";
 import { canMonitoring, createMonitoringOpportunity, personaScope, scopeMonitoringRows } from "../../domain/monitoring-access.ts";
 
 test("cada persona ve sólo el alcance que le corresponde", () => {
-  const rows = createAlfaTurmixRows();
+  const rows = createAlfaTurmixRows([
+    { id: "UCM-TEST-1", name: "Cuenta sintética", group: "(Individual)", territory: "Centro", channel: "Retail Moderno", subchannel: "General" },
+  ]);
   const keyAccountRows = scopeMonitoringRows(rows, personaScope("KEY_ACCOUNT"));
   const tradeRows = scopeMonitoringRows(rows, personaScope("TRADE_MARKETING"));
   const marketingRows = scopeMonitoringRows(rows, personaScope("MARKETING"));

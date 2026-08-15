@@ -14,14 +14,21 @@ Aplicación autónoma de planeación anual comercial y monitoreo Billing.
 ## Arquitectura única
 
 La aplicación usa Next.js nativo en Vercel y Postgres privado en el proyecto
-compartido de Supabase para CatHunt, Drizzle, React/TypeScript y
+compartido de Supabase para CatHunt, React/TypeScript y
 SheetJS. No depende de ChatGPT, encabezados privados, Cloudflare Workers, D1,
 R2, vinext ni bindings de una plataforma específica.
 
-La persistencia y los archivos viven en el esquema privado `revenue`; los
-binarios se guardan en `revenue.file_objects`. Vercel usa una sola credencial
-limitada a ese esquema, exclusivamente en rutas servidoras, y nunca se expone
-como variable `NEXT_PUBLIC_`.
+CANÓNICOS es el propietario único de bases, catálogos, bibliotecas de
+conocimiento, migraciones y datasets maestros. REVENUE sólo conserva interfaz,
+lógica de planeación y adaptadores. La persistencia operativa vive en el esquema
+privado `revenue` del backend compartido de CANÓNICOS; los binarios se guardan en
+`revenue.file_objects`. El universo comercial se lee de `public.cuentas` y el
+catálogo gobernado de building blocks de
+`revenue.building_block_definitions`, siempre desde rutas servidoras.
+
+La historia de esquemas y migraciones que antes vivía en esta app fue trasladada
+a `CANONICOS/supabase/history/revenue/`. Las muestras pequeñas bajo
+`tests/fixtures/` son exclusivamente sintéticas y regenerables.
 
 ## Desarrollo y validación
 
@@ -34,8 +41,9 @@ npm run build
 npm run start
 ```
 
-Variable requerida: `SUPABASE_DATABASE_URL`. Consulta `.env.example`; nunca
-guardes valores secretos en Git.
+Variables requeridas: `SUPABASE_DATABASE_URL`, `SUPABASE_URL` y
+`SUPABASE_SERVICE_ROLE_KEY`. Consulta `.env.example`; nunca guardes valores
+secretos en Git ni expongas la llave de servicio al navegador.
 
 El modo publicado actual es un piloto con datos sintéticos no comerciales y una
 identidad piloto compartida, por lo que funciona sin iniciar sesión en cualquier

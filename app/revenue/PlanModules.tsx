@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
-import { ALFA_UNIVERSE_ACCOUNTS } from "../../domain/alfa-turmix-universe";
+import type { AlfaUniverseAccount } from "../../domain/alfa-turmix-monitoring";
 import type { BaselineResult, BaselineReview, Contribution, GrowthResult, PlanResult, ProfitabilityResult, ReceivedFile } from "./model";
 import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
@@ -53,8 +53,9 @@ export function ContextModule({ plan }: { plan: Plan }) {
 }
 
 export function InformationModule({
-  files, accepted, systemReady, busy, onUpload, onGuidedCapture, onAccept,
+  accounts, files, accepted, systemReady, busy, onUpload, onGuidedCapture, onAccept,
 }: {
+  accounts: AlfaUniverseAccount[];
   files: ReceivedFile[]; accepted: boolean; systemReady: boolean; busy: string;
   onUpload: (requirementId: string, file?: File) => void; onAccept: () => void;
   onGuidedCapture: (requirementId: string, values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) => void;
@@ -78,7 +79,7 @@ export function InformationModule({
         </article>;
       })}
     </section>
-    {draftSource && <GuidedCaptureForm requirementId={draftSource} onCancel={() => setDraftSource(null)} onSubmit={(values) => { onGuidedCapture(draftSource, values); setDraftSource(null); }} />}
+    {draftSource && <GuidedCaptureForm accounts={accounts} requirementId={draftSource} onCancel={() => setDraftSource(null)} onSubmit={(values) => { onGuidedCapture(draftSource, values); setDraftSource(null); }} />}
     <details className="paper-detail"><summary>Fuentes complementarias</summary><div className="source-board compact">
       {PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "CONDITIONAL").map((requirement) => {
         const received = files.find((file) => file.requirementId === requirement.id);
@@ -91,9 +92,9 @@ export function InformationModule({
   </div>;
 }
 
-function GuidedCaptureForm({ requirementId, onCancel, onSubmit }: { requirementId: string; onCancel: () => void; onSubmit: (values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) => void }) {
+function GuidedCaptureForm({ accounts, requirementId, onCancel, onSubmit }: { accounts: AlfaUniverseAccount[]; requirementId: string; onCancel: () => void; onSubmit: (values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) => void }) {
   const requirement = PILOT_INPUT_REQUIREMENTS.find((item) => item.id === requirementId);
-  return <section className="plain-note draft-source"><b>Captura guiada · {requirement?.name}</b><p>Registra una fila mínima. REVENUE la convierte al formato de la fuente, la valida y la guarda junto con el Plan.</p><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onSubmit({ account: String(form.get("account") ?? "").trim(), product: String(form.get("product") ?? "").trim(), period: String(form.get("period") ?? "").trim(), units: String(form.get("units") ?? "0").trim(), value: String(form.get("value") ?? "0").trim(), currency: String(form.get("currency") ?? "MXN").trim(), evidence: String(form.get("evidence") ?? "Captura guiada").trim() }); }}><label>Cuenta<input name="account" required list="guided-account-options" placeholder="Cuenta existente" /><datalist id="guided-account-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.name}>{account.id}</option>)}</datalist></label><label>Producto<input name="product" required placeholder="SKU o producto" /></label><label>Periodo<input name="period" required type="month" /></label><label>Unidades<input name="units" required type="number" min="0" step=".01" defaultValue="0" /></label><label>Valor<input name="value" required type="number" min="0" step=".01" defaultValue="0" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><label className="wide">Evidencia<textarea name="evidence" defaultValue="Captura guiada" /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button type="submit" className="clay-primary">Terminar y validar muestra</button></div></form></section>;
+  return <section className="plain-note draft-source"><b>Captura guiada · {requirement?.name}</b><p>Registra una fila mínima. REVENUE la convierte al formato de la fuente, la valida y la guarda junto con el Plan.</p><form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onSubmit({ account: String(form.get("account") ?? "").trim(), product: String(form.get("product") ?? "").trim(), period: String(form.get("period") ?? "").trim(), units: String(form.get("units") ?? "0").trim(), value: String(form.get("value") ?? "0").trim(), currency: String(form.get("currency") ?? "MXN").trim(), evidence: String(form.get("evidence") ?? "Captura guiada").trim() }); }}><label>Cuenta<input name="account" required list="guided-account-options" placeholder="Cuenta existente" /><datalist id="guided-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id}</option>)}</datalist></label><label>Producto<input name="product" required placeholder="SKU o producto" /></label><label>Periodo<input name="period" required type="month" /></label><label>Unidades<input name="units" required type="number" min="0" step=".01" defaultValue="0" /></label><label>Valor<input name="value" required type="number" min="0" step=".01" defaultValue="0" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><label className="wide">Evidencia<textarea name="evidence" defaultValue="Captura guiada" /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button type="submit" className="clay-primary">Terminar y validar muestra</button></div></form></section>;
 }
 
 export function BaselineModule({ baseline, review, ready, busy, onCalculate, onApprove }: { baseline: BaselineResult | null; review: BaselineReview | null; ready: boolean; busy: string; onCalculate: () => void; onApprove: () => void }) {

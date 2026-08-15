@@ -20,7 +20,8 @@ test("feedback v63: Monitoreo conserva Shell, alcance y exportación", async () 
 test("feedback v63: cuenta existente, archivos y bloqueo Product Cost son visibles", async () => {
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   const modules = await readFile(new URL("../../app/revenue/PlanModules.tsx", import.meta.url), "utf8");
-  assert.match(platform, /ALFA_UNIVERSE_ACCOUNTS/);
+  assert.match(platform, /canonicalAccounts/);
+  assert.match(platform, /\/api\/canonical\/accounts/);
   assert.match(platform, /revenue-account-options/);
   assert.match(platform, /Selecciona una cuenta existente/);
   assert.match(modules, /Obligatorio/);

@@ -10,6 +10,7 @@ import {
 import type {
   Activity,
   Approval,
+  BuildingBlockDefinition,
   IncrementAllocation,
   Interaction,
   Plan,
@@ -45,9 +46,14 @@ async function sha256(value: unknown): Promise<string> {
 
 export class PlanService {
   private readonly repository: PlanRepository;
+  private readonly buildingBlocks: () => Promise<readonly BuildingBlockDefinition[]>;
 
-  constructor(repository: PlanRepository) {
+  constructor(
+    repository: PlanRepository,
+    buildingBlocks: () => Promise<readonly BuildingBlockDefinition[]>,
+  ) {
     this.repository = repository;
+    this.buildingBlocks = buildingBlocks;
   }
 
   private async execute<T>(
@@ -131,6 +137,7 @@ export class PlanService {
         versionId,
         input.activities,
         input.allocations,
+        await this.buildingBlocks(),
         input.interactions,
         new Set(input.baselineInclusionKeys),
       );

@@ -1,6 +1,6 @@
-import { getBuildingBlockDefinition } from "./catalog.ts";
 import type {
   Activity,
+  BuildingBlockDefinition,
   IncrementAllocation,
   Interaction,
   LedgerEntry,
@@ -47,16 +47,23 @@ export function buildIncrementLedger(
   versionId: string,
   activities: readonly Activity[],
   allocations: readonly IncrementAllocation[],
+  definitions: readonly BuildingBlockDefinition[],
   interactions: readonly Interaction[] = [],
   baselineInclusionKeys: ReadonlySet<string> = new Set(),
 ): LedgerResult {
+  const definitionById = new Map(definitions.filter((item) => item.active).map((item) => [item.id, item]));
+  const definitionFor = (id: string) => {
+    const definition = definitionById.get(id);
+    if (!definition) throw new Error(`Building block no disponible en CANÓNICOS: ${id}`);
+    return definition;
+  };
   const activityById = new Map(activities.map((activity) => [activity.id, activity]));
   const identities = new Set<string>();
   const allocationIdentities = new Set<string>();
   const entries: LedgerEntry[] = [];
 
   for (const activity of activities) {
-    const definition = getBuildingBlockDefinition(activity.blockDefinitionId);
+    const definition = definitionFor(activity.blockDefinitionId);
     if (definition.economicTreatment !== "INCREMENTAL") continue;
     if (!["ELIGIBLE", "APPROVED"].includes(activity.status)) continue;
     if (definition.requiresEvidence && activity.evidence.length === 0) {
@@ -78,7 +85,7 @@ export function buildIncrementLedger(
   for (const allocation of allocations) {
     const activity = activityById.get(allocation.activityId);
     if (!activity || !["ELIGIBLE", "APPROVED"].includes(activity.status)) continue;
-    const definition = getBuildingBlockDefinition(activity.blockDefinitionId);
+    const definition = definitionFor(activity.blockDefinitionId);
     if (definition.economicTreatment !== "INCREMENTAL") continue;
     const allocationIdentity = [
       versionId,

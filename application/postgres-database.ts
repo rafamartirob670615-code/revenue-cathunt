@@ -87,6 +87,7 @@ export class PostgresDatabase implements SqlDatabaseLike {
 
   async execute<T>(statement: PostgresStatement): Promise<QueryResult<T>> {
     return connection().begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE revenue_runtime");
       await transaction.unsafe("SET LOCAL search_path TO revenue, public");
       return this.executeInTransaction<T>(transaction, statement);
     });
@@ -94,6 +95,7 @@ export class PostgresDatabase implements SqlDatabaseLike {
 
   async batch<T = unknown>(statements: PostgresStatement[]): Promise<QueryResult<T>[]> {
     return connection().begin(async (transaction) => {
+      await transaction.unsafe("SET LOCAL ROLE revenue_runtime");
       await transaction.unsafe("SET LOCAL search_path TO revenue, public");
       const results: QueryResult<T>[] = [];
       for (const statement of statements) {

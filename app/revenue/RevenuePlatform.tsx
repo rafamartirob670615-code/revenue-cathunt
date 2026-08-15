@@ -28,7 +28,7 @@ import type {
 import type { RevenueModule } from "./modules";
 import { EmptyAnswer, ModuleHead } from "./ui";
 import type { RevenueIdentity } from "./access";
-import { ALFA_UNIVERSE_ACCOUNTS } from "../../domain/alfa-turmix-universe";
+import type { AlfaUniverseAccount } from "../../domain/alfa-turmix-monitoring";
 import AlfaTurmixMonitor from "./AlfaTurmixMonitor";
 
 const emptyPlanState = {
@@ -59,16 +59,23 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
+  const [canonicalAccounts, setCanonicalAccounts] = useState<AlfaUniverseAccount[]>([]);
 
   const loadHome = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [accessResponse] = await Promise.all([
+      const [accessResponse, accountsResponse] = await Promise.all([
         fetch("/api/access", { cache: "no-store" }),
+        fetch("/api/canonical/accounts", { cache: "no-store" }),
       ]);
       const accessBody = await accessResponse.json() as { ok: boolean; identity?: RevenueIdentity };
       if (accessResponse.ok && accessBody.ok && accessBody.identity) setEffectiveIdentity(accessBody.identity);
+      const accountsBody = await accountsResponse.json() as { ok: boolean; accounts?: AlfaUniverseAccount[]; error?: string };
+      if (!accountsResponse.ok || !accountsBody.ok || !accountsBody.accounts?.length) {
+        throw new Error(accountsBody.error || "CANÓNICOS no devolvió cuentas utilizables.");
+      }
+      setCanonicalAccounts(accountsBody.accounts);
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -358,8 +365,8 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
     const accountId = String(form.get("accountId") ?? "").trim();
     const accountInput = String(form.get("account") ?? "").trim();
     const normalizedAccountInput = accountInput.trim().toLowerCase();
-    const exactAccount = ALFA_UNIVERSE_ACCOUNTS.find((account) => account.id === accountId || account.name.toLowerCase() === normalizedAccountInput);
-    const matchingAccounts = ALFA_UNIVERSE_ACCOUNTS.filter((account) => normalizedAccountInput && account.name.toLowerCase().includes(normalizedAccountInput));
+    const exactAccount = canonicalAccounts.find((account) => account.id === accountId || account.name.toLowerCase() === normalizedAccountInput);
+    const matchingAccounts = canonicalAccounts.filter((account) => normalizedAccountInput && account.name.toLowerCase().includes(normalizedAccountInput));
     const selectedAccount = exactAccount ?? (matchingAccounts.length === 1 ? matchingAccounts[0] : undefined);
     if (!selectedAccount) {
       setError("Selecciona una cuenta existente del universo comercial o escribe su nombre completo.");
@@ -434,10 +441,10 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
+      creating ? <CreatePlanModule accounts={canonicalAccounts} busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
       active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => setActive("monitoreo")} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
-      active === "informacion" ? selected ? <InformationModule files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
+      active === "informacion" ? selected ? <InformationModule accounts={canonicalAccounts} files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeMarketing} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
       active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
@@ -454,8 +461,8 @@ function NoPlan({ onCreate }: { onCreate: () => void }) {
   return <div className="module-page"><ModuleHead eyebrow="Información" title="Primero selecciona o crea un Plan" description="El contexto de compañía, cuenta, año y versión gobierna toda la información." /><EmptyAnswer title="No hay una cuenta activa" copy="Registra el contexto una sola vez y REVENUE lo conservará durante todo el recorrido." action={<button className="clay-primary" onClick={onCreate}>Crear un Plan</button>} /></div>;
 }
 
-function CreatePlanModule({ busy, onSubmit, onCancel }: { busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
-  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con una cuenta del universo para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{ALFA_UNIVERSE_ACCOUNTS.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy)}>{busy || "Guardar y continuar"}</button></div></form></div>;
+function CreatePlanModule({ accounts, busy, onSubmit, onCancel }: { accounts: AlfaUniverseAccount[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<select name="currency" defaultValue="MXN"><option>MXN</option><option>USD</option></select></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
 function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {

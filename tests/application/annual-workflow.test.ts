@@ -9,6 +9,7 @@ import {
   annualPlanFixture,
   expectedAnnualPlanUnits,
 } from "../fixtures/annual-plan.ts";
+import { readTestBuildingBlocks } from "../fixtures/building-blocks.ts";
 
 const context = (commandId: string, actorId = "kam-1", hour = 12) => ({
   commandId,
@@ -18,7 +19,7 @@ const context = (commandId: string, actorId = "kam-1", hour = 12) => ({
 
 test("recorrido anual es idempotente, reconciliable y reproducible", async () => {
   const repository = new InMemoryPlanRepository();
-  const service = new PlanService(repository);
+  const service = new PlanService(repository, readTestBuildingBlocks);
 
   const created = await service.createPlan(annualPlanFixture, context("create-1"));
   const repeated = await service.createPlan(annualPlanFixture, context("create-1"));
@@ -109,7 +110,7 @@ test("recorrido anual es idempotente, reconciliable y reproducible", async () =>
 });
 
 test("un commandId no puede reutilizarse para otra operación", async () => {
-  const service = new PlanService(new InMemoryPlanRepository());
+  const service = new PlanService(new InMemoryPlanRepository(), readTestBuildingBlocks);
   await service.createPlan(annualPlanFixture, context("same-id"));
   await assert.rejects(
     service.calculate(
@@ -123,7 +124,7 @@ test("un commandId no puede reutilizarse para otra operación", async () => {
 });
 
 test("un Plan vacío se guarda, aparece en Mis Planes y conserva al autor autenticado", async () => {
-  const service = new PlanService(new InMemoryPlanRepository());
+  const service = new PlanService(new InMemoryPlanRepository(), readTestBuildingBlocks);
   const emptyPlan = structuredClone(annualPlanFixture);
   emptyPlan.id = "empty-plan";
   emptyPlan.accountName = "Cuenta controlada";

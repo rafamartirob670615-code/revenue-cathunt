@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildIncrementLedger, calculateNetUnits } from "../../domain/ledger.ts";
 import type { Activity, IncrementAllocation, Interaction } from "../../domain/types.ts";
+import { testBuildingBlocks } from "../fixtures/building-blocks.ts";
 
 const evidence = [{ id: "ev-1", source: "fixture", observedAt: "2026-07-26T12:00:00Z" }];
 
@@ -54,7 +55,7 @@ test("reconcilia bruto, neto e interacción aprobada", () => {
     evidence,
     approvedBy: "revenue",
   }];
-  const result = buildIncrementLedger("v-1", activities, allocations, interactions);
+  const result = buildIncrementLedger("v-1", activities, allocations, testBuildingBlocks, interactions);
   assert.equal(result.grossUnits, 200);
   assert.equal(result.netActivityUnits, 146);
   assert.equal(result.interactionUnits, -6);
@@ -68,6 +69,7 @@ test("bloquea una identidad económica duplicada", () => {
         "v-1",
         [activity("a-1", "campaign-1"), activity("a-2", "campaign-1")],
         [],
+        testBuildingBlocks,
       ),
     /Identidad económica duplicada/,
   );
@@ -80,6 +82,7 @@ test("bloquea dos asignaciones económicas de la misma actividad y grano", () =>
         "v-1",
         [activity("a-1")],
         [allocation("al-1", "a-1"), allocation("al-2", "a-1")],
+        testBuildingBlocks,
       ),
     /Asignación económica duplicada/,
   );
@@ -94,6 +97,7 @@ test("bloquea una actividad ya incluida en baseline", () => {
         "v-1",
         [included],
         [allocation("al-1", "a-1")],
+        testBuildingBlocks,
         [],
         new Set(["promo-2027-06"]),
       ),
@@ -108,6 +112,7 @@ test("bloquea solapamientos sin regla de interacción", () => {
         "v-1",
         [activity("a-1"), activity("a-2")],
         [allocation("al-1", "a-1"), allocation("al-2", "a-2")],
+        testBuildingBlocks,
       ),
     /Solapamiento sin interacción/,
   );

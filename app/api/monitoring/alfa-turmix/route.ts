@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readCanonicalRevenueAccounts } from "../../../../application/canonical-data";
 import { authorizeMonitoring } from "../../_access";
 import {
   alfaTurmixCatalog,
@@ -34,16 +35,17 @@ function aggregateByPeriod(rows: AlfaBillingRow[]) {
 }
 
 export async function GET(request: NextRequest) {
-  const allRows = createAlfaTurmixRows();
   try {
     await authorizeMonitoring(request);
   } catch (error) {
     const message = error instanceof Error ? error.message : "No tienes acceso autorizado a Monitoreo";
     return NextResponse.json({ ok: false, error: message }, { status: 403 });
   }
+  const accounts = await readCanonicalRevenueAccounts();
+  const allRows = createAlfaTurmixRows(accounts);
   const rows = filterAlfaTurmixRows(allRows, queryFilters(request));
   const sample = rows.slice(0, 240);
-  const catalog = alfaTurmixCatalog();
+  const catalog = alfaTurmixCatalog(accounts);
   const optionKeys = ["period", "territory", "account", "accountGroup", "channel", "subchannel", "category", "family", "product"] as const;
   const options = Object.fromEntries(optionKeys.map((key) => {
     const siblingFilters = { ...queryFilters(request) };
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     dataset: catalog,
-    source: { class: "SYNTHETIC_NON_COMMERCIAL", updatedAt: "2026-08-01T06:00:00-06:00", erpStatus: "SIMULATED_OFFICIAL_FEED" },
+    source: { class: "SYNTHETIC_NON_COMMERCIAL", accountUniverse: "CANONICOS", erpStatus: "SIMULATED_OFFICIAL_FEED" },
     filters: queryFilters(request),
     options,
     totals: summarizeAlfaTurmixRows(rows),

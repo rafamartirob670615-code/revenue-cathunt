@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateBaselineFromAcceptedPackage } from "../../domain/baseline-engine.ts";
-import { createSyntheticPilotPackage } from "../../domain/synthetic-pilot.ts";
+import { createSyntheticPilotPackage } from "../fixtures/synthetic-pilot.ts";
 
 test("el paquete sintético produce un baseline mensual reproducible y marcado", () => {
   const files = createSyntheticPilotPackage(2027, "cuenta-prueba");

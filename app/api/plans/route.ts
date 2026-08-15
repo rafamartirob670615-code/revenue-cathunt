@@ -6,6 +6,7 @@ import {
   type CalculationInput,
   type CommandContext,
 } from "../../../application/plan-service.ts";
+import { readCanonicalBuildingBlockCatalog } from "../../../application/canonical-building-blocks.ts";
 import type { Approval, Plan } from "../../../domain/types.ts";
 import { authorizePlan, authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
 import { database } from "../_infrastructure.ts";
@@ -13,9 +14,8 @@ import { database } from "../_infrastructure.ts";
 export const runtime = "nodejs";
 
 function service(): PlanService {
-  return new PlanService(
-    new SqlPlanRepository(database()),
-  );
+  const db = database();
+  return new PlanService(new SqlPlanRepository(db), () => readCanonicalBuildingBlockCatalog(db));
 }
 
 function authenticatedEmail(request: Request): string | undefined {
