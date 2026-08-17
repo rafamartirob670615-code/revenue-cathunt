@@ -41,9 +41,10 @@ npm run build
 npm run start
 ```
 
-Variables requeridas: `SUPABASE_DATABASE_URL`, `SUPABASE_URL` y
-`SUPABASE_SERVICE_ROLE_KEY`. Consulta `.env.example`; nunca guardes valores
-secretos en Git ni expongas la llave de servicio al navegador.
+Variable requerida para la persistencia y lectura de CANÓNICOS: `SUPABASE_DATABASE_URL`.
+`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sólo son opcionales para la
+compatibilidad del callback SSO. Consulta `.env.example`; nunca guardes valores
+secretos en Git ni expongas credenciales al navegador.
 
 El modo publicado actual es un piloto con datos sintéticos no comerciales y una
 identidad piloto compartida, por lo que funciona sin iniciar sesión en cualquier

@@ -1,4 +1,5 @@
 import type { AlfaUniverseAccount } from "../domain/alfa-turmix-monitoring.ts";
+import postgres from "postgres";
 
 type CanonicalAccountRow = {
   id_maestro: string;
@@ -10,43 +11,31 @@ type CanonicalAccountRow = {
   subcanal: string | null;
 };
 
-function canonicalCredentials() {
-  const url = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
-  if (!url || !key) {
-    throw new Error(
-      "CANÓNICOS no está disponible: faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.",
-    );
+const globalCanonicalDatabase = globalThis as typeof globalThis & {
+  canonicalRevenuePostgres?: ReturnType<typeof postgres>;
+};
+
+function canonicalDatabase() {
+  const connectionString = (process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL ?? "").trim();
+  if (!connectionString) {
+    throw new Error("CANÓNICOS no está disponible: falta SUPABASE_DATABASE_URL.");
   }
-  return { url: url.replace(/\/$/, ""), key };
+  globalCanonicalDatabase.canonicalRevenuePostgres ??= postgres(connectionString, {
+    max: 2,
+    prepare: false,
+    connect_timeout: 10,
+    idle_timeout: 20,
+  });
+  return globalCanonicalDatabase.canonicalRevenuePostgres;
 }
 
 export async function readCanonicalRevenueAccounts(): Promise<AlfaUniverseAccount[]> {
-  const { url, key } = canonicalCredentials();
-  const columns = [
-    "id_maestro",
-    "cuenta_cadena",
-    "grupo_corporativo",
-    "region",
-    "canal_consolidado",
-    "canal",
-    "subcanal",
-  ].join(",");
-  const response = await fetch(
-    `${url}/rest/v1/cuentas?select=${columns}&order=id_maestro.asc`,
-    {
-      cache: "no-store",
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Accept: "application/json",
-      },
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`CANÓNICOS respondió HTTP ${response.status} al leer cuentas.`);
-  }
-  const rows = (await response.json()) as CanonicalAccountRow[];
+  const rows = await canonicalDatabase()<CanonicalAccountRow[]>`
+    SELECT id_maestro, cuenta_cadena, grupo_corporativo, region,
+           canal_consolidado, canal, subcanal
+    FROM public.cuentas
+    ORDER BY id_maestro ASC
+  `;
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error("CANÓNICOS no devolvió un universo de cuentas utilizable.");
   }
