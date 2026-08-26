@@ -15,7 +15,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{
 .revenue-platform{display:grid;grid-template-columns:292px minmax(0,1fr);min-height:100vh}
 .revenue-sidebar{position:sticky;top:0;display:flex;flex-direction:column;height:100vh;padding:24px 16px 16px;border-right:1px solid var(--line);background:#fcfbf8;overflow:auto}
 .revenue-brand{display:flex;gap:11px;align-items:center;padding:0 8px 20px;border-bottom:1px solid var(--line)}
-.revenue-brand>span{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:#182b42;color:#fff;font-family:Georgia,serif;font-size:24px}
+.revenue-brand>img{display:block;width:40px;height:40px;border-radius:10px;object-fit:contain}
 .revenue-brand div{display:grid;gap:3px}.revenue-brand b{font-size:15px;letter-spacing:.08em}.revenue-brand small{color:var(--muted);font-size:10px}
 .revenue-sidebar nav{display:grid;gap:5px;padding:14px 0}
 .nav-group{display:grid;gap:3px;padding:5px 0}.nav-group>p{margin:6px 10px 4px;color:#a49b8d;font-size:8px;font-weight:850;letter-spacing:.13em;text-transform:uppercase}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Plan } from "../../domain/types";
+import Image from "next/image";
 import { REVENUE_MODULES, type RevenueModule } from "./modules";
 import { FUNCTION_LABELS, type RevenueIdentity } from "./access";
 
@@ -43,7 +44,7 @@ export default function Shell({
     <div className="revenue-platform">
       <aside className="revenue-sidebar">
         <div className="revenue-brand">
-          <span>R</span>
+          <Image src="/favicon-256.png" alt="REVENUE" width={40} height={40} priority />
           <div><b>REVENUE</b><small>Planeación anual</small></div>
         </div>
         <nav aria-label="Recorrido de REVENUE">
