@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const token = url.searchParams.get("cathunt_token");
-  const next = url.searchParams.get("next") || "/";
+  const requestedNext = url.searchParams.get("next");
+  const next = requestedNext?.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
 
   if (token) {
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
         const fila = rows[0];
         const vigente = fila && !fila.usado && Date.now() - new Date(fila.creado_en).getTime() < 30_000;
         if (vigente) {
-          await fetch(`${supabaseUrl}/rest/v1/sso_tokens?token=eq.${token}`, {
+          await fetch(`${supabaseUrl}/rest/v1/sso_tokens?token=eq.${encodeURIComponent(token)}&usado=eq.false`, {
             method: "PATCH",
             headers: { ...headers, "Content-Type": "application/json" },
             body: JSON.stringify({ usado: true }),
