@@ -96,9 +96,10 @@ function calculateBaseline(input: {
     const key = `${row.account_id}|${row.sku_id}|${month}`;
     const activityUnits = activityImpact.get(`${row.account_id}|${row.sku_id}|${row.period}`) ?? 0;
     const recurringUnits = Math.max(0, units - activityUnits);
+    const unitPrice = units > 0 ? Number(row.value ?? 0) / units : 0;
     const current = observations.get(key) ?? { units: [], values: [] };
     current.units.push(recurringUnits);
-    current.values.push(Number(row.value ?? 0));
+    current.values.push(recurringUnits * unitPrice);
     observations.set(key, current);
     periods.add(row.period);
   }
