@@ -12,9 +12,9 @@ export async function GET(request: Request) {
     try {
       const user = await consumeSsoToken(token, url.origin);
       if (user) {
-        const response = Response.redirect(new URL(next, request.url), 302);
-        response.headers.set("Set-Cookie", sessionCookie(user));
-        return response;
+        const headers = new Headers({ Location: new URL(next, request.url).toString() });
+        headers.set("Set-Cookie", sessionCookie(user));
+        return new Response(null, { status: 302, headers });
       }
     } catch (error) {
       // No revelamos datos ni capacidades si falla el SSO, pero dejamos una
