@@ -11,16 +11,14 @@ import {
   analyzeFinancialWorkbook,
   type WorkbookCell,
 } from "../../../domain/excel-intake.ts";
-import { authorizePlan } from "../_access.ts";
+import { accessError, authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
 import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "No pudimos recibir el archivo";
-  const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
-  return Response.json({ ok: false, error: message }, { status });
+  return accessError(error, "No pudimos recibir el archivo");
 }
 
 export async function GET(request: Request) {

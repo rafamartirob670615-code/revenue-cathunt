@@ -1,15 +1,12 @@
-import { authorizePlan } from "../_access.ts";
+import { accessError, authorizePlan } from "../_access.ts";
 import { parseCsv } from "../../../domain/input-package.ts";
 import { database, files } from "../_infrastructure.ts";
 import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
-
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "No pudimos consolidar unidades y valor";
-  const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
-  return Response.json({ ok: false, error: message }, { status });
+  return accessError(error, "No pudimos consolidar unidades y valor");
 }
 
 function records(csvText: string) {

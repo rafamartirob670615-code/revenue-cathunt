@@ -8,7 +8,7 @@ import {
 } from "../../../application/plan-service.ts";
 import { readCanonicalBuildingBlockCatalog } from "../../../application/canonical-building-blocks.ts";
 import type { Approval, Plan } from "../../../domain/types.ts";
-import { authorizePlan, authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
+import { authorizePlan, authenticatedEmail } from "../_access.ts";
 import { database } from "../_infrastructure.ts";
 import { requireAdmin } from "../_session.ts";
 
@@ -17,10 +17,6 @@ export const runtime = "nodejs";
 function service(): PlanService {
   const db = database();
   return new PlanService(new SqlPlanRepository(db), () => readCanonicalBuildingBlockCatalog(db));
-}
-
-function authenticatedEmail(request: Request): string | undefined {
-  return resolveAuthenticatedEmail(request);
 }
 
 function authorizedContext(

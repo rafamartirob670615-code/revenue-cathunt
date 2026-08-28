@@ -10,7 +10,7 @@ test("Monitoreo consume Actuals, cuota e historia canónicos", async () => {
   assert.match(route, /cutoffDate/);
   assert.match(route, /includedRows/);
   assert.match(route, /excludedRows/);
-  assert.match(route, /account_id.*sku_id.*period/s);
+  assert.match(route, /account_id[\s\S]*sku_id[\s\S]*period/);
   assert.match(route, /billingRows/);
   assert.match(route, /territory/);
   assert.match(route, /category/);
@@ -53,5 +53,5 @@ test("las acciones de Monitoreo quedan aisladas por versión y no pueden reabrir
   assert.match(route, /AND version_number = \? AND period/);
   assert.match(route, /Una acción cerrada no puede reabrirse/);
   assert.match(route, /Una acción en seguimiento no puede volver a abierta/);
-  assert.match(route, /asignación\|no autorizado/);
+  assert.match(route, /accessError/);
 });

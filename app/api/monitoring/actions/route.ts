@@ -1,13 +1,11 @@
-import { authorizePlan } from "../../_access.ts";
+import { accessError, authorizePlan } from "../../_access.ts";
 import { database, files } from "../../_infrastructure.ts";
 import { requireAdmin } from "../../_session.ts";
 
 export const runtime = "nodejs";
 
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "No pudimos guardar la acción";
-  const status = /Autenticación/.test(message) ? 401 : /asignación|no autorizado/.test(message) ? 403 : 422;
-  return Response.json({ ok: false, error: message }, { status });
+  return accessError(error, "No pudimos guardar la acción");
 }
 
 async function planContext(planId: string) {

@@ -84,8 +84,6 @@ export function sessionCookie(user: CanonicalUser) {
 
 export async function consumeSsoToken(token: string, destination: string): Promise<CanonicalUser | null> {
   const sql = database();
-  const [{ current_user: currentUser } = {}] = await sql<{ current_user: string }[]>`SELECT current_user`;
-  console.info("Revenue SSO database role", currentUser || "unknown");
   const rows = await sql<{ usuario_id: string; destino: string; creado_en: string; usado: boolean }[]>`
     SELECT usuario_id, destino, creado_en, usado FROM public.sso_tokens WHERE token = ${token} LIMIT 1
   `;

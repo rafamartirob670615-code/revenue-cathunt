@@ -1,6 +1,6 @@
 import { database } from "../_infrastructure.ts";
 import type { Plan, PlanStatus } from "../../../domain/types.ts";
-import { authenticatedEmail as resolveAuthenticatedEmail, requestIdentity } from "../_access.ts";
+import { accessError, authenticatedEmail, requestIdentity } from "../_access.ts";
 
 export const runtime = "nodejs";
 
@@ -26,11 +26,6 @@ interface DashboardPlan {
   readyFiles: number;
   packageAccepted: boolean;
   updatedAt: string;
-}
-
-function authenticatedEmail(request: Request) {
-  // Toda consulta se vincula a la sesión firmada emitida por el Hub.
-  return resolveAuthenticatedEmail(request);
 }
 
 function displayName(request: Request) {
@@ -182,7 +177,6 @@ export async function GET(request: Request) {
       plans,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No pudimos preparar el Inicio";
-    return Response.json({ ok: false, error: message }, { status: 422 });
+    return accessError(error, "No pudimos preparar el Inicio");
   }
 }

@@ -1,4 +1,4 @@
-import { authorizePlan } from "../_access.ts";
+import { accessError, authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
 import { requireAdmin } from "../_session.ts";
 
@@ -17,9 +17,7 @@ const SYNTHETIC_PARAMETERS = {
 
 
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "No pudimos calcular la rentabilidad";
-  const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
-  return Response.json({ ok: false, error: message }, { status });
+  return accessError(error, "No pudimos calcular la rentabilidad");
 }
 
 async function planResult(planId: string, ownerId: string) {

@@ -1,13 +1,11 @@
-import { authorizePlan } from "../_access.ts";
+import { accessError, authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
 import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 type DataClassification = "USER_PROVIDED" | "SYNTHETIC_NON_COMMERCIAL";
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "No pudimos preparar el crecimiento";
-  const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
-  return Response.json({ ok: false, error: message }, { status });
+  return accessError(error, "No pudimos preparar el crecimiento");
 }
 
 async function approvedBaseline(planId: string, ownerId: string) {

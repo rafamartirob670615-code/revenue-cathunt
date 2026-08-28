@@ -41,19 +41,19 @@ npm run build
 npm run start
 ```
 
-Variable requerida para la persistencia y lectura de CANÓNICOS: `SUPABASE_DATABASE_URL`.
-`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sólo son opcionales para la
-compatibilidad del callback SSO. Consulta `.env.example`; nunca guardes valores
-secretos en Git ni expongas credenciales al navegador.
+Variables requeridas: `SUPABASE_DATABASE_URL` para la persistencia y lectura de
+CANÓNICOS, y `REVENUE_SESSION_SECRET` (mínimo 32 caracteres) para firmar las
+cookies de sesión SSO. `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sólo son
+opcionales para la compatibilidad del callback SSO. Consulta `.env.example`;
+nunca guardes valores secretos en Git ni expongas credenciales al navegador.
 
-El modo publicado actual es un piloto con datos sintéticos no comerciales y una
-identidad piloto compartida, por lo que funciona sin iniciar sesión en cualquier
-navegador. Antes de conectar datos reales, esta identidad debe sustituirse por
-un login propio del producto. Las versiones anteriores del Site son historial
-técnico; la versión vigente se registra en `ESTADO.md` de la raíz maestra.
+Todo acceso a REVENUE exige sesión SSO autenticada contra CANÓNICOS; no existe
+modo sin login. Las versiones anteriores del Site son historial técnico; la
+versión vigente se registra en `ESTADO.md` de la raíz maestra.
 
 ## Migración de plataforma
 
-El corte de Cloudflare se conserva temporalmente como reversión hasta validar
-la publicación de Vercel. El respaldo de D1 y el procedimiento están
-documentados en `docs/MIGRACION_CLOUDFLARE_A_VERCEL_SUPABASE_2026-08-13.md`.
+Vercel + Supabase es la arquitectura única y validada en producción. El corte
+de Cloudflare (D1/Workers) queda como historial técnico, no como plan de
+reversión activo; el respaldo y el procedimiento seguido están documentados en
+`docs/MIGRACION_CLOUDFLARE_A_VERCEL_SUPABASE_2026-08-13.md`.

@@ -3,16 +3,14 @@ import {
   calculateBaselineFromCanonicalSales,
 } from "../../../domain/baseline-engine.ts";
 import type { CanonicalSalesRow } from "../../../domain/excel-intake.ts";
-import { authorizePlan } from "../_access.ts";
+import { accessError, authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
 import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "No pudimos calcular el baseline";
-  const status = /Autenticación/.test(message) ? 401 : /no autorizado/.test(message) ? 403 : 422;
-  return Response.json({ ok: false, error: message }, { status });
+  return accessError(error, "No pudimos calcular el baseline");
 }
 
 export async function GET(request: Request) {
@@ -218,12 +216,12 @@ export async function PUT(request: Request) {
       )
       .bind(
         planId,
-        actor.email,
+        ownerId,
         calculation.calculated_at,
         review.status,
         review.decision,
         JSON.stringify(review),
-        ownerId,
+        actor.email,
         decidedAt,
       )
       .run();
@@ -304,12 +302,12 @@ export async function PATCH(request: Request) {
       )
       .bind(
         planId,
-        actor.email,
+        ownerId,
         calculation.calculated_at,
         review.status,
         review.decision,
         JSON.stringify(review),
-        ownerId,
+        actor.email,
         frozenAt,
         frozenAt,
       )
