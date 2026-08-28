@@ -82,25 +82,51 @@ export function sessionCookie(user: CanonicalUser) {
 
 export async function consumeSsoToken(token: string, destination: string): Promise<CanonicalUser | null> {
   const supabase = supabaseServiceClient();
-  const { data: row } = await supabase
+  const { data: row, error: readError } = await supabase
     .from("sso_tokens")
     .select("usuario_id, destino, creado_en, usado")
     .eq("token", token)
     .maybeSingle();
-  const vigente = row && row.destino === destination && !row.usado && Date.now() - new Date(row.creado_en).getTime() < 30_000;
-  if (!vigente) return null;
-  const { data: consumed } = await supabase
+  if (readError) {
+    console.error("Revenue SSO: fallo al leer sso_tokens", readError.message);
+    return null;
+  }
+  if (!row) {
+    console.error("Revenue SSO: token no encontrado en sso_tokens");
+    return null;
+  }
+  const vigente = row.destino === destination && !row.usado && Date.now() - new Date(row.creado_en).getTime() < 30_000;
+  if (!vigente) {
+    console.error("Revenue SSO: token no vigente", { destinoEsperado: destination, destinoToken: row.destino, usado: row.usado, edadMs: Date.now() - new Date(row.creado_en).getTime() });
+    return null;
+  }
+  const { data: consumed, error: updateError } = await supabase
     .from("sso_tokens")
     .update({ usado: true })
     .eq("token", token)
     .eq("usado", false)
     .select("token")
     .maybeSingle();
-  if (!consumed) return null;
-  const { data: user } = await supabase
+  if (updateError) {
+    console.error("Revenue SSO: fallo al marcar el token usado", updateError.message);
+    return null;
+  }
+  if (!consumed) {
+    console.error("Revenue SSO: el token ya había sido consumido");
+    return null;
+  }
+  const { data: user, error: userError } = await supabase
     .from("usuarios")
     .select("id, rol, activo, correo, nombre")
     .eq("id", row.usuario_id)
     .maybeSingle<CanonicalUser>();
-  return user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
+  if (userError) {
+    console.error("Revenue SSO: fallo al leer usuarios", userError.message);
+    return null;
+  }
+  if (!(user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario"))) {
+    console.error("Revenue SSO: usuario no válido para sesión", { encontrado: Boolean(user), activo: user?.activo, rol: user?.rol, tieneCorreo: Boolean(user?.correo) });
+    return null;
+  }
+  return user;
 }
