@@ -84,14 +84,17 @@ export function sessionCookie(user: CanonicalUser) {
 
 export async function consumeSsoToken(token: string, destination: string): Promise<CanonicalUser | null> {
   const sql = database();
-  const rows = await sql<{ usuario_id: string; destino: string; creado_en: string; usado: boolean }[]>`
-    SELECT usuario_id, destino, creado_en, usado FROM public.sso_tokens WHERE token = ${token} LIMIT 1
-  `;
-  const row = rows[0];
-  if (!row || row.destino !== destination || row.usado || Date.now() - new Date(row.creado_en).getTime() >= 30_000) return null;
-  const consumed = await sql`UPDATE public.sso_tokens SET usado = true WHERE token = ${token} AND usado = false RETURNING token`;
-  if (!consumed.length) return null;
-  const users = await sql<CanonicalUser[]>`SELECT id, rol, activo, correo, nombre FROM public.usuarios WHERE id = ${row.usuario_id} LIMIT 1`;
-  const user = users[0];
-  return user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
+  return sql.begin(async (transaction) => {
+    await transaction.unsafe("SET LOCAL ROLE revenue_runtime");
+    const rows = await transaction<{ usuario_id: string; destino: string; creado_en: string; usado: boolean }[]>`
+      SELECT usuario_id, destino, creado_en, usado FROM public.sso_tokens WHERE token = ${token} LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row || row.destino !== destination || row.usado || Date.now() - new Date(row.creado_en).getTime() >= 30_000) return null;
+    const consumed = await transaction`UPDATE public.sso_tokens SET usado = true WHERE token = ${token} AND usado = false RETURNING token`;
+    if (!consumed.length) return null;
+    const users = await transaction<CanonicalUser[]>`SELECT id, rol, activo, correo, nombre FROM public.usuarios WHERE id = ${row.usuario_id} LIMIT 1`;
+    const user = users[0];
+    return user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
+  });
 }

@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 export default async function MonitoringPage() {
   const requestHeaders = await headers();
   const session = sessionActorFromCookie(requestHeaders.get("cookie"));
-  if (!session) redirect("https://cathunt-hub.vercel.app/api/sso/token?url=https%3A%2F%2Frevenue-marsal1.vercel.app%2Fmonitoring");
+  if (!session) {
+    const origin = `https://${requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host")}`;
+    redirect(`https://cathunt-hub.vercel.app/api/sso/token?url=${encodeURIComponent(`${origin}/monitoring`)}`);
+  }
   return <RevenuePlatform identity={identityFromSession(session)} initialModule="monitoreo" />;
 }
