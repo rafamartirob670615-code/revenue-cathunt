@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import postgres from "postgres";
+import { createClient } from "@supabase/supabase-js";
 
 const COOKIE = "cathunt_revenue_session";
 const SESSION_MS = 8 * 60 * 60 * 1000;
@@ -13,8 +13,6 @@ export type CanonicalUser = {
   nombre: string | null;
 };
 
-const globalConnection = globalThis as typeof globalThis & { revenueSsoDatabase?: ReturnType<typeof postgres> };
-
 function secret() {
   const value = String(process.env.REVENUE_SESSION_SECRET || "").trim();
   if (value.length < 32) throw new Error("REVENUE_SESSION_SECRET debe tener al menos 32 caracteres");
@@ -25,11 +23,11 @@ function signature(payload: string) {
   return crypto.createHmac("sha256", secret()).update(payload).digest("base64url");
 }
 
-function database() {
-  const connectionString = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("Persistencia no disponible: falta SUPABASE_DATABASE_URL");
-  globalConnection.revenueSsoDatabase ??= postgres(connectionString, { max: 1, prepare: false, connect_timeout: 10, idle_timeout: 20 });
-  return globalConnection.revenueSsoDatabase;
+function supabaseServiceClient() {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) throw new Error("SSO no disponible: falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
 function parseSession(token: string | undefined): Session | null {
@@ -83,18 +81,26 @@ export function sessionCookie(user: CanonicalUser) {
 }
 
 export async function consumeSsoToken(token: string, destination: string): Promise<CanonicalUser | null> {
-  const sql = database();
-  return sql.begin(async (transaction) => {
-    await transaction.unsafe("SET LOCAL ROLE revenue_runtime");
-    const rows = await transaction<{ usuario_id: string; destino: string; creado_en: string; usado: boolean }[]>`
-      SELECT usuario_id, destino, creado_en, usado FROM public.sso_tokens WHERE token = ${token} LIMIT 1
-    `;
-    const row = rows[0];
-    if (!row || row.destino !== destination || row.usado || Date.now() - new Date(row.creado_en).getTime() >= 30_000) return null;
-    const consumed = await transaction`UPDATE public.sso_tokens SET usado = true WHERE token = ${token} AND usado = false RETURNING token`;
-    if (!consumed.length) return null;
-    const users = await transaction<CanonicalUser[]>`SELECT id, rol, activo, correo, nombre FROM public.usuarios WHERE id = ${row.usuario_id} LIMIT 1`;
-    const user = users[0];
-    return user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
-  });
+  const supabase = supabaseServiceClient();
+  const { data: row } = await supabase
+    .from("sso_tokens")
+    .select("usuario_id, destino, creado_en, usado")
+    .eq("token", token)
+    .maybeSingle();
+  const vigente = row && row.destino === destination && !row.usado && Date.now() - new Date(row.creado_en).getTime() < 30_000;
+  if (!vigente) return null;
+  const { data: consumed } = await supabase
+    .from("sso_tokens")
+    .update({ usado: true })
+    .eq("token", token)
+    .eq("usado", false)
+    .select("token")
+    .maybeSingle();
+  if (!consumed) return null;
+  const { data: user } = await supabase
+    .from("usuarios")
+    .select("id, rol, activo, correo, nombre")
+    .eq("id", row.usuario_id)
+    .maybeSingle<CanonicalUser>();
+  return user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
 }

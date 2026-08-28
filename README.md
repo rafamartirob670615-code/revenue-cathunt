@@ -42,9 +42,10 @@ npm run start
 ```
 
 Variables requeridas: `SUPABASE_DATABASE_URL` para la persistencia y lectura de
-CANÓNICOS, y `REVENUE_SESSION_SECRET` (mínimo 32 caracteres) para firmar las
-cookies de sesión SSO. `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` sólo son
-opcionales para la compatibilidad del callback SSO. Consulta `.env.example`;
+CANÓNICOS, `REVENUE_SESSION_SECRET` (mínimo 32 caracteres) para firmar las
+cookies de sesión SSO, y `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` para canjear
+el token de SSO del Hub (mismo patrón que el resto de las apps de CatHunt).
+Consulta `.env.example`;
 nunca guardes valores secretos en Git ni expongas credenciales al navegador.
 
 Todo acceso a REVENUE exige sesión SSO autenticada contra CANÓNICOS; no existe
