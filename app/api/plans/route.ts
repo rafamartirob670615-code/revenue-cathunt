@@ -10,6 +10,7 @@ import { readCanonicalBuildingBlockCatalog } from "../../../application/canonica
 import type { Approval, Plan } from "../../../domain/types.ts";
 import { authorizePlan, authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
 import { database } from "../_infrastructure.ts";
+import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,7 @@ function authorizedContext(
 
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : "Error no identificado";
-  if (message === "AUTH_REQUIRED") {
+  if (message === "AUTH_REQUIRED" || /Autenticación/.test(message)) {
     return Response.json({ ok: false, error: "Autenticación requerida" }, { status: 401 });
   }
   const notFound = /no encontrado|no encontrada/.test(message);
@@ -119,6 +120,7 @@ type PlanCommand =
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    requireAdmin(request);
     const command = (await request.json()) as PlanCommand;
     const plans = service();
     let result: unknown;

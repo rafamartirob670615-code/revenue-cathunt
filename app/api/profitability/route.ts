@@ -1,5 +1,6 @@
 import { authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
+import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -117,6 +118,7 @@ function pnl(grossSales: number, investment: number) {
 
 export async function POST(request: Request) {
   try {
+    requireAdmin(request);
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
