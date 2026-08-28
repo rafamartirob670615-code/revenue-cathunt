@@ -1,6 +1,5 @@
 import { accessError, authorizePlan } from "../../_access.ts";
 import { database, files } from "../../_infrastructure.ts";
-import { requireAdmin } from "../../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -57,7 +56,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireAdmin(request);
     const body = await request.json() as {
       planId?: string; period?: string; cause?: string; evidence?: string;
       action?: string; responsible?: string; dueDate?: string;
@@ -122,7 +120,6 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    requireAdmin(request);
     const body = await request.json() as {
       planId?: string; actionId?: string; status?: string; outcomeNote?: string;
     };

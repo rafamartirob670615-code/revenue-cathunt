@@ -5,7 +5,6 @@ import {
 import type { CanonicalSalesRow } from "../../../domain/excel-intake.ts";
 import { accessError, authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
-import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -44,7 +43,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireAdmin(request);
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
@@ -130,7 +128,6 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    requireAdmin(request);
     const body = (await request.json()) as {
       planId?: string;
       adjustments?: Array<{
@@ -233,7 +230,6 @@ export async function PUT(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    requireAdmin(request);
     const body = (await request.json()) as {
       planId?: string;
       decision?: "CALCULATED" | "ADJUSTED";

@@ -1,6 +1,5 @@
 import { accessError, authorizePlan } from "../_access.ts";
 import { database, files } from "../_infrastructure.ts";
-import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 type DataClassification = "USER_PROVIDED" | "SYNTHETIC_NON_COMMERCIAL";
@@ -205,7 +204,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireAdmin(request);
     const body = await request.json() as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
@@ -222,7 +220,6 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    requireAdmin(request);
     const body = await request.json() as { planId?: string; activities?: EditableActivity[] };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");

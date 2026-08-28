@@ -1,6 +1,5 @@
 import { accessError, authorizePlan, ensureUser, requestIdentity } from "../_access.ts";
 import { database } from "../_infrastructure.ts";
-import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -46,7 +45,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireAdmin(request);
     const user = await ensureUser(request);
     const body = await request.json() as ContributionInput;
     const planId = body.planId ?? "";
@@ -86,7 +84,6 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    requireAdmin(request);
     requestIdentity(request);
     const body = await request.json() as { planId?: string; id?: string; status?: "ACCEPTED" | "RETURNED" };
     const planId = body.planId ?? "";

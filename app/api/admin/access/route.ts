@@ -9,7 +9,6 @@ import {
   type AssignableCapability,
 } from "../../_access.ts";
 import { database } from "../../_infrastructure.ts";
-import { requireAdmin } from "../../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -68,7 +67,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    requireAdmin(request);
     const body = await request.json() as {
       planId?: string; email?: string; displayName?: string; capability?: AssignableCapability;
     };
@@ -113,7 +111,6 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    requireAdmin(request);
     const body = await request.json() as { planId?: string; email?: string; capability?: AssignableCapability };
     const planId = body.planId ?? "";
     if ((!planId && body.capability !== "ADMINISTER_ACCESS") || !body.email || !ASSIGNABLE_CAPABILITIES.includes(body.capability as AssignableCapability)) {

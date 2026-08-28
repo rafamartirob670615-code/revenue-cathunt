@@ -10,7 +10,6 @@ import { readCanonicalBuildingBlockCatalog } from "../../../application/canonica
 import type { Approval, Plan } from "../../../domain/types.ts";
 import { authorizePlan, authenticatedEmail } from "../_access.ts";
 import { database } from "../_infrastructure.ts";
-import { requireAdmin } from "../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -116,7 +115,6 @@ type PlanCommand =
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    requireAdmin(request);
     const command = (await request.json()) as PlanCommand;
     const plans = service();
     let result: unknown;
