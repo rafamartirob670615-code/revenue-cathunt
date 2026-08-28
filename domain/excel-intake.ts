@@ -493,6 +493,7 @@ export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: F
   if (!header || header.score < 3) issues.push({code:"TABLE_NOT_FOUND",message:"No encontramos una tabla financiera reconocible."});
   else if (missing.length) issues.push({code:"MISSING_FIELDS",message:`Falta identificar: ${missing.join(", ")}.`});
   const canonicalRows: Array<Record<string,string|number>> = [];
+  const canonicalRowNumbers: number[] = [];
   const rejectedRows: number[] = [];
   if (selected && header && !missing.length) {
     selected.sheet.rows.slice(header.index + 1).forEach((row, offset) => {
@@ -534,7 +535,10 @@ export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: F
       }
       if (requirement === "actual-sales" && String(record.cutoff_date).slice(0, 7) < String(record.period)) valid = false;
       if (!valid) rejectedRows.push(header.index + offset + 2);
-      else canonicalRows.push(record);
+      else {
+        canonicalRows.push(record);
+        canonicalRowNumbers.push(header.index + offset + 2);
+      }
     });
   }
   if (rejectedRows.length) issues.push({code:"REJECTED_ROWS",message:`${rejectedRows.length} filas tienen valores inválidos.`,rows:rejectedRows.slice(0,20)});
@@ -550,7 +554,7 @@ export function analyzeFinancialWorkbook(sheets: WorkbookSheet[], requirement: F
   const duplicateRows: number[] = [];
   canonicalRows.forEach((row, index) => {
     const key = grain.map((field) => String(row[field])).join("|");
-    if (seen.has(key)) duplicateRows.push(index + 2);
+    if (seen.has(key)) duplicateRows.push(canonicalRowNumbers[index]);
     seen.add(key);
   });
   if (duplicateRows.length) issues.push({code:"DUPLICATE_GRAIN",message:"Hay combinaciones económicas duplicadas.",rows:duplicateRows.slice(0,20)});

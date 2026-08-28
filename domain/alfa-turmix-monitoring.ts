@@ -163,6 +163,10 @@ function matrixRatio(numerator: Record<string, number | null>, denominator: Reco
   return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, denominator[key] ? (numerator[key] ?? 0) / denominator[key] : null]));
 }
 
+function matrixDelta(numerator: Record<string, number | null>, denominator: Record<string, number | null>) {
+  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, denominator[key] ? (numerator[key] ?? 0) / denominator[key] - 1 : null]));
+}
+
 function matrixDifference(left: Record<string, number | null>, right: Record<string, number | null>) {
   return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, (left[key] ?? 0) - (right[key] ?? 0)]));
 }
@@ -178,10 +182,10 @@ function matrixBlock(label: string, rows: AlfaBillingRow[]): AlfaBillingMatrixBl
     { metric: "Cobertura", kind: "percent", values: matrixRatio(actual, plan) },
     { metric: "Vs. Business Plan", kind: "value", values: businessPlan },
     { metric: "Cobertura Vs. BP ($)", kind: "value", values: matrixDifference(actual, businessPlan) },
-    { metric: "Cobertura Vs. BP (%)", kind: "percent", values: matrixRatio(actual, businessPlan) },
+    { metric: "Cobertura Vs. BP (%)", kind: "percent", values: matrixDelta(actual, businessPlan) },
     { metric: "Real facturado año anterior", kind: "value", values: lastYear },
     { metric: "Δ a año anterior ($)", kind: "value", values: matrixDifference(actual, lastYear) },
-    { metric: "Δ a año anterior (%)", kind: "percent", values: matrixRatio(actual, lastYear) },
+    { metric: "Δ a año anterior (%)", kind: "percent", values: matrixDelta(actual, lastYear) },
   ] };
 }
 
