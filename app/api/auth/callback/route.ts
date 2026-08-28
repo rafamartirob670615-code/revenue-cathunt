@@ -16,8 +16,10 @@ export async function GET(request: Request) {
         response.headers.set("Set-Cookie", sessionCookie(user));
         return response;
       }
-    } catch {
-      // No revelamos datos ni capacidades si falla el SSO.
+    } catch (error) {
+      // No revelamos datos ni capacidades si falla el SSO, pero dejamos una
+      // causa operativa sin token ni datos de usuario para poder corregirlo.
+      console.error("Revenue SSO callback failed", error instanceof Error ? error.message : "unknown error");
     }
   }
 
