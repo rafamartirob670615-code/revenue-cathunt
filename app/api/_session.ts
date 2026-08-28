@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { redirect } from "next/navigation";
 
 const COOKIE = "cathunt_revenue_session";
 const SESSION_MS = 8 * 60 * 60 * 1000;
@@ -59,6 +60,13 @@ export function sessionActorFromCookie(cookieHeader: string | null | undefined):
 
 export function sessionActor(request: Request): Session | null {
   return sessionActorFromCookie(request.headers.get("cookie"));
+}
+
+export function requireSession(requestHeaders: Headers, path = ""): Session {
+  const session = sessionActorFromCookie(requestHeaders.get("cookie"));
+  if (session) return session;
+  const origin = `https://${requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host")}`;
+  redirect(`https://cathunt-hub.vercel.app/api/sso/token?url=${encodeURIComponent(origin + path)}`);
 }
 
 export function requireAdmin(request: Request) {

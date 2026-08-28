@@ -1,17 +1,11 @@
 import RevenuePlatform from "../revenue/RevenuePlatform";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { identityFromSession } from "../api/_access";
-import { sessionActorFromCookie } from "../api/_session";
+import { requireSession } from "../api/_session";
 
 export const dynamic = "force-dynamic";
 
 export default async function MonitoringPage() {
-  const requestHeaders = await headers();
-  const session = sessionActorFromCookie(requestHeaders.get("cookie"));
-  if (!session) {
-    const origin = `https://${requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host")}`;
-    redirect(`https://cathunt-hub.vercel.app/api/sso/token?url=${encodeURIComponent(`${origin}/monitoring`)}`);
-  }
+  const session = requireSession(await headers(), "/monitoring");
   return <RevenuePlatform identity={identityFromSession(session)} initialModule="monitoreo" />;
 }
