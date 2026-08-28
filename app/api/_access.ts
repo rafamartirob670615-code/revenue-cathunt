@@ -1,6 +1,7 @@
 import { database } from "./_infrastructure.ts";
 import type { Capability, BusinessFunction, RevenueIdentity } from "../revenue/access.ts";
 import type { Plan } from "../../domain/types.ts";
+import { sessionActor, type CanonicalUser } from "./_session.ts";
 
 export const ASSIGNABLE_CAPABILITIES = [
   "MARKETING_CONTRIBUTE",
@@ -12,25 +13,31 @@ export const ASSIGNABLE_CAPABILITIES = [
   "ADMINISTER_ACCESS",
 ] as const satisfies readonly Capability[];
 
-const LOCAL_DEMO_EMAIL = "pilot@revenue.local";
-
-// REVENUE is currently a synthetic, non-commercial pilot. Its public mode must not
-// depend on a browser-specific identity header or on ChatGPT's private hosting layer.
-// A real login can replace this adapter before non-synthetic data is exposed.
-
 export function authenticatedEmail(request: Request): string | undefined {
-  void request;
-  return LOCAL_DEMO_EMAIL;
+  return sessionActor(request)?.correo;
 }
 
 export type AssignableCapability = (typeof ASSIGNABLE_CAPABILITIES)[number];
 export type MonitoringAccessRule = { type: "ALL" | "ACCOUNT" | "TERRITORY" | "CHANNEL" | "FAMILY"; value?: string };
 
+export function identityFromSession(session: Pick<CanonicalUser, "rol" | "correo" | "nombre">): RevenueIdentity {
+  const administrator = session.rol === "admin";
+  return {
+    displayName: session.nombre?.trim() || session.correo?.trim() || "Usuario autorizado",
+    email: session.correo?.trim().toLowerCase() || "",
+    authenticated: true,
+    functions: [administrator ? "ADMINISTRATOR" : "PLAN_OWNER"],
+    capabilities: administrator
+      ? ["PLAN_CREATE", "PLAN_INTEGRATE", "BASELINE_REVIEW", "MONITOR", ...ASSIGNABLE_CAPABILITIES]
+      : [],
+  };
+}
+
 export function requestIdentity(request: Request) {
-  const email = authenticatedEmail(request);
+  const session = sessionActor(request);
+  const email = session?.correo;
   if (!email) throw new Error("Autenticación requerida");
-  const displayName = email === LOCAL_DEMO_EMAIL ? "Usuario piloto" : email;
-  return { id: `user:${email}`, email, displayName };
+  return { id: `user:${email}`, email, displayName: session?.nombre || email, role: session?.rol };
 }
 
 export async function ensureUser(request: Request) {
@@ -105,17 +112,21 @@ export async function resolveRevenueIdentity(request: Request): Promise<RevenueI
     `SELECT 1 AS owned FROM plan_aggregates
      WHERE lower(aggregate_json::jsonb #>> '{versions,0,createdBy}')=lower(?) LIMIT 1`,
   ).bind(actor.email).first<{ owned: number }>();
-  if (owned || actor.email === LOCAL_DEMO_EMAIL) {
+  if (owned || actor.role === "admin") {
     for (const capability of ["PLAN_CREATE", "PLAN_INTEGRATE", "BASELINE_REVIEW", "MONITOR"] as Capability[]) {
       if (!capabilities.includes(capability)) capabilities.push(capability);
     }
   }
-  if (actor.email === LOCAL_DEMO_EMAIL && !capabilities.includes("ADMINISTER_ACCESS")) capabilities.push("ADMINISTER_ACCESS");
+  if (actor.role === "admin") {
+    for (const capability of ASSIGNABLE_CAPABILITIES) {
+      if (!capabilities.includes(capability)) capabilities.push(capability);
+    }
+  }
   return {
     displayName: actor.displayName,
     email: actor.email,
     authenticated: true,
-    functions: functions.length ? functions : ["PLAN_OWNER"],
+    functions: actor.role === "admin" ? ["ADMINISTRATOR"] : functions.length ? functions : ["PLAN_OWNER"],
     capabilities,
   };
 }

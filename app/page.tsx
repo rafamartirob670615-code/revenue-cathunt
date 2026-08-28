@@ -1,8 +1,14 @@
 import RevenuePlatform from "./revenue/RevenuePlatform";
-import { PUBLIC_REVENUE_IDENTITY } from "./revenue/public-identity";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { identityFromSession } from "./api/_access";
+import { sessionActorFromCookie } from "./api/_session";
 
 export const dynamic = "force-dynamic";
 
 export default async function RevenueApp() {
-  return <RevenuePlatform identity={PUBLIC_REVENUE_IDENTITY} />;
+  const requestHeaders = await headers();
+  const session = sessionActorFromCookie(requestHeaders.get("cookie"));
+  if (!session) redirect("https://cathunt-hub.vercel.app/api/sso/token?url=https%3A%2F%2Frevenue-marsal1.vercel.app");
+  return <RevenuePlatform identity={identityFromSession(session)} />;
 }

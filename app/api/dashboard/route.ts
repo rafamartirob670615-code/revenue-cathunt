@@ -1,6 +1,6 @@
 import { database } from "../_infrastructure.ts";
 import type { Plan, PlanStatus } from "../../../domain/types.ts";
-import { authenticatedEmail as resolveAuthenticatedEmail } from "../_access.ts";
+import { authenticatedEmail as resolveAuthenticatedEmail, requestIdentity } from "../_access.ts";
 
 export const runtime = "nodejs";
 
@@ -29,13 +29,12 @@ interface DashboardPlan {
 }
 
 function authenticatedEmail(request: Request) {
-  // The standalone pilot uses the same browser-agnostic identity adapter as every API route.
+  // Toda consulta se vincula a la sesión firmada emitida por el Hub.
   return resolveAuthenticatedEmail(request);
 }
 
 function displayName(request: Request) {
-  void request;
-  return "Usuario piloto";
+  return requestIdentity(request).displayName;
 }
 
 function deriveStage(

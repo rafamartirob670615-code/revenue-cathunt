@@ -13,12 +13,11 @@ export async function GET(request: Request) {
       const user = await consumeSsoToken(token, url.origin);
       if (user) {
         const response = Response.redirect(new URL(next, request.url), 302);
-        response.headers.set("Set-Cookie", sessionCookie(user.id, user.rol));
+        response.headers.set("Set-Cookie", sessionCookie(user));
         return response;
       }
     } catch {
-      // La lectura pública sigue disponible si el SSO falla; las escrituras
-      // permanecen cerradas porque exigen una sesión firmada de administrador.
+      // No revelamos datos ni capacidades si falla el SSO.
     }
   }
 

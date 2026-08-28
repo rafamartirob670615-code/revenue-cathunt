@@ -25,7 +25,7 @@ const FUNCTION_BY_CAPABILITY: Record<AssignableCapability, BusinessFunction> = {
 
 async function requireAdministrator(request: Request, planId?: string) {
   const actor = requestIdentity(request);
-  if (actor.email === "pilot@revenue.local") return actor;
+  if (actor.role === "admin") return actor;
   if (planId) {
     const { ownerEmail } = await planRecord(planId);
     if (actor.email === ownerEmail) throw new Error("Sólo el administrador puede usar Administración");

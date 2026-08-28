@@ -2,10 +2,16 @@ import crypto from "node:crypto";
 import postgres from "postgres";
 
 const COOKIE = "cathunt_revenue_session";
-const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_MS = 8 * 60 * 60 * 1000;
 
-type Session = { usuarioId: string; rol: "admin" | "usuario"; exp: number };
-type CanonicalUser = { id: string; rol: "admin" | "usuario"; activo: boolean };
+type Session = { usuarioId: string; rol: "admin" | "usuario"; correo: string; nombre: string; exp: number };
+export type CanonicalUser = {
+  id: string;
+  rol: "admin" | "usuario";
+  activo: boolean;
+  correo: string | null;
+  nombre: string | null;
+};
 
 const globalConnection = globalThis as typeof globalThis & { revenueSsoDatabase?: ReturnType<typeof postgres> };
 
@@ -40,22 +46,39 @@ function parseSession(token: string | undefined): Session | null {
   }
 }
 
-function cookieValue(request: Request) {
-  const cookies = Object.fromEntries(String(request.headers.get("cookie") || "").split(";").map((item) => item.trim()).filter(Boolean).map((item) => {
+function cookieValue(cookieHeader: string | null | undefined) {
+  const cookies = Object.fromEntries(String(cookieHeader || "").split(";").map((item) => item.trim()).filter(Boolean).map((item) => {
     const index = item.indexOf("=");
     return [decodeURIComponent(item.slice(0, index)), decodeURIComponent(item.slice(index + 1))];
   }));
   return cookies[COOKIE] as string | undefined;
 }
 
+export function sessionActorFromCookie(cookieHeader: string | null | undefined): Session | null {
+  const session = parseSession(cookieValue(cookieHeader));
+  return session?.correo ? session : null;
+}
+
+export function sessionActor(request: Request): Session | null {
+  return sessionActorFromCookie(request.headers.get("cookie"));
+}
+
 export function requireAdmin(request: Request) {
-  const session = parseSession(cookieValue(request));
+  const session = sessionActor(request);
   if (session?.rol === "admin") return session;
   throw new Error("Autenticación de administrador requerida");
 }
 
-export function sessionCookie(usuarioId: string, rol: Session["rol"]) {
-  const payload = Buffer.from(JSON.stringify({ usuarioId, rol, exp: Date.now() + SESSION_MS })).toString("base64url");
+export function sessionCookie(user: CanonicalUser) {
+  const correo = String(user.correo || "").trim().toLowerCase();
+  if (!correo) throw new Error("El usuario autorizado no tiene correo en CANÓNICOS");
+  const payload = Buffer.from(JSON.stringify({
+    usuarioId: user.id,
+    rol: user.rol,
+    correo,
+    nombre: String(user.nombre || "").trim(),
+    exp: Date.now() + SESSION_MS,
+  })).toString("base64url");
   return `${COOKIE}=${payload}.${signature(payload)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MS / 1000}`;
 }
 
@@ -68,7 +91,7 @@ export async function consumeSsoToken(token: string, destination: string): Promi
   if (!row || row.destino !== destination || row.usado || Date.now() - new Date(row.creado_en).getTime() >= 30_000) return null;
   const consumed = await sql`UPDATE public.sso_tokens SET usado = true WHERE token = ${token} AND usado = false RETURNING token`;
   if (!consumed.length) return null;
-  const users = await sql<CanonicalUser[]>`SELECT id, rol, activo FROM public.usuarios WHERE id = ${row.usuario_id} LIMIT 1`;
+  const users = await sql<CanonicalUser[]>`SELECT id, rol, activo, correo, nombre FROM public.usuarios WHERE id = ${row.usuario_id} LIMIT 1`;
   const user = users[0];
-  return user?.activo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
+  return user?.activo && user.correo && (user.rol === "admin" || user.rol === "usuario") ? user : null;
 }

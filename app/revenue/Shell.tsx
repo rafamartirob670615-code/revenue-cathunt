@@ -66,7 +66,7 @@ export default function Shell({
             </section>;
           })}
         </nav>
-        <footer><i /><span><b>{identity.displayName}</b><small>{FUNCTION_LABELS[identity.functions[0]]} · modo piloto autónomo</small><small className="copyright">© 2026 REVENUE · CatHunt</small></span></footer>
+        <footer><i /><span><b>{identity.displayName}</b><small>{FUNCTION_LABELS[identity.functions[0]]} · sesión autorizada</small><small className="copyright">© 2026 REVENUE · CatHunt</small></span></footer>
       </aside>
       <section className="revenue-stage">
         <header className="plan-context">
