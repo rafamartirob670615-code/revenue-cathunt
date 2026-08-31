@@ -44,7 +44,7 @@ export default function Shell({
     <div className="revenue-platform">
       <aside className="revenue-sidebar">
         <div className="revenue-brand">
-          <Image src="/favicon-256.png" alt="REVENUE" width={120} height={120} priority />
+          <Image src="/favicon-256.png" alt="REVENUE" width={192} height={192} priority />
           <div><b>REVENUE</b></div>
         </div>
         <nav aria-label="Recorrido de REVENUE">

@@ -14,9 +14,9 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{
 
 .revenue-platform{display:grid;grid-template-columns:292px minmax(0,1fr);min-height:100vh}
 .revenue-sidebar{position:sticky;top:0;display:flex;flex-direction:column;height:100vh;padding:24px 16px 16px;border-right:1px solid var(--line);background:#fcfbf8;overflow:auto}
-.revenue-brand{display:flex;flex-direction:column;gap:10px;align-items:center;text-align:center;padding:0 8px 24px;border-bottom:1px solid var(--line)}
-.revenue-brand>img{display:block;width:120px;height:120px;border-radius:28px;object-fit:contain}
-.revenue-brand div{display:grid;justify-items:center;gap:3px}.revenue-brand b{font-size:15px;letter-spacing:.08em}.revenue-brand small{color:var(--muted);font-size:10px}
+.revenue-brand{display:flex;flex-direction:column;gap:8px;align-items:center;text-align:center;padding:0 8px 24px;border-bottom:1px solid var(--line)}
+.revenue-brand>img{display:block;width:192px;height:192px;border-radius:28px;object-fit:contain}
+.revenue-brand div{display:grid;justify-items:center;gap:3px}.revenue-brand b{font-size:20px;font-weight:600;letter-spacing:-.025em}.revenue-brand small{color:var(--muted);font-size:10px}
 .revenue-sidebar nav{display:grid;gap:5px;padding:14px 0}
 .nav-group{display:grid;gap:3px;padding:5px 0}.nav-group>p{margin:6px 10px 4px;color:#a49b8d;font-size:8px;font-weight:850;letter-spacing:.13em;text-transform:uppercase}
 .nav-group button{display:grid;grid-template-columns:25px 1fr;gap:9px;align-items:flex-start;width:100%;padding:9px;border:0;border-radius:8px;background:transparent;color:var(--ink);text-align:left}
