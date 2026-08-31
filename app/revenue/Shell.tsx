@@ -45,7 +45,7 @@ export default function Shell({
       <aside className="revenue-sidebar">
         <div className="revenue-brand">
           <Image src="/favicon-256.png" alt="REVENUE" width={120} height={120} priority />
-          <div><b>REVENUE</b><small>Planeación anual</small></div>
+          <div><b>REVENUE</b></div>
         </div>
         <nav aria-label="Recorrido de REVENUE">
           {groups.map((group) => {
