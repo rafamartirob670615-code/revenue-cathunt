@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 import LegalNotice from "./LegalNotice";
+
+const geistSans = localFont({
+  src: "./fonts/geist-latin.woff2",
+  variable: "--font-geist-sans",
+});
 
 export const metadata: Metadata = {
   title: "REVENUE | Crear Plan anual",
@@ -16,5 +22,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body>{children}<LegalNotice /></body></html>;
+  return <html lang="es" className={geistSans.variable}><body>{children}<LegalNotice /></body></html>;
 }
