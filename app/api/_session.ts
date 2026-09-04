@@ -103,7 +103,14 @@ export async function consumeSsoToken(token: string, destination: string): Promi
     console.error("Revenue SSO: token no encontrado en sso_tokens");
     return null;
   }
-  const vigente = row.destino === destination && !row.usado && Date.now() - new Date(row.creado_en).getTime() < 30_000;
+  // Se valida por origen (no por URL completa) — mismo bug encontrado y
+  // corregido el 2026-09-04 en Precio, Producto, Go To Market, Meridiano y
+  // Promoción: comparar con igualdad exacta contra la URL completa nunca
+  // hace match en cuanto `destino` trae un path o query string, y la sesión
+  // nunca se abre.
+  let rowOrigin: string | null = null;
+  try { rowOrigin = new URL(row.destino).origin; } catch {}
+  const vigente = rowOrigin === destination && !row.usado && Date.now() - new Date(row.creado_en).getTime() < 30_000;
   if (!vigente) {
     console.error("Revenue SSO: token no vigente", { destinoEsperado: destination, destinoToken: row.destino, usado: row.usado, edadMs: Date.now() - new Date(row.creado_en).getTime() });
     return null;
