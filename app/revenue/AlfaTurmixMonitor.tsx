@@ -1,13 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import * as XLSX from "xlsx";
 
 type FilterKey = "territory" | "account" | "accountGroup" | "channel" | "subchannel" | "family" | "product" | "period";
 type Filters = Record<FilterKey, string>;
 type MatrixBlock = { label: string; rows: Array<{ metric: string; kind: "value" | "percent"; values: Record<string, number | null> }> };
-type Body = { dataset: { label: string; category: string }; cutoff: { asOfDate: string; label: string; status: string; source: string }; options: Record<string, string[]>; matrix: MatrixBlock[]; rows: Array<AlfaRow>; exportRows?: Array<AlfaRow>; rowCount: number; totals: { actualValue: number; acceptedPlanValue: number; coverage: number | null; vsLastYearValue: number; vsLastYearPercent: number | null } };
-type AlfaRow = { territory: string; account: string; accountGroup: string; channel: string; subchannel: string; family: string; product: string; period: string; actualValue: number | null; acceptedPlanToDateValue: number | null };
+type Body = { dataset: { label: string; category: string }; options: Record<string, string[]>; matrix: MatrixBlock[]; totals: { actualValue: number; acceptedPlanValue: number; coverage: number | null; vsLastYearValue: number; vsLastYearPercent: number | null } };
 
 const filterKeys: FilterKey[] = ["territory", "account", "accountGroup", "channel", "subchannel", "family", "product", "period"];
 const labels: Record<FilterKey, string> = { territory: "Territorio", account: "Cuenta", accountGroup: "Agrupación", channel: "Canal", subchannel: "Subcanal", family: "Familia", product: "Producto", period: "Periodo" };
@@ -44,28 +42,8 @@ export default function AlfaTurmixMonitor() {
     setFilters((current) => ({ ...current, [key]: value }));
     if (key === "account") setAccountQuery(value === "Todos" ? "" : value);
   }
-  const selectedAccount = filters.account === "Todos" ? null : filters.account;
-  function clearAccount() {
-    setAccountQuery("");
-    setFilters((current) => ({ ...current, account: "Todos" }));
-  }
-  function exportBilling() {
-    if (!body) return;
-    const header = ["Corte","Territorio","Cuenta","Agrupación","Canal","Subcanal","Familia","Producto","Periodo","Actual","Plan al corte","Variación"];
-    const rows = (body.exportRows ?? body.rows).map((row) => [body.cutoff.asOfDate,row.territory,row.account,row.accountGroup,row.channel,row.subchannel,row.family,row.product,row.period,row.actualValue ?? "",row.acceptedPlanToDateValue ?? "",row.actualValue === null || row.acceptedPlanToDateValue === null ? "" : row.actualValue - row.acceptedPlanToDateValue]);
-    const sheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, "Billing File");
-    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    link.download = `REVENUE_Billing_${selectedAccount ?? "compania"}.xlsx`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
   return <main className="revenue-content"><div className="module-page billing-report">
     <header className="module-head"><div><h1>Estado del negocio al día de hoy</h1></div><span className="synthetic-badge">{body.dataset.label}</span></header>
-    <div className="monitor-actions"><button className="paper-button" onClick={clearAccount} disabled={!selectedAccount}>← Todas las cuentas</button><button className="paper-button" onClick={() => window.print()}>Imprimir</button><button className="clay-primary" onClick={exportBilling}>Descargar Excel</button></div>
     {error && <div className="platform-error">{error}</div>}
     <section className="billing-report-head"><div><small>Cuenta / negocio</small><b>Electrodomésticos</b><span>ALFA Turmix · 2027 · MXN</span></div><div><small>Actual ERP</small><b>{money(body.totals.actualValue)}</b><span>Venta acumulada al corte</span></div><div><small>Plan aceptado</small><b>{money(body.totals.acceptedPlanValue)}</b><span>Plan acumulado al corte</span></div><div><small>Cobertura</small><b>{display(body.totals.coverage, "percent")}</b><span>Actual vs. Plan al corte</span></div><div><small>Vs. año anterior</small><b>{money(body.totals.vsLastYearValue)}</b><span>{display(body.totals.vsLastYearPercent, "percent")}</span></div></section>
     <section className="billing-filters billing-report-filters"><div className="billing-report-filter-primary">{(["territory", "channel"] as FilterKey[]).map((key) => <label key={key}>{labels[key]}<select value={filters[key]} onChange={(event) => updateFilter(key, event.target.value)}><option>Todos</option>{(body.options[key] ?? []).map((value) => <option key={value}>{value}</option>)}</select></label>)}<label>Cuenta <span className="billing-filter-hint">{body.options.account?.length ?? 0} disponibles</span><input aria-label="Cuenta" list="alfa-account-options" value={filters.account === "Todos" ? accountQuery : filters.account} placeholder="Buscar cuenta…" onChange={(event) => { const value = event.target.value; setAccountQuery(value); updateFilter("account", (body.options.account ?? []).includes(value) ? value : "Todos"); }} /><datalist id="alfa-account-options">{(body.options.account ?? []).map((value) => <option key={value} value={value} />)}</datalist></label></div><details className="billing-report-more"><summary>Más segmentaciones</summary><div>{filterKeys.filter((key) => !["territory", "account", "channel"].includes(key)).map((key) => <label key={key}>{labels[key]}<select value={filters[key]} onChange={(event) => updateFilter(key, event.target.value)}><option>Todos</option>{(body.options[key] ?? []).map((value) => <option key={value}>{value}</option>)}</select></label>)}</div></details></section>

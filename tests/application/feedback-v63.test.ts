@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("feedback v63: Seguimiento elimina contexto técnico y conserva sus acciones", async () => {
+test("feedback v63: Seguimiento elimina contexto técnico y acciones auxiliares", async () => {
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   const monitor = await readFile(new URL("../../app/revenue/AlfaTurmixMonitor.tsx", import.meta.url), "utf8");
   const modules = await readFile(new URL("../../app/revenue/modules.ts", import.meta.url), "utf8");
@@ -15,11 +15,7 @@ test("feedback v63: Seguimiento elimina contexto técnico y conserva sus accione
   assert.match(shell, /module\.slug === "monitoreo"/);
   assert.match(monitor, /Estado del negocio al día de hoy/);
   assert.doesNotMatch(monitor, /Monitoreo · ALFA Turmix|Reporte oficial de avance|Alcance seleccionado|Fecha de corte|Los meses posteriores permanecen sin actuals/);
-  assert.match(monitor, /Todas las cuentas/);
-  assert.match(monitor, /window\.print/);
-  assert.match(monitor, /download/);
-  assert.match(monitor, /bookType: "xlsx"/);
-  assert.match(monitor, /\.xlsx/);
+  assert.doesNotMatch(monitor, /Todas las cuentas|window\.print|Descargar Excel|bookType: "xlsx"|\.xlsx/);
 });
 
 test("feedback v63: cuenta existente, archivos y bloqueo Product Cost son visibles", async () => {
