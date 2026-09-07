@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCanonicalRevenueAccounts } from "../../../../application/canonical-data";
+import { readCanonicalRevenueMonitoringRows } from "../../../../application/canonical-data";
 import { authorizeMonitoring } from "../../_access";
 import {
-  alfaTurmixCatalog,
-  alfaTurmixAsOfDate,
-  formatAlfaTurmixAsOfDate,
   alfaTurmixOptions,
   createAlfaTurmixBillingMatrix,
-  createAlfaTurmixRows,
   filterAlfaTurmixRows,
   summarizeAlfaTurmixRows,
   type AlfaBillingFilters,
-  type AlfaBillingRow,
 } from "../../../../domain/alfa-turmix-monitoring";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +25,8 @@ function queryFilters(request: NextRequest): AlfaBillingFilters {
   return filters;
 }
 
-function aggregateByPeriod(rows: AlfaBillingRow[]) {
-  const groups = new Map<string, AlfaBillingRow[]>();
-  for (const row of rows) groups.set(row.period, [...(groups.get(row.period) ?? []), row]);
-  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([period, group]) => ({ period, ...summarizeAlfaTurmixRows(group) }));
+function formatCanonicalAsOfDate(asOfDate: string) {
+  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${asOfDate}T12:00:00Z`));
 }
 
 export async function GET(request: NextRequest) {
@@ -43,31 +36,24 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : "No tienes acceso autorizado a Monitoreo";
     return NextResponse.json({ ok: false, error: message }, { status: 403 });
   }
-  const accounts = await readCanonicalRevenueAccounts();
-  const asOfDate = alfaTurmixAsOfDate();
-  const allRows = createAlfaTurmixRows(accounts, asOfDate);
-  const rows = filterAlfaTurmixRows(allRows, queryFilters(request));
-  const sample = rows.slice(0, 240);
-  const catalog = alfaTurmixCatalog(accounts);
+  // All business inputs and calculated Billing rows are owned by CANÓNICOS.
+  const allRows = await readCanonicalRevenueMonitoringRows();
+  const filters = queryFilters(request);
+  const rows = filterAlfaTurmixRows(allRows, filters);
+  const representative = allRows[0];
   const optionKeys = ["period", "territory", "account", "accountGroup", "channel", "subchannel", "category", "family", "product"] as const;
   const options = Object.fromEntries(optionKeys.map((key) => {
-    const siblingFilters = { ...queryFilters(request) };
+    const siblingFilters = { ...filters };
     delete siblingFilters[key];
     return [key, alfaTurmixOptions(filterAlfaTurmixRows(allRows, siblingFilters), key)];
   }));
   return NextResponse.json({
     ok: true,
-    dataset: catalog,
-    source: { class: "SYNTHETIC_NON_COMMERCIAL", accountUniverse: "CANONICOS", erpStatus: "SIMULATED_OFFICIAL_FEED" },
-    cutoff: { asOfDate, label: formatAlfaTurmixAsOfDate(asOfDate), status: "PRELIMINAR", source: "ERP simulado · Billing File" },
-    filters: queryFilters(request),
+    dataset: { label: representative.datasetLabel, category: representative.category },
+    cutoff: { asOfDate: representative.asOfDate, label: formatCanonicalAsOfDate(representative.asOfDate) },
+    filters,
     options,
     totals: summarizeAlfaTurmixRows(rows),
-    byPeriod: aggregateByPeriod(rows),
     matrix: createAlfaTurmixBillingMatrix(rows),
-    rows: sample,
-    exportRows: rows,
-    rowCount: rows.length,
-    sampleLimit: 240,
   });
 }

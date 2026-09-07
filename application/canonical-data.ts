@@ -1,4 +1,4 @@
-import type { AlfaUniverseAccount } from "../domain/alfa-turmix-monitoring.ts";
+import type { AlfaBillingRow, AlfaUniverseAccount } from "../domain/alfa-turmix-monitoring.ts";
 import postgres from "postgres";
 
 type CanonicalAccountRow = {
@@ -9,6 +9,40 @@ type CanonicalAccountRow = {
   canal_consolidado: string | null;
   canal: string | null;
   subcanal: string | null;
+};
+
+type CanonicalMonitoringRow = {
+  scenario_id: string;
+  period: string;
+  as_of_date: string | Date;
+  account_id: string;
+  territory: string;
+  account: string;
+  account_group: string;
+  channel: string;
+  subchannel: string;
+  category: string;
+  family: string;
+  family_sort: number | string;
+  product: string;
+  product_sort: number | string;
+  currency: string;
+  accepted_plan_units: number | string;
+  accepted_plan_value: number | string;
+  accepted_plan_to_date_units: number | string | null;
+  accepted_plan_to_date_value: number | string | null;
+  business_plan_units: number | string;
+  business_plan_value: number | string;
+  business_plan_to_date_units: number | string | null;
+  business_plan_to_date_value: number | string | null;
+  actual_units: number | string | null;
+  actual_value: number | string | null;
+  last_year_units: number | string | null;
+  last_year_value: number | string | null;
+  source_class: string;
+  company_name: string;
+  dataset_label: string;
+  erp_status: string;
 };
 
 const globalCanonicalDatabase = globalThis as typeof globalThis & {
@@ -54,4 +88,68 @@ export async function readCanonicalRevenueAccounts(): Promise<AlfaUniverseAccoun
       subchannel: row.subcanal?.trim() || "General",
     };
   });
+}
+
+function canonicalNumber(value: number | string | null) {
+  return value === null ? null : Number(value);
+}
+
+function canonicalDate(value: string | Date) {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : value.slice(0, 10);
+}
+
+/** Billing File de REVENUE: calculado y almacenado exclusivamente en CANÓNICOS. */
+export async function readCanonicalRevenueMonitoringRows(): Promise<AlfaBillingRow[]> {
+  const rows = await canonicalDatabase()<CanonicalMonitoringRow[]>`
+    SELECT scenario_id, period, as_of_date, account_id, territory, account, account_group,
+           channel, subchannel, category, family, family_sort, product, product_sort, currency,
+           accepted_plan_units, accepted_plan_value,
+           accepted_plan_to_date_units, accepted_plan_to_date_value,
+           business_plan_units, business_plan_value,
+           business_plan_to_date_units, business_plan_to_date_value,
+           actual_units, actual_value, last_year_units, last_year_value,
+           source_class, company_name, dataset_label, erp_status
+    FROM revenue.monitoring_billing_lines
+    ORDER BY family_sort ASC, product_sort ASC, period ASC, account_id ASC
+  `;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error("CANÓNICOS no devolvió un Billing File de REVENUE utilizable.");
+  }
+  const scenarios = new Set(rows.map((row) => row.scenario_id));
+  if (scenarios.size !== 1) {
+    throw new Error("CANÓNICOS devolvió más de un escenario de Billing File activo.");
+  }
+  return rows.map((row) => ({
+    scenarioId: row.scenario_id,
+    period: row.period,
+    asOfDate: canonicalDate(row.as_of_date),
+    accountId: row.account_id,
+    territory: row.territory,
+    account: row.account,
+    accountGroup: row.account_group,
+    channel: row.channel,
+    subchannel: row.subchannel,
+    category: row.category,
+    family: row.family,
+    familySort: Number(row.family_sort),
+    product: row.product,
+    productSort: Number(row.product_sort),
+    currency: row.currency,
+    acceptedPlanUnits: Number(row.accepted_plan_units),
+    acceptedPlanValue: Number(row.accepted_plan_value),
+    acceptedPlanToDateUnits: canonicalNumber(row.accepted_plan_to_date_units),
+    acceptedPlanToDateValue: canonicalNumber(row.accepted_plan_to_date_value),
+    businessPlanUnits: Number(row.business_plan_units),
+    businessPlanValue: Number(row.business_plan_value),
+    businessPlanToDateUnits: canonicalNumber(row.business_plan_to_date_units),
+    businessPlanToDateValue: canonicalNumber(row.business_plan_to_date_value),
+    actualUnits: canonicalNumber(row.actual_units),
+    actualValue: canonicalNumber(row.actual_value),
+    lastYearUnits: canonicalNumber(row.last_year_units),
+    lastYearValue: canonicalNumber(row.last_year_value),
+    sourceClass: row.source_class,
+    companyName: row.company_name,
+    datasetLabel: row.dataset_label,
+    erpStatus: row.erp_status,
+  }));
 }

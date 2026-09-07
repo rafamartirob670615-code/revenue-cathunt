@@ -17,6 +17,14 @@ test("Monitoreo consume Actuals, cuota e historia canónicos", async () => {
   assert.match(route, /segment/);
 });
 
+test("Seguimiento de REVENUE lee su Billing File desde CANÓNICOS", async () => {
+  const route = await readFile(new URL("../../app/api/monitoring/alfa-turmix/route.ts", import.meta.url), "utf8");
+  const reader = await readFile(new URL("../../application/canonical-data.ts", import.meta.url), "utf8");
+  assert.match(route, /readCanonicalRevenueMonitoringRows/);
+  assert.doesNotMatch(route, /createAlfaTurmixRows|exportRows/);
+  assert.match(reader, /FROM revenue\.monitoring_billing_lines/);
+});
+
 test("la vista integral carga Excel y calcula variaciones comparables", async () => {
   const source = await readFile(new URL("../../app/revenue/MonitoringModule.tsx", import.meta.url), "utf8");
   assert.match(source, /Cuota comercial/);
