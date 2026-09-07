@@ -4,7 +4,7 @@ Aplicación autónoma de planeación anual comercial y monitoreo Billing.
 
 ## Producto vigente
 
-- **Inicio:** elige entre Monitoreo o Crear un Plan.
+- **Crear plan:** registra el contexto para iniciar la construcción anual.
 - **Monitoreo:** consulta transversal del negocio completo para el piloto.
 - **Construcción:** responsable del Plan y administrador pueden trabajar la
   cuenta; Marketing y Trade entregan aportaciones separadas.

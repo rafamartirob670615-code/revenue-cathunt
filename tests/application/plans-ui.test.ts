@@ -102,7 +102,7 @@ test("Revisión concentra validaciones y bloquea el caso sintético", async () =
 
 test("la nueva maquinaria usa un registro único de módulos", async () => {
   const source = await readFile(registryUrl, "utf8");
-  for (const moduleName of ["inicio", "contexto", "informacion", "volumen-base", "plan-marketing", "plan-trade", "plan-anual", "rentabilidad", "revision", "monitoreo", "administracion"]) {
+  for (const moduleName of ["contexto", "informacion", "volumen-base", "plan-marketing", "plan-trade", "plan-anual", "rentabilidad", "revision", "monitoreo", "administracion"]) {
     assert.match(source, new RegExp(`\"${moduleName}\"`));
   }
 });

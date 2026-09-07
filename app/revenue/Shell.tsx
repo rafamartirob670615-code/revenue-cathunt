@@ -4,7 +4,7 @@ import Image from "next/image";
 import { REVENUE_MODULES, type RevenueModule } from "./modules";
 import { FUNCTION_LABELS, type RevenueIdentity } from "./access";
 
-const sidebarModules: RevenueModule[] = ["inicio", "monitoreo", "administracion"];
+const sidebarModules: RevenueModule[] = ["contexto", "monitoreo", "administracion"];
 
 export default function Shell({
   active,

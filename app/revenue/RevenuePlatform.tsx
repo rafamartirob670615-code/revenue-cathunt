@@ -6,7 +6,6 @@ import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
 import MonitoringModule from "./MonitoringModule";
 import Shell from "./Shell";
-import HomeModule from "./HomeModule";
 import {
   BaselineModule,
   ContextModule,
@@ -49,7 +48,7 @@ function friendly(message?: string) {
   return message || "No pudimos completar la acción. Tu trabajo guardado no se perdió.";
 }
 
-export default function RevenuePlatform({ identity, initialModule = "inicio" }: { identity: RevenueIdentity; initialModule?: RevenueModule }) {
+export default function RevenuePlatform({ identity, initialModule = "monitoreo" }: { identity: RevenueIdentity; initialModule?: RevenueModule }) {
   const [effectiveIdentity, setEffectiveIdentity] = useState(identity);
   const [active, setActive] = useState<RevenueModule>(initialModule);
   const [selected, setSelected] = useState<Plan | null>(null);
@@ -393,6 +392,10 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
   }
 
   function navigate(module: RevenueModule) {
+    if (module === "contexto") {
+      startCreate();
+      return;
+    }
     // El menú lateral es persistente: cualquier destino debe cerrar el formulario
     // transitorio de creación para no dejar el contenido desfasado del módulo activo.
     setCreating(false);
@@ -427,8 +430,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule accounts={canonicalAccounts} busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("inicio"); }} /> :
-      active === "inicio" ? <HomeModule canCreate={can("PLAN_CREATE") || can("PLAN_INTEGRATE")} onCreate={startCreate} onMonitor={() => setActive("monitoreo")} /> :
+      creating ? <CreatePlanModule accounts={canonicalAccounts} busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("monitoreo"); }} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule accounts={canonicalAccounts} files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :

@@ -1,5 +1,4 @@
 export type RevenueModule =
-  | "inicio"
   | "contexto"
   | "informacion"
   | "volumen-base"
@@ -20,8 +19,7 @@ export type RevenueModuleDefinition = {
 };
 
 export const REVENUE_MODULES: RevenueModuleDefinition[] = [
-  { slug: "inicio", name: "Inicio", question: "Trabajo y Planes guardados", group: "general" },
-  { slug: "contexto", name: "Contexto del Plan", question: "Compañía, cuenta, año y versión", group: "build", step: 1 },
+  { slug: "contexto", name: "Crear plan", question: "Compañía, cuenta, año y versión", group: "build", step: 1 },
   { slug: "informacion", name: "Información", question: "Excel y fuentes empresariales", group: "build", step: 2 },
   { slug: "volumen-base", name: "Volumen base", question: "Venta sin nuevas actividades", group: "build", step: 3 },
   { slug: "plan-marketing", name: "Plan de Marketing", question: "Demanda y construcción de marca", group: "build", step: 4 },

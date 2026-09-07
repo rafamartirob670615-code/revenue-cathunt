@@ -28,7 +28,7 @@ test("Monitoreo es transversal y el menú conserva sus accesos principales", asy
   assert.match(monitoring, /requestIdentity\(request\)/);
   assert.doesNotMatch(monitoring, /authorizePlan\(request/);
   assert.match(access, /administrator && buildAccess/);
-  assert.match(shell, /sidebarModules.*"inicio".*"monitoreo".*"administracion"/);
+  assert.match(shell, /sidebarModules.*"contexto".*"monitoreo".*"administracion"/);
 });
 
 test("Marketing y Trade sólo aportan a su función y únicamente el KAM integra", async () => {
