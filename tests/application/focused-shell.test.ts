@@ -8,19 +8,23 @@ test("Inicio y los módulos viven en una sola maquinaria", async () => {
   const home = await readFile(new URL("../../app/revenue/HomeModule.tsx", import.meta.url), "utf8");
   assert.match(page, /RevenuePlatform/);
   assert.match(shell, /REVENUE_MODULES\.filter/);
-  assert.match(shell, /Construir el Plan/);
+  assert.match(shell, /sidebarModules/);
   assert.match(home, /Crear un Plan anual/);
   assert.match(home, /Ver el negocio completo/);
   assert.match(home, /Rutas principales/);
+  assert.match(home, /Estado del negocio en este momento/);
+  assert.doesNotMatch(home, /Elige una ruta para empezar/);
+  assert.doesNotMatch(home, /Registra compañía, cuenta, año y después/);
   assert.doesNotMatch(home, /Continuar exactamente donde quedó|Aportaciones por función|Demo oficial/);
   assert.doesNotMatch(page, /RevenueLobby|PlansWorkspace/);
 });
 
-test("el armazón conserva contexto y muestra el recorrido completo", async () => {
+test("el armazón mantiene una navegación simplificada", async () => {
   const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
-  for (const label of ["Compañía", "Cuenta", "Año", "Versión", "Estado"]) assert.match(shell, new RegExp(label));
-  assert.match(platform, /completed\.has|completed=/);
+  for (const label of ["inicio", "monitoreo", "administracion"]) assert.match(shell, new RegExp(label));
+  assert.doesNotMatch(shell, /plan-context/);
+  assert.doesNotMatch(platform, /completed=/);
   assert.doesNotMatch(shell, /disabled={!available/);
   assert.match(platform, /APPROVED_FROZEN/);
   assert.match(platform, /unitsReconciled/);

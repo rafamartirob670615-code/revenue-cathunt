@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
@@ -149,20 +149,6 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
       setBusy("");
     }
   }
-
-  const completed = useMemo(() => {
-    const modules = new Set<RevenueModule>();
-    if (selected) modules.add("contexto");
-    if (state.accepted) modules.add("informacion");
-    if (state.review?.status === "APPROVED_FROZEN") modules.add("volumen-base");
-    if (state.growth?.activities.some((activity) => activity.family === "MARKETING")) modules.add("plan-marketing");
-    if (state.growth?.activities.some((activity) => activity.family === "TRADE_MARKETING")) modules.add("plan-trade");
-    if (state.result?.controls.unitsReconciled) modules.add("plan-anual");
-    if (state.profitability?.controls.planReconciled) modules.add("rentabilidad");
-    if (state.profitability) modules.add("revision");
-    if (selected && ["SUBMITTED","COMMERCIAL_APPROVED","OFFICIAL"].includes(selected.versions.at(-1)?.status ?? "")) modules.add("monitoreo");
-    return modules;
-  }, [selected, state]);
 
   async function upload(requirementId: string, file?: File, destination?: RevenueModule) {
     if (!selected || !file) return;
@@ -437,7 +423,7 @@ export default function RevenuePlatform({ identity, initialModule = "inicio" }: 
   const financeOnly = can("VIEW_FINANCIALS") && !canIntegrate && !can("REVIEW") && !can("APPROVE");
 
   return (
-    <Shell active={active} plan={selected} identity={effectiveIdentity} completed={completed} onNavigate={navigate}>
+    <Shell active={active} identity={effectiveIdentity} onNavigate={navigate}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :

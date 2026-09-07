@@ -21,14 +21,14 @@ test("la administración sólo concede las seis capacidades de construcción y g
   assert.doesNotMatch(route, /MONITOR_SCOPE_TYPES|capability === "MONITOR"/);
 });
 
-test("Monitoreo es transversal y Construcción reconoce al administrador", async () => {
+test("Monitoreo es transversal y el menú conserva sus accesos principales", async () => {
   const monitoring = await readFile(new URL("../../app/api/monitoring/route.ts", import.meta.url), "utf8");
   const access = await readFile(new URL("../../app/api/_access.ts", import.meta.url), "utf8");
   const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   assert.match(monitoring, /requestIdentity\(request\)/);
   assert.doesNotMatch(monitoring, /authorizePlan\(request/);
   assert.match(access, /administrator && buildAccess/);
-  assert.match(shell, /slug === "monitoreo"\) return true/);
+  assert.match(shell, /sidebarModules.*"inicio".*"monitoreo".*"administracion"/);
 });
 
 test("Marketing y Trade sólo aportan a su función y únicamente el KAM integra", async () => {
