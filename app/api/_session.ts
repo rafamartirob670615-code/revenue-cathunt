@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 
 const COOKIE = "cathunt_revenue_session";
 const SESSION_MS = 8 * 60 * 60 * 1000;
+// Esta es la dirección registrada en el directorio seguro del Hub. No se
+// deriva del host recibido, porque los aliases de Vercel no son destinos SSO
+// autorizados por sí mismos.
+const CANONICAL_REVENUE_ORIGIN = "https://revenue-marsal1.vercel.app";
 
 type Session = { usuarioId: string; rol: "admin" | "usuario"; correo: string; nombre: string; exp: number };
 export type CanonicalUser = {
@@ -65,8 +69,7 @@ export function sessionActor(request: Request): Session | null {
 export function requireSession(requestHeaders: Headers, path = ""): Session {
   const session = sessionActorFromCookie(requestHeaders.get("cookie"));
   if (session) return session;
-  const origin = `https://${requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host")}`;
-  redirect(`https://cathunt-hub.vercel.app/api/sso/token?url=${encodeURIComponent(origin + path)}`);
+  redirect(`https://cathunt-hub.vercel.app/api/sso/token?url=${encodeURIComponent(CANONICAL_REVENUE_ORIGIN + path)}`);
 }
 
 export function requireAdmin(request: Request) {

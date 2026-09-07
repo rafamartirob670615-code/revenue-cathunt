@@ -31,6 +31,13 @@ test("Monitoreo es transversal y el menú conserva sus accesos principales", asy
   assert.match(shell, /sidebarModules.*"contexto".*"monitoreo".*"administracion"/);
 });
 
+test("Revenue solicita SSO para su dirección canónica y no para aliases temporales", async () => {
+  const session = await readFile(new URL("../../app/api/_session.ts", import.meta.url), "utf8");
+  assert.match(session, /CANONICAL_REVENUE_ORIGIN = "https:\/\/revenue-marsal1\.vercel\.app"/);
+  assert.match(session, /encodeURIComponent\(CANONICAL_REVENUE_ORIGIN \+ path\)/);
+  assert.doesNotMatch(session, /x-forwarded-host/);
+});
+
 test("Marketing y Trade sólo aportan a su función y únicamente el KAM integra", async () => {
   const route = await readFile(new URL("../../app/api/contributions/route.ts", import.meta.url), "utf8");
   assert.match(route, /body\.businessFunction === "MARKETING" \? "MARKETING_CONTRIBUTE" : "TRADE_CONTRIBUTE"/);
