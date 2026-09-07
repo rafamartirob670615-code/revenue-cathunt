@@ -3,6 +3,8 @@ import { readCanonicalRevenueAccounts } from "../../../../application/canonical-
 import { authorizeMonitoring } from "../../_access";
 import {
   alfaTurmixCatalog,
+  alfaTurmixAsOfDate,
+  formatAlfaTurmixAsOfDate,
   alfaTurmixOptions,
   createAlfaTurmixBillingMatrix,
   createAlfaTurmixRows,
@@ -42,7 +44,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: message }, { status: 403 });
   }
   const accounts = await readCanonicalRevenueAccounts();
-  const allRows = createAlfaTurmixRows(accounts);
+  const asOfDate = alfaTurmixAsOfDate();
+  const allRows = createAlfaTurmixRows(accounts, asOfDate);
   const rows = filterAlfaTurmixRows(allRows, queryFilters(request));
   const sample = rows.slice(0, 240);
   const catalog = alfaTurmixCatalog(accounts);
@@ -56,6 +59,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     dataset: catalog,
     source: { class: "SYNTHETIC_NON_COMMERCIAL", accountUniverse: "CANONICOS", erpStatus: "SIMULATED_OFFICIAL_FEED" },
+    cutoff: { asOfDate, label: formatAlfaTurmixAsOfDate(asOfDate), status: "PRELIMINAR", source: "ERP simulado · Billing File" },
     filters: queryFilters(request),
     options,
     totals: summarizeAlfaTurmixRows(rows),

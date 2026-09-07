@@ -10,6 +10,8 @@ test("feedback v63: Monitoreo conserva Shell, alcance y exportación", async () 
   assert.match(platform, /<AlfaTurmixMonitor \/>/);
   assert.match(page, /initialModule="monitoreo"/);
   assert.match(monitor, /Alcance seleccionado/);
+  assert.match(monitor, /Fecha de corte/);
+  assert.match(monitor, /sin actuals/);
   assert.match(monitor, /Todas las cuentas/);
   assert.match(monitor, /window\.print/);
   assert.match(monitor, /download/);

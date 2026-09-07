@@ -36,12 +36,16 @@ export type AlfaBillingRow = {
   currency: "MXN";
   acceptedPlanUnits: number;
   acceptedPlanValue: number;
+  acceptedPlanToDateUnits: number | null;
+  acceptedPlanToDateValue: number | null;
   businessPlanUnits: number;
   businessPlanValue: number;
-  actualUnits: number;
-  actualValue: number;
-  lastYearUnits: number;
-  lastYearValue: number;
+  businessPlanToDateUnits: number | null;
+  businessPlanToDateValue: number | null;
+  actualUnits: number | null;
+  actualValue: number | null;
+  lastYearUnits: number | null;
+  lastYearValue: number | null;
   sourceClass: typeof ALFA_TURMIX_DATASET;
 };
 
@@ -68,7 +72,31 @@ function stableAdjustment(seed: number) {
   return 1 + ((seed % 7) - 3) / 100;
 }
 
-export function createAlfaTurmixRows(accounts: readonly AlfaUniverseAccount[]): AlfaBillingRow[] {
+function validCutoff(value: string) {
+  return /^2027-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`));
+}
+
+export function alfaTurmixAsOfDate(now = new Date()) {
+  const configured = String(process.env.REVENUE_SYNTHETIC_AS_OF_DATE ?? "").trim();
+  if (validCutoff(configured)) return configured;
+  return `${ALFA_TURMIX_YEAR}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+export function formatAlfaTurmixAsOfDate(asOfDate: string) {
+  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${asOfDate}T12:00:00Z`));
+}
+
+function cutOffProgress(month: number, asOfDate: string) {
+  const [, monthText, dayText] = asOfDate.split("-");
+  const cutoffMonth = Number(monthText);
+  const cutoffDay = Number(dayText);
+  if (month < cutoffMonth) return 1;
+  if (month > cutoffMonth) return 0;
+  return cutoffDay / new Date(Date.UTC(ALFA_TURMIX_YEAR, month, 0)).getUTCDate();
+}
+
+export function createAlfaTurmixRows(accounts: readonly AlfaUniverseAccount[], asOfDate = alfaTurmixAsOfDate()): AlfaBillingRow[] {
+  if (!validCutoff(asOfDate)) throw new Error("La fecha de corte sintética debe pertenecer a 2027.");
   const rows: AlfaBillingRow[] = [];
   let seed = 0;
   for (let month = 1; month <= 12; month += 1) {
@@ -78,18 +106,24 @@ export function createAlfaTurmixRows(accounts: readonly AlfaUniverseAccount[]): 
           seed += 1;
           const accountSeed = [...account.id].reduce((sum, character) => sum + character.charCodeAt(0), 0);
           const accountFactor = account.channel === "Especialistas" ? 0.72 : account.territory === "Norte" ? 1.1 : 0.96;
-          const lastYearUnits = Math.round(product.base * seasonal[month - 1] * accountFactor * stableAdjustment(seed + accountSeed));
-          const acceptedPlanUnits = Math.round(lastYearUnits * (1.04 + (family === "Café y Bebidas" ? 0.025 : 0)));
-          const businessPlanUnits = Math.round(lastYearUnits * 1.055);
-          const actualUnits = Math.round(acceptedPlanUnits * (0.95 + ((month + seed) % 9) / 100));
+          const lastYearFullUnits = Math.round(product.base * seasonal[month - 1] * accountFactor * stableAdjustment(seed + accountSeed));
+          const acceptedPlanUnits = Math.round(lastYearFullUnits * (1.04 + (family === "Café y Bebidas" ? 0.025 : 0)));
+          const businessPlanUnits = Math.round(lastYearFullUnits * 1.055);
+          const progress = cutOffProgress(month, asOfDate);
+          const actualUnits = progress ? Math.round(acceptedPlanUnits * (0.95 + ((month + seed) % 9) / 100) * progress) : null;
+          const lastYearUnits = progress ? Math.round(lastYearFullUnits * progress) : null;
+          const acceptedPlanToDateUnits = progress ? Math.round(acceptedPlanUnits * progress) : null;
+          const businessPlanToDateUnits = progress ? Math.round(businessPlanUnits * progress) : null;
           rows.push({
             period: period(month), territory: account.territory, account: account.name,
             accountGroup: account.group, channel: account.channel, subchannel: account.subchannel,
             category: "Electrodomésticos", family, product: product.name, currency: "MXN",
             acceptedPlanUnits, acceptedPlanValue: acceptedPlanUnits * product.price,
+            acceptedPlanToDateUnits, acceptedPlanToDateValue: acceptedPlanToDateUnits === null ? null : acceptedPlanToDateUnits * product.price,
             businessPlanUnits, businessPlanValue: businessPlanUnits * product.price,
-            actualUnits, actualValue: actualUnits * product.price,
-            lastYearUnits, lastYearValue: lastYearUnits * product.price,
+            businessPlanToDateUnits, businessPlanToDateValue: businessPlanToDateUnits === null ? null : businessPlanToDateUnits * product.price,
+            actualUnits, actualValue: actualUnits === null ? null : actualUnits * product.price,
+            lastYearUnits, lastYearValue: lastYearUnits === null ? null : lastYearUnits * product.price,
             sourceClass: ALFA_TURMIX_DATASET,
           });
         }
@@ -104,10 +138,11 @@ export function filterAlfaTurmixRows(rows: AlfaBillingRow[], filters: AlfaBillin
 }
 
 export function summarizeAlfaTurmixRows(rows: AlfaBillingRow[]) {
-  const acceptedPlanValue = rows.reduce((sum, row) => sum + row.acceptedPlanValue, 0);
-  const businessPlanValue = rows.reduce((sum, row) => sum + row.businessPlanValue, 0);
-  const actualValue = rows.reduce((sum, row) => sum + row.actualValue, 0);
-  const lastYearValue = rows.reduce((sum, row) => sum + row.lastYearValue, 0);
+  const sum = (field: "acceptedPlanToDateValue" | "businessPlanToDateValue" | "actualValue" | "lastYearValue") => rows.reduce((total, row) => total + (row[field] ?? 0), 0);
+  const acceptedPlanValue = sum("acceptedPlanToDateValue");
+  const businessPlanValue = sum("businessPlanToDateValue");
+  const actualValue = sum("actualValue");
+  const lastYearValue = sum("lastYearValue");
   return {
     rows: rows.length,
     acceptedPlanValue,
@@ -152,10 +187,18 @@ export const ALFA_BILLING_COLUMNS = [
 export type AlfaBillingMatrixRow = { metric: string; kind: "value" | "percent"; values: Record<string, number | null> };
 export type AlfaBillingMatrixBlock = { label: string; rows: AlfaBillingMatrixRow[] };
 
-function matrixValues(rows: AlfaBillingRow[], field: "acceptedPlanValue" | "actualValue" | "businessPlanValue" | "lastYearValue") {
+function matrixValues(rows: AlfaBillingRow[], field: "acceptedPlanToDateValue" | "actualValue" | "businessPlanToDateValue" | "lastYearValue") {
   const byMonth = new Map<string, number>();
-  for (const row of rows) byMonth.set(row.period.slice(-2), (byMonth.get(row.period.slice(-2)) ?? 0) + row[field]);
-  const value = (key: string) => ["Q1", "Q2", "Q3", "Q4"].includes(key) ? [...(key === "Q1" ? ["01", "02", "03"] : key === "Q2" ? ["04", "05", "06"] : key === "Q3" ? ["07", "08", "09"] : ["10", "11", "12"])].reduce((sum, month) => sum + (byMonth.get(month) ?? 0), 0) : key.length === 2 ? byMonth.get(key) ?? 0 : [...byMonth.values()].reduce((sum, current) => sum + current, 0);
+  for (const row of rows) {
+    const amount = row[field];
+    if (amount !== null) byMonth.set(row.period.slice(-2), (byMonth.get(row.period.slice(-2)) ?? 0) + amount);
+  }
+  const monthsFor = (key: string) => key === "Q1" ? ["01", "02", "03"] : key === "Q2" ? ["04", "05", "06"] : key === "Q3" ? ["07", "08", "09"] : key === "Q4" ? ["10", "11", "12"] : [...ALFA_BILLING_COLUMNS.filter((column) => column.key.length === 2).map((column) => column.key)];
+  const value = (key: string) => {
+    if (/^\d{2}$/.test(key)) return byMonth.get(key) ?? null;
+    const values = monthsFor(key).flatMap((month) => byMonth.has(month) ? [byMonth.get(month)!] : []);
+    return values.length ? values.reduce((sum, current) => sum + current, 0) : null;
+  };
   return Object.fromEntries([...ALFA_BILLING_COLUMNS.map(({ key }) => [key, value(key)])]);
 }
 
@@ -172,15 +215,15 @@ function matrixDifference(left: Record<string, number | null>, right: Record<str
 }
 
 function matrixBlock(label: string, rows: AlfaBillingRow[]): AlfaBillingMatrixBlock {
-  const plan = matrixValues(rows, "acceptedPlanValue");
+  const plan = matrixValues(rows, "acceptedPlanToDateValue");
   const actual = matrixValues(rows, "actualValue");
-  const businessPlan = matrixValues(rows, "businessPlanValue");
+  const businessPlan = matrixValues(rows, "businessPlanToDateValue");
   const lastYear = matrixValues(rows, "lastYearValue");
   return { label, rows: [
-    { metric: "Plan aceptado", kind: "value", values: plan },
+    { metric: "Plan aceptado al corte", kind: "value", values: plan },
     { metric: "Actuales (ERP)", kind: "value", values: actual },
     { metric: "Cobertura", kind: "percent", values: matrixRatio(actual, plan) },
-    { metric: "Vs. Business Plan", kind: "value", values: businessPlan },
+    { metric: "Business Plan al corte", kind: "value", values: businessPlan },
     { metric: "Cobertura Vs. BP ($)", kind: "value", values: matrixDifference(actual, businessPlan) },
     { metric: "Cobertura Vs. BP (%)", kind: "percent", values: matrixDelta(actual, businessPlan) },
     { metric: "Real facturado año anterior", kind: "value", values: lastYear },
