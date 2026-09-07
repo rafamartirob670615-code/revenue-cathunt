@@ -187,7 +187,7 @@ export const ALFA_BILLING_COLUMNS = [
 export type AlfaBillingMatrixRow = { metric: string; kind: "value" | "percent"; values: Record<string, number | null> };
 export type AlfaBillingMatrixBlock = { label: string; rows: AlfaBillingMatrixRow[] };
 
-function matrixValues(rows: AlfaBillingRow[], field: "acceptedPlanToDateValue" | "actualValue" | "businessPlanToDateValue" | "lastYearValue") {
+function matrixValues(rows: AlfaBillingRow[], field: "acceptedPlanValue" | "acceptedPlanToDateValue" | "actualValue" | "businessPlanValue" | "businessPlanToDateValue" | "lastYearValue") {
   const byMonth = new Map<string, number>();
   for (const row of rows) {
     const amount = row[field];
@@ -203,27 +203,27 @@ function matrixValues(rows: AlfaBillingRow[], field: "acceptedPlanToDateValue" |
 }
 
 function matrixRatio(numerator: Record<string, number | null>, denominator: Record<string, number | null>) {
-  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, denominator[key] ? (numerator[key] ?? 0) / denominator[key] : null]));
+  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, numerator[key] !== null && denominator[key] ? numerator[key]! / denominator[key] : null]));
 }
 
 function matrixDelta(numerator: Record<string, number | null>, denominator: Record<string, number | null>) {
-  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, denominator[key] ? (numerator[key] ?? 0) / denominator[key] - 1 : null]));
+  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, numerator[key] !== null && denominator[key] ? numerator[key]! / denominator[key] - 1 : null]));
 }
 
 function matrixDifference(left: Record<string, number | null>, right: Record<string, number | null>) {
-  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, (left[key] ?? 0) - (right[key] ?? 0)]));
+  return Object.fromEntries(ALFA_BILLING_COLUMNS.map(({ key }) => [key, left[key] !== null && right[key] !== null ? left[key]! - right[key]! : null]));
 }
 
 function matrixBlock(label: string, rows: AlfaBillingRow[]): AlfaBillingMatrixBlock {
-  const plan = matrixValues(rows, "acceptedPlanToDateValue");
+  const plan = matrixValues(rows, "acceptedPlanValue");
   const actual = matrixValues(rows, "actualValue");
-  const businessPlan = matrixValues(rows, "businessPlanToDateValue");
+  const businessPlan = matrixValues(rows, "businessPlanValue");
   const lastYear = matrixValues(rows, "lastYearValue");
   return { label, rows: [
-    { metric: "Plan aceptado al corte", kind: "value", values: plan },
+    { metric: "Plan aceptado", kind: "value", values: plan },
     { metric: "Actuales (ERP)", kind: "value", values: actual },
     { metric: "Cobertura", kind: "percent", values: matrixRatio(actual, plan) },
-    { metric: "Business Plan al corte", kind: "value", values: businessPlan },
+    { metric: "Business Plan", kind: "value", values: businessPlan },
     { metric: "Cobertura Vs. BP ($)", kind: "value", values: matrixDifference(actual, businessPlan) },
     { metric: "Cobertura Vs. BP (%)", kind: "percent", values: matrixDelta(actual, businessPlan) },
     { metric: "Real facturado año anterior", kind: "value", values: lastYear },

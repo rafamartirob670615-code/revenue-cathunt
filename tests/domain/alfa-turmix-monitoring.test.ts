@@ -61,11 +61,16 @@ test("the Billing matrix keeps the Excel reading pattern", () => {
   assert.equal("FY" in matrix[0].rows[0].values, false);
   assert.equal("YTD" in matrix[0].rows[0].values, true);
   assert.deepEqual(matrix[0].rows.map((row) => row.metric), [
-    "Plan aceptado al corte", "Actuales (ERP)", "Cobertura", "Business Plan al corte",
+    "Plan aceptado", "Actuales (ERP)", "Cobertura", "Business Plan",
     "Cobertura Vs. BP ($)", "Cobertura Vs. BP (%)", "Real facturado año anterior",
     "Δ a año anterior ($)", "Δ a año anterior (%)",
   ]);
   assert.equal(matrix[0].rows[0].values["Q1"], matrix[0].rows[0].values["01"]! + matrix[0].rows[0].values["02"]! + matrix[0].rows[0].values["03"]!);
+  assert.ok(matrix[0].rows[0].values["10"] !== null);
+  assert.ok(matrix[0].rows[3].values["10"] !== null);
   assert.equal(matrix[0].rows[1].values["10"], null);
+  assert.equal(matrix[0].rows[2].values["10"], null);
+  assert.equal(matrix[0].rows[4].values["10"], null);
+  assert.equal(matrix[0].rows[5].values["10"], null);
   assert.equal(matrix[0].rows[1].values["YTD"], matrix[0].rows[1].values["Q1"]! + matrix[0].rows[1].values["Q2"]! + matrix[0].rows[1].values["Q3"]!);
 });
