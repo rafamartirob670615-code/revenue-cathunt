@@ -15,6 +15,8 @@ test("feedback v63: Seguimiento elimina contexto técnico y acciones auxiliares"
   assert.match(modules, /Cómo va el plan al día de hoy/);
   assert.match(shell, /module\.slug === "monitoreo"/);
   assert.match(monitor, /Estado del negocio al día de hoy/);
+  assert.match(monitor, /className="synthetic-note"/);
+  assert.doesNotMatch(monitor, /synthetic-badge/);
   assert.doesNotMatch(monitor, /Monitoreo · ALFA Turmix|Reporte oficial de avance|Alcance seleccionado|Fecha de corte|Los meses posteriores permanecen sin actuals/);
   assert.doesNotMatch(monitor, /Todas las cuentas|window\.print|Descargar Excel|bookType: "xlsx"|\.xlsx/);
   assert.doesNotMatch(planMonitor, /window\.print|Descargar Excel|Descargar Excel\/CSV|REVENUE_Seguimiento_Billing/);
