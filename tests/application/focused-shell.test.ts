@@ -9,6 +9,7 @@ test("Crear plan y los módulos viven en una sola maquinaria", async () => {
   assert.match(page, /RevenuePlatform/);
   assert.match(shell, /REVENUE_MODULES\.filter/);
   assert.match(shell, /sidebarModules/);
+  assert.match(shell, /\["monitoreo", "contexto", "administracion"\]/);
   assert.match(platform, /initialModule = "monitoreo"/);
   assert.match(platform, /module === "contexto"/);
   assert.match(platform, /startCreate\(\)/);

@@ -4,7 +4,7 @@ import Image from "next/image";
 import { REVENUE_MODULES, type RevenueModule } from "./modules";
 import { FUNCTION_LABELS, type RevenueIdentity } from "./access";
 
-const sidebarModules: RevenueModule[] = ["contexto", "monitoreo", "administracion"];
+const sidebarModules: RevenueModule[] = ["monitoreo", "contexto", "administracion"];
 
 export default function Shell({
   active,
@@ -17,7 +17,7 @@ export default function Shell({
   onNavigate: (module: RevenueModule) => void;
   children: React.ReactNode;
 }) {
-  const modules = REVENUE_MODULES.filter((module) => sidebarModules.includes(module.slug));
+  const modules = sidebarModules.flatMap((slug) => REVENUE_MODULES.filter((module) => module.slug === slug));
   return (
     <div className="revenue-platform">
       <aside className="revenue-sidebar">

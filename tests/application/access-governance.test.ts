@@ -28,7 +28,7 @@ test("Monitoreo es transversal y el menú conserva sus accesos principales", asy
   assert.match(monitoring, /requestIdentity\(request\)/);
   assert.doesNotMatch(monitoring, /authorizePlan\(request/);
   assert.match(access, /administrator && buildAccess/);
-  assert.match(shell, /sidebarModules.*"contexto".*"monitoreo".*"administracion"/);
+  assert.match(shell, /sidebarModules.*"monitoreo".*"contexto".*"administracion"/);
 });
 
 test("Revenue solicita SSO para su dirección canónica y no para aliases temporales", async () => {
