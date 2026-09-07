@@ -5,6 +5,7 @@ import test from "node:test";
 test("feedback v63: Seguimiento elimina contexto técnico y acciones auxiliares", async () => {
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   const monitor = await readFile(new URL("../../app/revenue/AlfaTurmixMonitor.tsx", import.meta.url), "utf8");
+  const planMonitor = await readFile(new URL("../../app/revenue/MonitoringModule.tsx", import.meta.url), "utf8");
   const modules = await readFile(new URL("../../app/revenue/modules.ts", import.meta.url), "utf8");
   const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../../app/monitoring/page.tsx", import.meta.url), "utf8");
@@ -16,6 +17,7 @@ test("feedback v63: Seguimiento elimina contexto técnico y acciones auxiliares"
   assert.match(monitor, /Estado del negocio al día de hoy/);
   assert.doesNotMatch(monitor, /Monitoreo · ALFA Turmix|Reporte oficial de avance|Alcance seleccionado|Fecha de corte|Los meses posteriores permanecen sin actuals/);
   assert.doesNotMatch(monitor, /Todas las cuentas|window\.print|Descargar Excel|bookType: "xlsx"|\.xlsx/);
+  assert.doesNotMatch(planMonitor, /window\.print|Descargar Excel|Descargar Excel\/CSV|REVENUE_Seguimiento_Billing/);
 });
 
 test("feedback v63: cuenta existente, archivos y bloqueo Product Cost son visibles", async () => {

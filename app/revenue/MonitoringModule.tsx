@@ -141,13 +141,6 @@ export default function MonitoringModule({ planId }: { planId: string }) {
     const months = key === "YTD" ? ["01","02","03","04","05","06","07","08","09","10","11","12"] : key.startsWith("Q") ? (key === "Q1" ? ["01","02","03"] : key === "Q2" ? ["04","05","06"] : key === "Q3" ? ["07","08","09"] : ["10","11","12"]) : [key];
     return billingFiltered.filter((row) => months.includes(row.period.slice(5, 7))).reduce((sum, row) => sum + (metric === "plan" ? row.planValue : metric === "quota" ? (row.quotaValue ?? 0) : metric === "actual" ? (row.actualValue ?? 0) : (row.varianceValue ?? 0)), 0);
   };
-  function exportBilling() {
-    const header = ["Territorio","Cuenta","Canal","Categoría","Segmento","Producto","Periodo","Plan","Cuota","Venta real","Variación"];
-    const rows = billingFiltered.map((row) => [row.territory || "", row.accountId, row.channel || "", row.category || "", row.segment || "", row.skuId, row.period, row.planValue, row.quotaValue ?? "", row.actualValue ?? "", row.varianceValue ?? ""]);
-    const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"','""')}"`).join(",")).join("\n");
-    const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type:"application/vnd.ms-excel;charset=utf-8" })); link.download = `REVENUE_Seguimiento_Billing_${planId}.xls`; link.click(); URL.revokeObjectURL(link.href);
-  }
-
   return <div className="module-page">
     <ModuleHead eyebrow="Ejecutar el Plan · Seguimiento" title="Plan contra venta real" description="Un solo comparativo mensual. Las desviaciones materiales se convierten en acciones con responsable y fecha." />
     {error && <div className="platform-error">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
@@ -158,10 +151,9 @@ export default function MonitoringModule({ planId }: { planId: string }) {
     </section>
     <section className="paper-metrics"><Metric label="Plan comparable" value={formatMoney(planYtd, currency)} note="hasta el corte" /><Metric label="Venta real" value={data.actuals.ready ? formatMoney(actualYtd, currency) : "Pendiente"} note={data.actuals.cutoffDate ?? "sin corte"} /><Metric label="Variación" value={planYtd ? `${((actualYtd / planYtd - 1) * 100).toFixed(1)}%` : "N/D"} note="Actual vs. Plan" tone={actualYtd < planYtd ? "warn" : "good"} /><Metric label="Desviaciones" value={String(deviations.length)} note="umbral operativo 5%" /></section>
     <section className="billing-matrix"><div className="section-title"><small>Documento oficial de seguimiento</small><h2>Billing File · Plan, cuota, real y variación</h2><p>La misma estructura mensual del Plan oficial, con fuentes faltantes visibles como —.</p></div><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Métrica</th>{officialColumns.map((column) => <th key={column.key} className={column.key.startsWith("Q") || column.key === "YTD" ? "summary-col" : ""}>{column.label}</th>)}</tr></thead><tbody>{([['Plan','plan'],['Cuota','quota'],['Venta real','actual'],['Variación','variance']] as const).map(([label, metric]) => <tr className={`matrix-row ${metric === "variance" ? "percent-row" : ""}`} key={metric}><th>{label}</th>{officialColumns.map((column) => <td key={column.key} className={column.key.startsWith("Q") || column.key === "YTD" ? "summary-col" : ""}>{formatMoney(matrixValue(metric, column.key), currency)}</td>)}</tr>)}</tbody></table></div></section>
-    <div className="billing-actions"><button className="paper-button" onClick={() => window.print()}>Imprimir Billing</button><button className="clay-primary" onClick={exportBilling}>Descargar Excel</button></div>
     {data.growth?.activities?.length && data.result ? <BuildingBlocksWaterfall result={data.result} growth={data.growth} currency={currency} /> : null}
     <section className="billing-explorer">
-      <div className="section-title"><small>Vista de negocio completo</small><h2>Billing consolidado</h2><p>Comienza con todos los canales y desciende por territorio, cuenta, canal, categoría, segmento, producto y periodo.</p><div><button className="paper-button" onClick={() => window.print()}>Imprimir Billing</button> <button className="clay-primary" onClick={exportBilling}>Descargar Excel/CSV</button></div></div>
+      <div className="section-title"><small>Vista de negocio completo</small><h2>Billing consolidado</h2><p>Comienza con todos los canales y desciende por territorio, cuenta, canal, categoría, segmento, producto y periodo.</p></div>
       <div className="billing-filters">{billingDimensions.map(([key, label]) => {
         const values = Array.from(new Set(data.billing.map((row) => String(row[key as keyof BillingRow] ?? "").trim()).filter(Boolean))).sort();
         return <label key={key}>{label}<select value={billingFilters[key as keyof typeof billingFilters]} onChange={(event) => setBillingFilters({ ...billingFilters, [key]:event.target.value })}><option>Todos</option>{values.map((value) => <option key={value}>{value}</option>)}</select></label>;
