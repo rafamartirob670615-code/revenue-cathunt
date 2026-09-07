@@ -27,6 +27,6 @@ export const REVENUE_MODULES: RevenueModuleDefinition[] = [
   { slug: "plan-anual", name: "Plan anual", question: "Unidades y valor consolidados", group: "build", step: 6 },
   { slug: "rentabilidad", name: "Rentabilidad", question: "Margen, inversión y contribución", group: "build", step: 7 },
   { slug: "revision", name: "Revisión y aprobación", question: "Controles y versión defendible", group: "build", step: 8 },
-  { slug: "monitoreo", name: "Seguimiento", question: "Plan contra venta real", group: "execute" },
+  { slug: "monitoreo", name: "Seguimiento", question: "Cómo va el plan al día de hoy", group: "execute" },
   { slug: "administracion", name: "Administración", question: "Usuarios, permisos y reglas", group: "system" },
 ];

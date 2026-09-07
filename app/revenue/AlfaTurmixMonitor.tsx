@@ -37,7 +37,7 @@ export default function AlfaTurmixMonitor() {
     return () => controller.abort();
   }, [filters]);
 
-  if (loading && !body) return <main className="revenue-content"><div className="platform-loading"><span /><b>Abriendo Billing File…</b></div></main>;
+  if (loading && !body) return <main className="revenue-content"><div className="platform-loading"><span /><b>Abriendo estado del negocio…</b></div></main>;
   if (error && !body) return <main className="revenue-content"><div className="platform-error">{error}</div></main>;
   if (!body) return null;
   function updateFilter(key: FilterKey, value: string) {
@@ -45,7 +45,6 @@ export default function AlfaTurmixMonitor() {
     if (key === "account") setAccountQuery(value === "Todos" ? "" : value);
   }
   const selectedAccount = filters.account === "Todos" ? null : filters.account;
-  const scopeLabel = selectedAccount ? `Cuenta · ${selectedAccount}` : filters.territory !== "Todos" ? `Territorio · ${filters.territory}` : filters.channel !== "Todos" ? `Canal · ${filters.channel}` : "Compañía completa";
   function clearAccount() {
     setAccountQuery("");
     setFilters((current) => ({ ...current, account: "Todos" }));
@@ -65,9 +64,8 @@ export default function AlfaTurmixMonitor() {
     URL.revokeObjectURL(link.href);
   }
   return <main className="revenue-content"><div className="module-page billing-report">
-    <header className="module-head"><div><p>Monitoreo · ALFA Turmix</p><h1>Billing File</h1><span>Reporte oficial de avance. La vista comienza con el total del negocio y conserva la lectura matricial del Excel.</span></div><span className="synthetic-badge">{body.dataset.label}</span></header>
-    <section className="billing-cutoff"><div><small>Fuente</small><b>{body.cutoff.source}</b></div><div><small>Fecha de corte</small><b>{body.cutoff.label}</b></div><div><small>Estado</small><b>{body.cutoff.status}</b><span>Los meses posteriores permanecen sin actuals.</span></div></section>
-    <section className="monitor-scope-bar"><div><small>Alcance seleccionado</small><b>{scopeLabel}</b><span>{body.rowCount.toLocaleString("es-MX")} líneas del universo · cambia filtros sin perder el contexto.</span></div><div><button className="paper-button" onClick={clearAccount} disabled={!selectedAccount}>← Todas las cuentas</button><button className="paper-button" onClick={() => window.print()}>Imprimir</button><button className="clay-primary" onClick={exportBilling}>Descargar Excel</button></div></section>
+    <header className="module-head"><div><h1>Estado del negocio al día de hoy</h1></div><span className="synthetic-badge">{body.dataset.label}</span></header>
+    <div className="monitor-actions"><button className="paper-button" onClick={clearAccount} disabled={!selectedAccount}>← Todas las cuentas</button><button className="paper-button" onClick={() => window.print()}>Imprimir</button><button className="clay-primary" onClick={exportBilling}>Descargar Excel</button></div>
     {error && <div className="platform-error">{error}</div>}
     <section className="billing-report-head"><div><small>Cuenta / negocio</small><b>Electrodomésticos</b><span>ALFA Turmix · 2027 · MXN</span></div><div><small>Actual ERP</small><b>{money(body.totals.actualValue)}</b><span>Venta acumulada al corte</span></div><div><small>Plan aceptado</small><b>{money(body.totals.acceptedPlanValue)}</b><span>Plan acumulado al corte</span></div><div><small>Cobertura</small><b>{display(body.totals.coverage, "percent")}</b><span>Actual vs. Plan al corte</span></div><div><small>Vs. año anterior</small><b>{money(body.totals.vsLastYearValue)}</b><span>{display(body.totals.vsLastYearPercent, "percent")}</span></div></section>
     <section className="billing-filters billing-report-filters"><div className="billing-report-filter-primary">{(["territory", "channel"] as FilterKey[]).map((key) => <label key={key}>{labels[key]}<select value={filters[key]} onChange={(event) => updateFilter(key, event.target.value)}><option>Todos</option>{(body.options[key] ?? []).map((value) => <option key={value}>{value}</option>)}</select></label>)}<label>Cuenta <span className="billing-filter-hint">{body.options.account?.length ?? 0} disponibles</span><input aria-label="Cuenta" list="alfa-account-options" value={filters.account === "Todos" ? accountQuery : filters.account} placeholder="Buscar cuenta…" onChange={(event) => { const value = event.target.value; setAccountQuery(value); updateFilter("account", (body.options.account ?? []).includes(value) ? value : "Todos"); }} /><datalist id="alfa-account-options">{(body.options.account ?? []).map((value) => <option key={value} value={value} />)}</datalist></label></div><details className="billing-report-more"><summary>Más segmentaciones</summary><div>{filterKeys.filter((key) => !["territory", "account", "channel"].includes(key)).map((key) => <label key={key}>{labels[key]}<select value={filters[key]} onChange={(event) => updateFilter(key, event.target.value)}><option>Todos</option>{(body.options[key] ?? []).map((value) => <option key={value}>{value}</option>)}</select></label>)}</div></details></section>

@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("feedback v63: Monitoreo conserva Shell, alcance y exportación", async () => {
+test("feedback v63: Seguimiento elimina contexto técnico y conserva sus acciones", async () => {
   const platform = await readFile(new URL("../../app/revenue/RevenuePlatform.tsx", import.meta.url), "utf8");
   const monitor = await readFile(new URL("../../app/revenue/AlfaTurmixMonitor.tsx", import.meta.url), "utf8");
+  const modules = await readFile(new URL("../../app/revenue/modules.ts", import.meta.url), "utf8");
+  const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../../app/monitoring/page.tsx", import.meta.url), "utf8");
   assert.match(platform, /active === "monitoreo" \? selected \? <MonitoringModule/);
   assert.match(platform, /<AlfaTurmixMonitor \/>/);
   assert.match(page, /initialModule="monitoreo"/);
-  assert.match(monitor, /Alcance seleccionado/);
-  assert.match(monitor, /Fecha de corte/);
-  assert.match(monitor, /sin actuals/);
+  assert.match(modules, /Cómo va el plan al día de hoy/);
+  assert.match(shell, /module\.slug === "monitoreo"/);
+  assert.match(monitor, /Estado del negocio al día de hoy/);
+  assert.doesNotMatch(monitor, /Monitoreo · ALFA Turmix|Reporte oficial de avance|Alcance seleccionado|Fecha de corte|Los meses posteriores permanecen sin actuals/);
   assert.match(monitor, /Todas las cuentas/);
   assert.match(monitor, /window\.print/);
   assert.match(monitor, /download/);

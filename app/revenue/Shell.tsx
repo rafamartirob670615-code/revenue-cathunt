@@ -32,7 +32,7 @@ export default function Shell({
               className={active === module.slug ? "active" : ""}
               onClick={() => onNavigate(module.slug)}
             >
-              <i>·</i><span><b>{module.name.toUpperCase()}</b></span>
+              <i>·</i><span><b>{module.name.toUpperCase()}</b>{module.slug === "monitoreo" && <small>{module.question}</small>}</span>
             </button>)}
           </section>
         </nav>
