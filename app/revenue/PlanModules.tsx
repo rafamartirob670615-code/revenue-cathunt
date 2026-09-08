@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
@@ -15,9 +15,23 @@ const billingColumns = [
   ["10", "Oct"], ["11", "Nov"], ["12", "Dic"], ["Q4", "Q4"], ["YTD", "YTD"],
 ] as const;
 
+const quarterMonths: Record<string, string[]> = { Q1: ["01", "02", "03"], Q2: ["04", "05", "06"], Q3: ["07", "08", "09"], Q4: ["10", "11", "12"] };
+
+function BaselineBillingMatrix({ baseline }: { baseline: BaselineResult }) {
+  const products = [...new Set(baseline.lines.map((line) => line.skuId))];
+  const valueFor = (skuId: string, period: string, field: "observedAverageUnits" | "calculatedUnits") =>
+    baseline.lines.filter((line) => line.skuId === skuId && line.period.endsWith(`-${period}`)).reduce((sum, line) => sum + line[field], 0);
+  const cells = (skuId: string, field: "observedAverageUnits" | "calculatedUnits") => billingColumns.map(([key]) => {
+    if (key === "YTD") return baseline.lines.filter((line) => line.skuId === skuId).reduce((sum, line) => sum + line[field], 0);
+    if (key.startsWith("Q")) return (quarterMonths[key] ?? []).reduce((sum, month) => sum + valueFor(skuId, month, field), 0);
+    return valueFor(skuId, key, field);
+  });
+  const summaryCol = (key: string) => key.startsWith("Q") || key === "YTD" ? "summary-col" : "";
+  return <section className="billing-matrix"><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Billing File · Volumen base</th>{billingColumns.map(([key, label]) => <th key={key} className={summaryCol(key)}>{label}</th>)}</tr></thead><tbody>{products.map((skuId) => <Fragment key={skuId}><tr className="matrix-block"><th colSpan={billingColumns.length + 1}>{skuId}</th></tr><tr className="matrix-row"><th>Histórico (promedio observado)</th>{cells(skuId, "observedAverageUnits").map((value, index) => <td key={billingColumns[index][0]} className={summaryCol(billingColumns[index][0])}>{Math.round(value).toLocaleString("es-MX")}</td>)}</tr><tr className="matrix-row"><th>Base calculada</th>{cells(skuId, "calculatedUnits").map((value, index) => <td key={billingColumns[index][0]} className={summaryCol(billingColumns[index][0])}>{Math.round(value).toLocaleString("es-MX")}</td>)}</tr></Fragment>)}</tbody></table></div></section>;
+}
+
 function OfficialPlanBilling({ result }: { result: PlanResult }) {
   const products = [...new Set(result.lines.map((line) => line.skuId))];
-  const quarterMonths: Record<string, string[]> = { Q1: ["01", "02", "03"], Q2: ["04", "05", "06"], Q3: ["07", "08", "09"], Q4: ["10", "11", "12"] };
   const valueFor = (skuId: string, period: string, field: "planUnits" | "planValue") => result.lines.filter((line) => line.skuId === skuId && line.period.endsWith(`-${period}`)).reduce((sum, line) => sum + line[field], 0);
   const cells = (skuId: string, field: "planUnits" | "planValue") => billingColumns.map(([key]) => {
     if (key === "YTD") return result.lines.filter((line) => line.skuId === skuId).reduce((sum, line) => sum + line[field], 0);
@@ -101,7 +115,8 @@ export function BaselineModule({ baseline, review, ready, busy, onCalculate, onA
     {baseline ? <>
       <section className="single-answer"><span>Volumen base anual</span><strong>{baseline.annualUnits.toLocaleString("es-MX")}</strong><small>unidades · {baseline.targetYear}</small><p>{baseline.explanation}</p></section>
       <section className="paper-metrics"><Metric label="Cierre histórico observado" value={formatMoney(baseline.lines.reduce((sum, line) => sum + line.observedAverageValue, 0), "MXN")} note={`${baseline.historyPeriods} periodos · valor promedio`} /><Metric label="Base calculada" value={formatMoney(baseline.lines.reduce((sum, line) => sum + line.calculatedValue, 0), "MXN")} note={`${baseline.annualUnits.toLocaleString("es-MX")} unidades`} /><Metric label="Decisión" value={review?.status === "APPROVED_FROZEN" ? "Aprobada" : "Pendiente"} note="antes de sumar crecimiento" tone={review?.status === "APPROVED_FROZEN" ? "good" : "warn"} /></section>
-      <details className="paper-detail" open><summary>De dónde venía cada línea y a qué base llegó</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>De · promedio observado</span><span>A · base calculada</span></div>{baseline.lines.map((line) => <div className="paper-row" key={`${line.accountId}|${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span><b>{line.observedAverageUnits.toLocaleString("es-MX")}</b><small>{(line.observedUnits ?? []).length ? ` · historia: ${(line.observedUnits ?? []).map((value) => value.toLocaleString("es-MX")).join(" · ")}` : " · sin detalle histórico"}</small></span><span><b>{line.calculatedUnits.toLocaleString("es-MX")}</b><small> · confianza {Math.round(line.confidence * 100)}%</small></span></div>)}</div></details>
+      <BaselineBillingMatrix baseline={baseline} />
+      <details className="paper-detail"><summary>De dónde venía cada línea y a qué base llegó</summary><div className="paper-table"><div className="paper-row head"><span>Periodo</span><span>Producto</span><span>De · promedio observado</span><span>A · base calculada</span></div>{baseline.lines.map((line) => <div className="paper-row" key={`${line.accountId}|${line.period}|${line.skuId}`}><b>{line.period}</b><span>{line.skuId}</span><span><b>{line.observedAverageUnits.toLocaleString("es-MX")}</b><small>{(line.observedUnits ?? []).length ? ` · historia: ${(line.observedUnits ?? []).map((value) => value.toLocaleString("es-MX")).join(" · ")}` : " · sin detalle histórico"}</small></span><span><b>{line.calculatedUnits.toLocaleString("es-MX")}</b><small> · confianza {Math.round(line.confidence * 100)}%</small></span></div>)}</div></details>
       {review?.status !== "APPROVED_FROZEN" && <button className="clay-primary action-wide" onClick={onApprove}>Aprobar y congelar Volumen base</button>}
     </> : <EmptyAnswer title={ready ? "Falta calcular esta respuesta" : "Primero confirma la Información"} copy={ready ? "Los archivos esenciales están aceptados y el motor puede construir la respuesta." : "Regresa a Información, completa las fuentes esenciales y confirma la interpretación."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onCalculate}>{busy ? "Calculando…" : "Calcular Volumen base"}</button> : undefined} />}
   </div>;
