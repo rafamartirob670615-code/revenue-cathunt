@@ -447,7 +447,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule accounts={canonicalAccounts} existingPlans={existingPlans} busy={busy} onSubmit={createPlan} onOpen={openPlan} onCancel={() => { setCreating(false); setActive("monitoreo"); }} /> :
+      creating ? <CreatePlanModule accounts={canonicalAccounts} busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("monitoreo"); }} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule accounts={canonicalAccounts} files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
@@ -457,7 +457,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} baselineResult={state.baseline} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
-      <AdministrationModule plan={selected} accounts={canonicalAccounts} onChanged={loadHome} />}
+      <AdministrationModule plan={selected} accounts={canonicalAccounts} onChanged={loadHome} existingPlans={existingPlans} onOpen={openPlan} />}
     </Shell>
   );
 }
@@ -470,15 +470,12 @@ const statusLabels: Record<string, string> = {
   DRAFT: "En construcción", SUBMITTED: "En revisión", COMMERCIAL_APPROVED: "Aprobado comercialmente", OFFICIAL: "Oficial",
 };
 
-function CreatePlanModule({ accounts, existingPlans, busy, onSubmit, onOpen, onCancel }: { accounts: AlfaUniverseAccount[]; existingPlans: Plan[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onOpen: (plan: Plan) => void; onCancel: () => void }) {
+function CreatePlanModule({ accounts, busy, onSubmit, onCancel }: { accounts: AlfaUniverseAccount[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   return <div className="module-page">
-    {existingPlans.length > 0 && <section className="paper-panel plan-picker"><b>Tus Planes</b><p>Continúa un Plan que ya empezaste; REVENUE te lleva exactamente donde lo dejaste.</p><div className="plan-picker-list">{existingPlans.map((plan) => {
-      return <article key={plan.id}><div><b>{plan.accountName ?? plan.accountId}</b><small>{plan.companyName ?? ""} · {plan.year}</small></div><div><button type="button" className="paper-button" onClick={() => onOpen(plan)}>Abrir</button></div></article>;
-    })}</div></section>}
     <ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
-function AdministrationModule({ plan, accounts, onChanged }: { plan: Plan | null; accounts: AlfaUniverseAccount[]; onChanged: () => Promise<void> }) {
+function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen }: { plan: Plan | null; accounts: AlfaUniverseAccount[]; onChanged: () => Promise<void>; existingPlans: Plan[]; onOpen: (plan: Plan) => void }) {
   const [assignments, setAssignments] = useState<Array<Record<string,string>>>([]);
   const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>>([]);
   const [targetPlanId, setTargetPlanId] = useState(plan?.id ?? "");
@@ -526,6 +523,10 @@ function AdministrationModule({ plan, accounts, onChanged }: { plan: Plan | null
   const visibleBoardPlans = onlyPending ? boardPlans.filter((item) => item.status !== "COMMERCIAL_APPROVED" && item.status !== "OFFICIAL") : boardPlans;
   return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Usuarios, roles y configuración de REVENUE" description="Administra personas, responsables, cuentas y permisos. Monitoreo es transversal; Construcción sólo corresponde al responsable del Plan y a Administración." />
     <section className="admin-foundation"><article><b>Cuentas administrables</b><p>{adminPlans.length || (plan ? 1 : 0)} Planes disponibles para asignar.</p></article><article><b>Regla de acceso</b><p>Monitoreo: cualquier usuario autenticado. Construcción: responsable o administrador.</p></article><article><b>Responsabilidad</b><p>{activePlan ? `${activeAccountName} · ${activePlan.year}` : "Selecciona una cuenta para gestionar su equipo."}</p></article></section>
+    {!plan && existingPlans.length > 0 && <section className="paper-panel plan-picker"><b>Tus Planes</b><p>Continúa un Plan que ya empezaste; REVENUE te lleva exactamente donde lo dejaste.</p><div className="plan-picker-list">{existingPlans.map((item) => {
+      const version = item.versions.at(-1);
+      return <article key={item.id}><div><b>{item.accountName ?? item.accountId}</b><small>{item.companyName ?? ""} · {item.year}</small></div><div><span>{statusLabels[version?.status ?? "DRAFT"] ?? version?.status ?? "Borrador"}</span><button type="button" className="paper-button" onClick={() => onOpen(item)}>Abrir</button></div></article>;
+    })}</div></section>}
     {!plan && boardPlans.length > 0 && <section className="section-title"><small>Tablero de estado</small><h2>Planes por cuenta</h2><p>El Plan de compañía (marca/fabricante) aparece primero; el resto son cuentas cliente.</p><label className="plan-board-filter"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} /> Solo Planes trabajados sin autorizar ni finalizar</label></section>}
     {!plan && boardPlans.length > 0 && <section className="plan-board"><div className="plan-board-scroll"><table><thead><tr><th>Cuenta</th><th>Compañía</th><th>Año</th><th>Estado</th><th>Responsable</th></tr></thead><tbody>{visibleBoardPlans.map((item) => <tr key={item.id} className={companyAccountIds.has(item.accountId) ? "company-row" : ""}><td>{item.account}{companyAccountIds.has(item.accountId) && <span className="plan-board-tag">Compañía</span>}</td><td>{item.company}</td><td>{item.year}</td><td>{statusLabels[item.status] ?? item.status}</td><td>{item.responsible}</td></tr>)}</tbody></table>{visibleBoardPlans.length === 0 && <p className="plan-board-empty">No hay Planes sin autorizar o finalizar.</p>}</div></section>}
     {(!plan && adminPlans.length > 0) && <label className="admin-plan-picker">Cuenta / Plan<select value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona una cuenta</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
