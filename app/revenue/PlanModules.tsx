@@ -66,6 +66,16 @@ export function ContextModule({ plan }: { plan: Plan }) {
   </div>;
 }
 
+// Debe coincidir con los sets del mismo nombre en app/api/inputs/route.ts:
+// esas fuentes se validan con encabezados exactos (CSV); el resto acepta
+// Excel con encabezados libres y detección automática de la tabla.
+const CSV_EXACT_REQUIREMENTS = new Set(["account-product-mapping", "unit-conversions", "prices-currency", "activity-history"]);
+
+function FormatSpec({ requirementId, fields }: { requirementId: string; fields: readonly string[] }) {
+  const isCsv = CSV_EXACT_REQUIREMENTS.has(requirementId);
+  return <small className="format-spec"><b>{isCsv ? "CSV · encabezados exactos" : "Excel · encabezados libres"}</b> · {fields.join(", ")}</small>;
+}
+
 export function InformationModule({
   accounts, files, accepted, systemReady, busy, onUpload, onGuidedCapture, onAccept,
 }: {
@@ -79,14 +89,14 @@ export function InformationModule({
   const essential = PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "ESSENTIAL");
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" description="Estos 4 archivos son obligatorios para calcular el Plan. REVENUE conserva el original, interpreta la tabla y muestra qué entendió." />
-    <section className="plain-note"><b>Información básica para empezar</b><p>REVENUE necesita información real de tu ERP o sistema de facturación y de las áreas que conocen cada cuenta. Puedes cargar Excel o CSV, ver un ejemplo del formato esperado o armar una fuente aquí para dejar registrada la información mínima y validarla antes de calcular.</p><div className="inline-actions"><button className="paper-button" type="button" onClick={() => setShowGuide(!showGuide)}>{showGuide ? "Cerrar información básica" : "Información básica"}</button></div></section>
-    {showGuide && <section className="plain-note guide-panel"><b>Qué debe contener cada fuente</b><p>Historia de ventas: cuenta, producto, periodo, unidades, valor y moneda. Catálogo y correspondencias: producto de la cuenta y producto REVENUE. Conversiones: unidad origen, unidad base y factor. Precios: cuenta, producto, precio, moneda y vigencia. Las demás fuentes —condiciones, costos, inversiones, cuota y venta actual— alimentan rentabilidad, seguimiento y Billing. Cada tarjeta conserva el original, valida columnas y explica cualquier campo faltante.</p></section>}
+    <section className="plain-note"><b>Información básica para empezar</b><p>REVENUE necesita información real de tu ERP o sistema de facturación y de las áreas que conocen cada cuenta. Hay dos formatos según la fuente: unas piden CSV con encabezados exactos (los verás abajo) y otras aceptan Excel con encabezados libres — REVENUE detecta la tabla y las variantes en español. Cada tarjeta muestra exactamente qué columnas necesita.</p><div className="inline-actions"><button className="paper-button" type="button" onClick={() => setShowGuide(!showGuide)}>{showGuide ? "Cerrar información básica" : "Información básica"}</button></div></section>
+    {showGuide && <section className="plain-note guide-panel"><b>Cómo REVENUE lee cada archivo</b><p><b>CSV con encabezados exactos</b> (Catálogo y correspondencias, Unidades y conversiones, Precios y moneda, Historia de promociones): usa los nombres de columna tal cual se muestran en la tarjeta, en la primera fila. <b>Excel con encabezados libres</b> (Historia de ventas, planes de Marketing/Trade, y las fuentes financieras): REVENUE busca la tabla dentro del archivo y reconoce variantes en español o inglés de cada campo — no necesitas acomodar tus columnas a un formato fijo. En ambos casos, el archivo original se conserva y cualquier campo faltante se explica en la tarjeta.</p></section>}
     <section className="source-board">
       {essential.map((requirement, index) => {
         const received = files.find((file) => file.requirementId === requirement.id);
         return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}>
           <i>{received?.status === "READY" ? "✓" : index + 1}</i>
-          <div><b>{requirement.name} <em>{requirement.criticality === "ESSENTIAL" ? "· Obligatorio" : "· Opcional según etapa"}</em></b><p>{requirement.purpose}</p><small>Responsable sugerido: {requirement.suggestedOwner} · Cobertura: {requirement.minimumCoverage}</small>{received && <small>{received.originalName} · {received.summary.rowCount} filas</small>}{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div>
+          <div><b>{requirement.name} <em>{requirement.criticality === "ESSENTIAL" ? "· Obligatorio" : "· Opcional según etapa"}</em></b><p>{requirement.purpose}</p><small>Responsable sugerido: {requirement.suggestedOwner} · Cobertura: {requirement.minimumCoverage}</small><FormatSpec requirementId={requirement.id} fields={requirement.requiredFields} />{received && <small>{received.originalName} · {received.summary.rowCount} filas</small>}{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div>
           <div className="source-actions"><button type="button" className="paper-button" onClick={() => setDraftSource(requirement.id)}>Armar aquí</button><label>{busy === requirement.id ? "Leyendo…" : received ? "Reemplazar" : "Seleccionar archivo"}<input type="file" accept=".xlsx,.xls,.csv" disabled={Boolean(busy)} onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></div>
         </article>;
       })}
@@ -95,7 +105,7 @@ export function InformationModule({
     <details className="paper-detail"><summary>Fuentes complementarias</summary><div className="source-board compact">
       {PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "CONDITIONAL").map((requirement) => {
         const received = files.find((file) => file.requirementId === requirement.id);
-        return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}><i>{received?.status === "READY" ? "✓" : "·"}</i><div><b>{requirement.name} <em>· Opcional según etapa</em></b><p>{requirement.purpose}</p><small>Se usa en: {requirement.suggestedOwner} · Necesita: {requirement.minimumCoverage}</small>{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div><label>{received ? "Reemplazar" : "Cargar"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></article>;
+        return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}><i>{received?.status === "READY" ? "✓" : "·"}</i><div><b>{requirement.name} <em>· Opcional según etapa</em></b><p>{requirement.purpose}</p><small>Se usa en: {requirement.suggestedOwner} · Necesita: {requirement.minimumCoverage}</small><FormatSpec requirementId={requirement.id} fields={requirement.requiredFields} />{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div><label>{received ? "Reemplazar" : "Cargar"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></article>;
       })}
     </div></details>
     {!accepted && systemReady && <EmptyAnswer title="La información esencial está completa" copy="Confirma la interpretación para construir el Volumen base." action={<button className="clay-primary" onClick={onAccept}>Confirmar información</button>} />}
