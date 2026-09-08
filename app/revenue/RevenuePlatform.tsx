@@ -60,7 +60,6 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
   const [creating, setCreating] = useState(false);
   const [canonicalAccounts, setCanonicalAccounts] = useState<AlfaUniverseAccount[]>([]);
   const [existingPlans, setExistingPlans] = useState<Plan[]>([]);
-  const [prefillAccount, setPrefillAccount] = useState<AlfaUniverseAccount | null>(null);
 
   const loadHome = useCallback(async () => {
     setLoading(true);
@@ -384,7 +383,6 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       const body = await response.json() as { ok: boolean; result?: Plan; error?: string };
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setCreating(false);
-      setPrefillAccount(null);
       await loadPlan(body.result);
     } catch (cause) { setError(friendly(cause instanceof Error ? cause.message : "")); }
     finally { setBusy(""); }
@@ -400,20 +398,6 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
   async function openPlan(plan: Plan) {
     setCreating(false);
     await loadPlan(plan);
-  }
-
-  // Selector único de Seguimiento: si la cuenta ya tiene Plan, lo abre
-  // donde vaya; si no, arranca su creación con la cuenta pre-llenada.
-  async function jumpToAccount(account: AlfaUniverseAccount) {
-    const existing = [...existingPlans]
-      .filter((item) => item.accountId === account.id)
-      .sort((a, b) => b.year - a.year)[0];
-    if (existing) {
-      await openPlan(existing);
-    } else {
-      setPrefillAccount(account);
-      startCreate();
-    }
   }
 
   function navigate(module: RevenueModule) {
@@ -463,7 +447,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule accounts={canonicalAccounts} existingPlans={existingPlans} prefillAccount={prefillAccount} busy={busy} onSubmit={createPlan} onOpen={openPlan} onCancel={() => { setPrefillAccount(null); setCreating(false); setActive("monitoreo"); }} /> :
+      creating ? <CreatePlanModule accounts={canonicalAccounts} existingPlans={existingPlans} busy={busy} onSubmit={createPlan} onOpen={openPlan} onCancel={() => { setCreating(false); setActive("monitoreo"); }} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule accounts={canonicalAccounts} files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
@@ -472,25 +456,10 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} growth={state.growth} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} baselineResult={state.baseline} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
-      active === "monitoreo" ? <>
-        <AccountJump accounts={canonicalAccounts} current={selected} onSelect={jumpToAccount} />
-        {selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor />}
-      </> :
+      active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
       <AdministrationModule plan={selected} accounts={canonicalAccounts} onChanged={loadHome} />}
     </Shell>
   );
-}
-
-function AccountJump({ accounts, current, onSelect }: { accounts: AlfaUniverseAccount[]; current: Plan | null; onSelect: (account: AlfaUniverseAccount) => void }) {
-  const [query, setQuery] = useState("");
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const account = accounts.find((item) => item.name === query);
-    if (account) { onSelect(account); setQuery(""); }
-  }
-  return <section className="plain-note account-jump"><b>Ver el Plan de una cuenta</b><p>Escoge cualquier cuenta del universo comercial: si ya tiene Plan, te lleva a donde vaya; si no, lo empiezas ahí mismo.{current ? ` Viendo ahora: ${current.accountName ?? current.accountId}.` : " Ahora: compañía completa."}</p>
-    <form onSubmit={submit}><input aria-label="Cuenta" list="account-jump-options" value={query} placeholder="Busca una cuenta, por ejemplo Liverpool" onChange={(event) => setQuery(event.target.value)} /><datalist id="account-jump-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist><button type="submit" className="paper-button" disabled={!accounts.some((account) => account.name === query)}>Ver</button></form>
-  </section>;
 }
 
 function NoPlan({ onCreate }: { onCreate: () => void }) {
@@ -501,13 +470,13 @@ const statusLabels: Record<string, string> = {
   DRAFT: "En construcción", SUBMITTED: "En revisión", COMMERCIAL_APPROVED: "Aprobado comercialmente", OFFICIAL: "Oficial",
 };
 
-function CreatePlanModule({ accounts, existingPlans, prefillAccount, busy, onSubmit, onOpen, onCancel }: { accounts: AlfaUniverseAccount[]; existingPlans: Plan[]; prefillAccount: AlfaUniverseAccount | null; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onOpen: (plan: Plan) => void; onCancel: () => void }) {
+function CreatePlanModule({ accounts, existingPlans, busy, onSubmit, onOpen, onCancel }: { accounts: AlfaUniverseAccount[]; existingPlans: Plan[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onOpen: (plan: Plan) => void; onCancel: () => void }) {
   return <div className="module-page">
     {existingPlans.length > 0 && <section className="paper-panel plan-picker"><b>Tus Planes</b><p>Continúa un Plan que ya empezaste; REVENUE te lleva exactamente donde lo dejaste.</p><div className="plan-picker-list">{existingPlans.map((plan) => {
       const version = plan.versions.at(-1);
       return <article key={plan.id}><div><b>{plan.accountName ?? plan.accountId}</b><small>{plan.companyName ?? ""} · {plan.year}</small></div><div><span>{statusLabels[version?.status ?? "DRAFT"] ?? version?.status ?? "Borrador"}</span><button type="button" className="paper-button" onClick={() => onOpen(plan)}>Abrir</button></div></article>;
     })}</div></section>}
-    <ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description={prefillAccount ? `Confirma los datos de ${prefillAccount.name}; ya no tiene un Plan y lo estás empezando desde Seguimiento.` : "Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo."} /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form key={prefillAccount?.id ?? "blank"} className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" defaultValue={prefillAccount?.name ?? ""} placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" defaultValue={prefillAccount?.name ?? ""} placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
+    <ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
 function AdministrationModule({ plan, accounts, onChanged }: { plan: Plan | null; accounts: AlfaUniverseAccount[]; onChanged: () => Promise<void> }) {
