@@ -457,7 +457,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} baselineResult={state.baseline} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
-      <AdministrationModule plan={selected} onChanged={loadHome} />}
+      <AdministrationModule plan={selected} accounts={canonicalAccounts} onChanged={loadHome} />}
     </Shell>
   );
 }
@@ -479,16 +479,16 @@ function CreatePlanModule({ accounts, existingPlans, busy, onSubmit, onOpen, onC
     <ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
-function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {
+function AdministrationModule({ plan, accounts, onChanged }: { plan: Plan | null; accounts: AlfaUniverseAccount[]; onChanged: () => Promise<void> }) {
   const [assignments, setAssignments] = useState<Array<Record<string,string>>>([]);
-  const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; company: string; year: number }>>([]);
+  const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>>([]);
   const [targetPlanId, setTargetPlanId] = useState(plan?.id ?? "");
   const [message, setMessage] = useState("");
   const [configuration, setConfiguration] = useState<Record<string,string>>({});
   const load = useCallback(async () => {
     const selectedPlanId = plan?.id ?? "";
     const response = await fetch(selectedPlanId ? `/api/admin/access?planId=${encodeURIComponent(selectedPlanId)}` : "/api/admin/access", { cache: "no-store" });
-    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; company: string; year: number }>; configuration?: Record<string,string>; error?: string };
+    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; configuration?: Record<string,string>; error?: string };
     if (response.ok && body.ok) {
       setAssignments(body.assignments ?? body.users ?? []);
       setAdminPlans(body.plans ?? []);
@@ -521,8 +521,12 @@ function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChange
   }
   const activePlan = plan ?? adminPlans.find((item) => item.id === targetPlanId);
   const activeAccountName = plan?.accountName ?? adminPlans.find((item) => item.id === targetPlanId)?.account ?? "";
+  const companyAccountIds = new Set(accounts.filter((account) => account.channel === "Marca / fabricante").map((account) => account.id));
+  const boardPlans = [...adminPlans].sort((a, b) => Number(companyAccountIds.has(b.accountId)) - Number(companyAccountIds.has(a.accountId)));
   return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Usuarios, roles y configuración de REVENUE" description="Administra personas, responsables, cuentas y permisos. Monitoreo es transversal; Construcción sólo corresponde al responsable del Plan y a Administración." />
     <section className="admin-foundation"><article><b>Cuentas administrables</b><p>{adminPlans.length || (plan ? 1 : 0)} Planes disponibles para asignar.</p></article><article><b>Regla de acceso</b><p>Monitoreo: cualquier usuario autenticado. Construcción: responsable o administrador.</p></article><article><b>Responsabilidad</b><p>{activePlan ? `${activeAccountName} · ${activePlan.year}` : "Selecciona una cuenta para gestionar su equipo."}</p></article></section>
+    {!plan && boardPlans.length > 0 && <section className="section-title"><small>Tablero de estado</small><h2>Planes por cuenta</h2><p>El Plan de compañía (marca/fabricante) aparece primero; el resto son cuentas cliente.</p></section>}
+    {!plan && boardPlans.length > 0 && <section className="plan-board"><div className="plan-board-scroll"><table><thead><tr><th>Cuenta</th><th>Compañía</th><th>Año</th><th>Estado</th><th>Responsable</th></tr></thead><tbody>{boardPlans.map((item) => <tr key={item.id} className={companyAccountIds.has(item.accountId) ? "company-row" : ""}><td>{item.account}{companyAccountIds.has(item.accountId) && <span className="plan-board-tag">Compañía</span>}</td><td>{item.company}</td><td>{item.year}</td><td>{statusLabels[item.status] ?? item.status}</td><td>{item.responsible}</td></tr>)}</tbody></table></div></section>}
     {(!plan && adminPlans.length > 0) && <label className="admin-plan-picker">Cuenta / Plan<select value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona una cuenta</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
     {(plan || targetPlanId || !plan) ? <>
       {activePlan && <section className="plain-note"><b>{activeAccountName} · {plan?.companyName ?? adminPlans.find((item) => item.id === targetPlanId)?.company ?? ""} · {activePlan.year}</b><p>El administrador concede capacidades concretas para esta cuenta. Ser administrador no sustituye la revisión o aprobación comercial.</p></section>}

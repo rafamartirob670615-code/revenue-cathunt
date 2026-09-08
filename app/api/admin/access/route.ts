@@ -1,4 +1,5 @@
 import type { BusinessFunction } from "../../../revenue/access.ts";
+import type { Plan } from "../../../../domain/types.ts";
 import {
   accessError,
   ASSIGNABLE_CAPABILITIES,
@@ -51,7 +52,15 @@ export async function GET(request: Request) {
         database().prepare(`SELECT u.email,u.display_name,om.business_function,aa.capability,aa.scope_type,aa.scope_id,aa.valid_from,aa.valid_until FROM users u LEFT JOIN organization_memberships om ON om.user_id=u.id AND om.status='ACTIVE' LEFT JOIN access_assignments aa ON aa.membership_id=om.id ORDER BY u.display_name,aa.capability`).run<Record<string, unknown>>(),
         database().prepare("SELECT aggregate_json FROM plan_aggregates ORDER BY updated_at DESC").run<{ aggregate_json: string }>(),
       ]);
-      return Response.json({ ok: true, users: users.results ?? [], plans: (plans.results ?? []).map((row) => { const plan = JSON.parse(row.aggregate_json) as { id: string; companyName?: string; accountName?: string; year: number; organizationId: string }; return { id: plan.id, company: plan.companyName ?? "", account: plan.accountName ?? "", year: plan.year, organizationId: plan.organizationId }; }), assignableCapabilities: ASSIGNABLE_CAPABILITIES, configuration: { monitoringVisibility: "ALL_AUTHENTICATED_USERS", constructionAccess: "PLAN_OWNER_OR_ADMINISTRATOR", accountScope: "PLAN_ACCOUNT_UNIVERSE", reviewApproval: "SEPARATE_REVIEW_AND_APPROVE_CAPABILITIES" } });
+      return Response.json({ ok: true, users: users.results ?? [], plans: (plans.results ?? []).map((row) => {
+        const plan = JSON.parse(row.aggregate_json) as Plan;
+        const version = plan.versions.at(-1);
+        return {
+          id: plan.id, company: plan.companyName ?? "", account: plan.accountName ?? "",
+          accountId: plan.accountId, year: plan.year, organizationId: plan.organizationId,
+          status: version?.status ?? "DRAFT", responsible: version?.createdBy ?? "",
+        };
+      }), assignableCapabilities: ASSIGNABLE_CAPABILITIES, configuration: { monitoringVisibility: "ALL_AUTHENTICATED_USERS", constructionAccess: "PLAN_OWNER_OR_ADMINISTRATOR", accountScope: "PLAN_ACCOUNT_UNIVERSE", reviewApproval: "SEPARATE_REVIEW_AND_APPROVE_CAPABILITIES" } });
     }
     const result = await database().prepare(
       `SELECT u.email,u.display_name,om.business_function,aa.capability,aa.valid_from,aa.valid_until
