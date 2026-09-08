@@ -9,7 +9,8 @@ test("feedback v63: Seguimiento elimina contexto técnico y acciones auxiliares"
   const modules = await readFile(new URL("../../app/revenue/modules.ts", import.meta.url), "utf8");
   const shell = await readFile(new URL("../../app/revenue/Shell.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../../app/monitoring/page.tsx", import.meta.url), "utf8");
-  assert.match(platform, /active === "monitoreo" \? selected \? <MonitoringModule/);
+  assert.match(platform, /active === "monitoreo" \? <>/);
+  assert.match(platform, /selected \? <MonitoringModule/);
   assert.match(platform, /<AlfaTurmixMonitor \/>/);
   assert.match(page, /initialModule="monitoreo"/);
   assert.match(modules, /Cómo va el plan al día de hoy/);
