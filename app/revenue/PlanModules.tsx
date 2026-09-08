@@ -73,7 +73,7 @@ const CSV_EXACT_REQUIREMENTS = new Set(["account-product-mapping", "unit-convers
 
 function FormatSpec({ requirementId, fields }: { requirementId: string; fields: readonly string[] }) {
   const isCsv = CSV_EXACT_REQUIREMENTS.has(requirementId);
-  return <small className="format-spec"><b>{isCsv ? "CSV · encabezados exactos" : "Excel · encabezados libres"}</b> · {fields.join(", ")}</small>;
+  return <small className="format-spec"><b>{isCsv ? "CSV · encabezados exactos" : "Excel · encabezados libres"}</b>{isCsv ? ` · ${fields.join(", ")}` : " · REVENUE reconoce las columnas automáticamente"}</small>;
 }
 
 export function InformationModule({
@@ -151,7 +151,7 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
     : [["DISTRIBUTION","Distribución y alcance"],["CHAIN_ACTIVITY","Actividad de la cadena"],["EXECUTION","Preparación y ejecución"]];
   synthetic = synthetic || growth?.dataClassification === "SYNTHETIC_NON_COMMERCIAL";
   return <div className="module-page">
-    <ModuleHead eyebrow={`Paso ${isMarketing ? 4 : 5} de 8 · ${isMarketing ? "Marketing" : "Trade Marketing"}`} title={isMarketing ? "¿Qué demanda construirá Marketing?" : "¿Qué ejecutará Trade Marketing en el cliente?"} description={isMarketing ? "Campañas, lanzamientos y construcción de demanda con su impacto bruto y sus efectos netos." : "Promociones, exhibiciones y ejecución en punto de venta, separadas de Marketing para evitar doble conteo."} />
+    <ModuleHead eyebrow={`Paso ${isMarketing ? 4 : 5} de 8 · ${isMarketing ? "Marketing" : "Trade Marketing"}`} title={isMarketing ? "¿Qué demanda construirá Marketing?" : "¿Qué demanda construirá Trade Marketing?"} description={isMarketing ? "Campañas, lanzamientos y construcción de demanda con su impacto bruto y sus efectos netos." : "Promociones, exhibiciones y ejecución en punto de venta, separadas de Marketing para evitar doble conteo."} />
     <section className="plan-source">
       <div><small>Fuente de esta sección</small><h2>{source ? source.originalName : synthetic ? "Caso guiado sintético" : `Excel del Plan de ${isMarketing ? "Marketing" : "Trade Marketing"}`}</h2><p>{source ? `${source.summary.rowCount} filas interpretadas y preservadas.` : synthetic ? "Fuente de demostración aislada y no comercial." : "Carga el archivo que ya utiliza el área responsable."}</p></div>
       {!synthetic && canContribute && <label className="paper-button">{busy === requirementId ? "Leyendo…" : source ? "Reemplazar Excel" : "Seleccionar Excel"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirementId, event.target.files?.[0])} /></label>}
@@ -190,7 +190,7 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
 
 export function ResultModule({ result, baselineUnits, growthUnits, growth, ready, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; growth: GrowthResult | null; ready: boolean; busy: string; onBuild: () => void }) {
   return <div className="module-page">
-    <ModuleHead eyebrow="Paso 6 de 8 · Plan anual" title="Una sola respuesta en unidades y valor" description="Volumen base + Marketing + Trade Marketing, reconciliados por cuenta, producto y mes." />
+    <ModuleHead eyebrow="Paso 6 de 8 · Plan anual" title="El Plan anual, consolidado en un solo número" description="Volumen base + Marketing + Trade Marketing, sumados y reconciliados por cuenta, producto y mes." />
     <span className="billing-filter-hint">Detalle mensual por producto · formato Billing oficial</span>
     {result ? <>
       <section className="double-answer"><div><span>Unidades del Plan</span><strong>{result.annualUnits.toLocaleString("es-MX")}</strong><small>unidades reconciliadas</small></div><div><span>Revenue del Plan</span><strong>{formatMoney(result.annualValue, result.currency)}</strong><small>{result.currency}</small></div></section>
@@ -221,7 +221,7 @@ export function ReviewModule({ baseline, growth, result, profitability, syntheti
   const checks = [["Información y base", baseline?.status === "APPROVED_FROZEN"],["Marketing y Trade", Boolean(growth?.controls.reconciled)],["Unidades y valor", Boolean(result?.controls.unitsReconciled && result.controls.valueReconciled)],["Rentabilidad", Boolean(profitability?.controls.planReconciled)]] as const;
   const ready = checks.every(([,ok]) => ok);
   return <div className="module-page">
-    <ModuleHead eyebrow="Paso 8 de 8 · Revisión y aprobación" title="Una versión defendible, no otra hoja de cálculo" description="Las decisiones y controles se presentan en un solo lugar antes de congelar la versión." />
+    <ModuleHead eyebrow="Paso 8 de 8 · Revisión y aprobación" title="Todo el Plan, listo para su revisión final" description="Las decisiones y controles de cada paso se reúnen aquí antes de enviar la versión a revisión." />
     <section className="approval-sheet">{checks.map(([label,ok], index) => <article className={ok ? "ready" : ""} key={label}><i>{ok ? "✓" : index + 1}</i><div><b>{label}</b><small>{ok ? "Listo" : "Pendiente"}</small></div></article>)}</section>
     <section className="official-document"><header><small>Documento oficial actualizado · Billing File oficial</small><h2>Única vista para revisar antes de aprobar</h2><p>Este Billing mensual es la base inamovible que pasará a Seguimiento después de la aprobación.</p></header><h3>Billing mensual del Plan</h3>{result ? <OfficialPlanBilling result={result} /> : <p>El Billing mensual aparecerá cuando el Plan anual esté consolidado.</p>}<p className="billing-report-note"><b>Regla:</b> la aprobación no se habilita mientras el Billing File no esté completo y reconciliado.</p></section>
     {synthetic && <section className="plain-note warning"><b>Prueba no comercial</b><p>Este recorrido demuestra la maquinaria, pero no puede convertirse en compromiso oficial.</p></section>}
