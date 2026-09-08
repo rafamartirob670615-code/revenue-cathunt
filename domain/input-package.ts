@@ -26,6 +26,8 @@ export interface InputPackage {
   items: InputPackageItem[];
 }
 
+export const DEFAULT_ORGANIZATION_ID = "revenue-pilot";
+
 export const PILOT_INPUT_REQUIREMENTS: readonly InputRequirement[] = [
   {
     id: "sales-history",

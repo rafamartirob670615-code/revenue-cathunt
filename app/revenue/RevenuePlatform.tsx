@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import type { Plan } from "../../domain/types";
-import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
+import { DEFAULT_ORGANIZATION_ID, PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
 import MonitoringModule from "./MonitoringModule";
 import Shell from "./Shell";
 import {
@@ -381,7 +381,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
     const occurredAt = new Date().toISOString();
     const plan: Plan = {
       id: `plan:${crypto.randomUUID()}`,
-      organizationId: "revenue-pilot",
+      organizationId: DEFAULT_ORGANIZATION_ID,
       companyId: companyName.toLowerCase().replace(/\s+/g, "-"),
       companyName,
       accountId: selectedAccount.id,

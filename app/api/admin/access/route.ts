@@ -1,5 +1,6 @@
 import type { BusinessFunction } from "../../../revenue/access.ts";
 import type { Plan } from "../../../../domain/types.ts";
+import { DEFAULT_ORGANIZATION_ID } from "../../../../domain/input-package.ts";
 import {
   accessError,
   ASSIGNABLE_CAPABILITIES,
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
       throw new Error("Cuenta, usuario y capacidad son obligatorios");
     }
     const admin = await requireAdministrator(request, planId || undefined);
-    const plan = planId ? (await authorizePlan(request, planId)).plan : { organizationId: "revenue-pilot" };
+    const plan = planId ? (await authorizePlan(request, planId)).plan : { organizationId: DEFAULT_ORGANIZATION_ID };
     const email = body.email.trim().toLowerCase();
     const person = await lookupCanonicalPerson(email);
     if (!person) throw new Error("Esa persona no existe en el directorio de CatHunt Hub. Créala primero en Administración del Hub.");
