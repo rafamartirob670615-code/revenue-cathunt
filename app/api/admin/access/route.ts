@@ -49,12 +49,8 @@ export async function GET(request: Request) {
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     await requireAdministrator(request, planId || undefined);
     if (!planId) {
-      const [users, plans, people] = await Promise.all([
-        database().prepare(`SELECT u.email,u.display_name,om.business_function,aa.capability,aa.scope_type,aa.scope_id,aa.valid_from,aa.valid_until FROM users u LEFT JOIN organization_memberships om ON om.user_id=u.id AND om.status='ACTIVE' LEFT JOIN access_assignments aa ON aa.membership_id=om.id ORDER BY u.display_name,aa.capability`).run<Record<string, unknown>>(),
-        database().prepare("SELECT aggregate_json FROM plan_aggregates ORDER BY updated_at DESC").run<{ aggregate_json: string }>(),
-        listCanonicalPeople(),
-      ]);
-      return Response.json({ ok: true, users: users.results ?? [], plans: (plans.results ?? []).map((row) => {
+      const plans = await database().prepare("SELECT aggregate_json FROM plan_aggregates ORDER BY updated_at DESC").run<{ aggregate_json: string }>();
+      return Response.json({ ok: true, plans: (plans.results ?? []).map((row) => {
         const plan = JSON.parse(row.aggregate_json) as Plan;
         const version = plan.versions.at(-1);
         return {
@@ -62,7 +58,7 @@ export async function GET(request: Request) {
           accountId: plan.accountId, year: plan.year, organizationId: plan.organizationId,
           status: version?.status ?? "DRAFT", responsible: version?.createdBy ?? "",
         };
-      }), people, assignableCapabilities: ASSIGNABLE_CAPABILITIES });
+      }) });
     }
     const [result, people] = await Promise.all([
       database().prepare(

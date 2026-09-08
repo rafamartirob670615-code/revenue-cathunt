@@ -35,8 +35,3 @@ export const FUNCTION_LABELS: Record<BusinessFunction, string> = {
   APPROVER: "Revisión y aprobación",
   ADMINISTRATOR: "Administración",
 };
-
-export const ASSIGNABLE_CAPABILITIES: Capability[] = [
-  "MARKETING_CONTRIBUTE", "TRADE_CONTRIBUTE", "PLAN_INTEGRATE",
-  "REVIEW", "APPROVE", "VIEW_FINANCIALS", "MONITOR", "ADMINISTER_ACCESS",
-];
