@@ -62,7 +62,7 @@ export async function GET(request: Request) {
           accountId: plan.accountId, year: plan.year, organizationId: plan.organizationId,
           status: version?.status ?? "DRAFT", responsible: version?.createdBy ?? "",
         };
-      }), people, assignableCapabilities: ASSIGNABLE_CAPABILITIES, configuration: { monitoringVisibility: "ALL_AUTHENTICATED_USERS", constructionAccess: "PLAN_OWNER_OR_ADMINISTRATOR", accountScope: "PLAN_ACCOUNT_UNIVERSE", reviewApproval: "SEPARATE_REVIEW_AND_APPROVE_CAPABILITIES" } });
+      }), people, assignableCapabilities: ASSIGNABLE_CAPABILITIES });
     }
     const [result, people] = await Promise.all([
       database().prepare(

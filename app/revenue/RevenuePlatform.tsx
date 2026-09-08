@@ -500,18 +500,16 @@ function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen
   const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>>([]);
   const [targetPlanId, setTargetPlanId] = useState(plan?.id ?? "");
   const [message, setMessage] = useState("");
-  const [configuration, setConfiguration] = useState<Record<string,string>>({});
   const [onlyPending, setOnlyPending] = useState(false);
   const [people, setPeople] = useState<Array<{ nombre: string; correo: string }>>([]);
   const load = useCallback(async () => {
     const selectedPlanId = plan?.id ?? "";
     const response = await fetch(selectedPlanId ? `/api/admin/access?planId=${encodeURIComponent(selectedPlanId)}` : "/api/admin/access", { cache: "no-store" });
-    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; people?: Array<{ nombre: string; correo: string }>; configuration?: Record<string,string>; error?: string };
+    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; people?: Array<{ nombre: string; correo: string }>; error?: string };
     if (response.ok && body.ok) {
       setAssignments(body.assignments ?? body.users ?? []);
       setAdminPlans(body.plans ?? []);
       setPeople(body.people ?? []);
-      setConfiguration(body.configuration ?? {});
     }
     else setMessage(body.error ?? "No pudimos recuperar los accesos.");
   }, [plan]);
@@ -560,7 +558,6 @@ function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen
         <button className="clay-primary">Conceder acceso</button>
       </form>
       {message && <section className="plain-note"><p>{message}</p></section>}
-      {Object.keys(configuration).length > 0 && <section className="admin-foundation">{Object.entries(configuration).map(([key,value]) => <article key={key}><b>{key.replaceAll(/([A-Z])/g," $1")}</b><p>{value.replaceAll("_"," ")}</p></article>)}</section>}
       <section className="contribution-register"><div className="section-title"><small>Acceso vigente</small><h2>Personas asignadas a esta cuenta</h2></div>{assignments.map((item, index) => <article key={`${item.email}:${item.capability}:${index}`}><div><b>{item.display_name}</b><span>{item.email}</span></div><div><strong>{capabilityLabels[item.capability] ?? String(item.capability).replaceAll("_"," ")}</strong><span>{item.business_function}</span></div><div><strong>{String(item.scope_type).startsWith("MONITOR_") ? String(item.scope_type).replace("MONITOR_", "Monitoreo · ") : "Plan completo"}</strong><span>{String(item.scope_id)}</span></div><button className="paper-button" onClick={() => revoke(item)}>Retirar</button></article>)}</section>
     </> : <EmptyAnswer title="No hay cuentas cargadas" copy="Crea el primer Plan para que el administrador pueda asignar responsables y capacidades." />}
   </div>;
