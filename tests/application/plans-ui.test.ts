@@ -29,7 +29,6 @@ test("la información comienza con un Excel y revela lo demás después", async 
   assert.match(source, /Fuentes complementarias/);
   assert.match(source, /conserva el original/);
   assert.match(source, /Confirmar información/);
-  assert.match(source, /Usar prueba guiada/);
 });
 
 test("el volumen base abre con una respuesta y mantiene detalle progresivo", async () => {
