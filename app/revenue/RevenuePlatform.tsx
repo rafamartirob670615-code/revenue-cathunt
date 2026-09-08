@@ -472,7 +472,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} baselineResult={state.baseline} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
-      <AdministrationModule plan={selected} accounts={canonicalAccounts} onChanged={loadHome} existingPlans={existingPlans} onOpen={openPlan} canApprove={canApprove} onApprove={approveCommercially} />}
+      <AdministrationModule accounts={canonicalAccounts} existingPlans={existingPlans} onOpen={openPlan} canApprove={canApprove} onApprove={approveCommercially} />}
     </Shell>
   );
 }
@@ -485,80 +485,36 @@ const statusLabels: Record<string, string> = {
   DRAFT: "En construcción", SUBMITTED: "En revisión", COMMERCIAL_APPROVED: "Aprobado comercialmente", OFFICIAL: "Oficial",
 };
 
-const capabilityLabels: Record<string, string> = {
-  ADMINISTER_ACCESS: "Administrador global", MARKETING_CONTRIBUTE: "Aportar Marketing", TRADE_CONTRIBUTE: "Aportar Trade Marketing",
-  PLAN_INTEGRATE: "Construir e integrar Plan", REVIEW: "Revisar comercialmente", APPROVE: "Aprobar comercialmente", VIEW_FINANCIALS: "Consultar Finanzas",
-};
-
 function CreatePlanModule({ accounts, busy, onSubmit, onCancel }: { accounts: AlfaUniverseAccount[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Crear Plan" title="El Plan de una cuenta, o de toda la compañía" description="Elige la cuenta específica para la que vas a planear, o la cuenta de compañía si el Plan cubre todo el portafolio. Búscala en el universo comercial escribiendo su nombre; el identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" defaultValue="Turmix de México" placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
-function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen, canApprove, onApprove }: { plan: Plan | null; accounts: AlfaUniverseAccount[]; onChanged: () => Promise<void>; existingPlans: Plan[]; onOpen: (plan: Plan) => void; canApprove: boolean; onApprove: (plan: Plan) => void }) {
-  const [assignments, setAssignments] = useState<Array<Record<string,string>>>([]);
+const FINISHED_STATUSES = new Set(["COMMERCIAL_APPROVED", "OFFICIAL"]);
+
+function AdministrationModule({ accounts, existingPlans, onOpen, canApprove, onApprove }: { accounts: AlfaUniverseAccount[]; existingPlans: Plan[]; onOpen: (plan: Plan) => void; canApprove: boolean; onApprove: (plan: Plan) => void }) {
   const [adminPlans, setAdminPlans] = useState<Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>>([]);
-  const [targetPlanId, setTargetPlanId] = useState(plan?.id ?? "");
   const [message, setMessage] = useState("");
   const [onlyPending, setOnlyPending] = useState(false);
-  const [people, setPeople] = useState<Array<{ nombre: string; correo: string }>>([]);
   const load = useCallback(async () => {
-    const selectedPlanId = plan?.id ?? "";
-    const response = await fetch(selectedPlanId ? `/api/admin/access?planId=${encodeURIComponent(selectedPlanId)}` : "/api/admin/access", { cache: "no-store" });
-    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; people?: Array<{ nombre: string; correo: string }>; error?: string };
-    if (response.ok && body.ok) {
-      setAssignments(body.assignments ?? body.users ?? []);
-      setAdminPlans(body.plans ?? []);
-      setPeople(body.people ?? []);
-    }
-    else setMessage(body.error ?? "No pudimos recuperar los accesos.");
-  }, [plan]);
+    const response = await fetch("/api/admin/access", { cache: "no-store" });
+    const body = await response.json() as { ok: boolean; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; error?: string };
+    if (response.ok && body.ok) setAdminPlans(body.plans ?? []);
+    else setMessage(body.error ?? "No pudimos recuperar los Planes.");
+  }, []);
   // The effect initiates an asynchronous request; the request callbacks update the view state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
-  async function grant(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const selectedPlanId = plan?.id ?? String(form.get("planId") ?? targetPlanId);
-    const capability = String(form.get("capability") ?? "");
-    const response = await fetch("/api/admin/access", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ planId: capability === "ADMINISTER_ACCESS" ? "" : selectedPlanId, email: form.get("email"), capability }),
-    });
-    const body = await response.json() as { ok: boolean; error?: string };
-    setMessage(response.ok && body.ok ? "Acceso concedido para esta cuenta." : body.error ?? "No pudimos guardar el acceso.");
-    if (response.ok && body.ok) { formElement.reset(); await load(); await onChanged(); }
-  }
-  async function revoke(item: Record<string,string>) {
-    const response = await fetch("/api/admin/access", { method:"DELETE", headers:{ "content-type":"application/json" }, body:JSON.stringify({ planId:item.scope_type === "PLAN" ? (plan?.id ?? targetPlanId) : "", email:item.email, capability:item.capability }) });
-    const body = await response.json() as { ok?: boolean; error?: string };
-    setMessage(response.ok && body.ok ? "Acceso retirado." : body.error ?? "No pudimos retirar el acceso.");
-    if (response.ok && body.ok) await load();
-  }
-  const activePlan = plan ?? adminPlans.find((item) => item.id === targetPlanId);
-  const activeAccountName = plan?.accountName ?? adminPlans.find((item) => item.id === targetPlanId)?.account ?? "";
   const companyAccountIds = new Set(accounts.filter((account) => account.channel === "Marca / fabricante").map((account) => account.id));
   const boardPlans = [...adminPlans].sort((a, b) => Number(companyAccountIds.has(b.accountId)) - Number(companyAccountIds.has(a.accountId)));
-  const visibleBoardPlans = onlyPending ? boardPlans.filter((item) => item.status !== "COMMERCIAL_APPROVED" && item.status !== "OFFICIAL") : boardPlans;
-  return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Todos los Planes del año, por cuenta" description="El estado de cada Plan de cada cuenta a lo largo del año, y quién tiene permiso para construirlo, revisarlo o aprobarlo." />
-    <section className="plain-note"><p>Monitoreo lo puede ver cualquier usuario autenticado. Construcción (aportar, integrar, revisar, aprobar) requiere que el responsable de la cuenta o Administración le conceda la capacidad aquí abajo.</p></section>
-    {!plan && boardPlans.length > 0 && <section className="section-title"><small>Tablero de estado</small><h2>Planes por cuenta</h2><p>El Plan de compañía (marca/fabricante) aparece primero; el resto son cuentas cliente.</p><label className="plan-board-filter"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} /> Solo Planes trabajados sin autorizar ni finalizar</label></section>}
-    {!plan && boardPlans.length > 0 && <section className="plan-board"><div className="plan-board-scroll"><table><thead><tr><th>Cuenta</th><th>Compañía</th><th>Año</th><th>Estado</th><th>Responsable</th><th>Acciones</th></tr></thead><tbody>{visibleBoardPlans.map((item) => {
+  const visibleBoardPlans = onlyPending ? boardPlans.filter((item) => !FINISHED_STATUSES.has(item.status)) : boardPlans;
+  return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Todos los Planes del año, por cuenta" description="El estado de cada Plan de cada cuenta a lo largo del año." />
+    {message && <section className="plain-note"><p>{message}</p></section>}
+    {boardPlans.length > 0 && <section className="section-title"><small>Tablero de estado</small><h2>Planes por cuenta</h2><p>El Plan de compañía (marca/fabricante) aparece primero; el resto son cuentas cliente.</p><label className="plan-board-filter"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} /> Solo Planes trabajados sin autorizar ni finalizar</label></section>}
+    {boardPlans.length > 0 && <section className="plan-board"><div className="plan-board-scroll"><table><thead><tr><th>Cuenta</th><th>Compañía</th><th>Año</th><th>Estado</th><th>Responsable</th><th>Acciones</th></tr></thead><tbody>{visibleBoardPlans.map((item) => {
       const fullPlan = existingPlans.find((candidate) => candidate.id === item.id);
-      return <tr key={item.id} className={companyAccountIds.has(item.accountId) ? "company-row" : ""}><td>{item.account}{companyAccountIds.has(item.accountId) && <span className="plan-board-tag">Compañía</span>}</td><td>{item.company}</td><td>{item.year}</td><td>{statusLabels[item.status] ?? item.status}</td><td>{item.responsible}</td><td className="plan-board-actions">{fullPlan && <>{canApprove && item.status === "SUBMITTED" && <button type="button" className="clay-primary" onClick={() => onApprove(fullPlan)}>Aprobar comercialmente</button>}<button type="button" className="paper-button" onClick={() => onOpen(fullPlan)}>Abrir</button></>}</td></tr>;
+      const finished = FINISHED_STATUSES.has(item.status);
+      return <tr key={item.id} className={companyAccountIds.has(item.accountId) ? "company-row" : ""}><td>{item.account}{companyAccountIds.has(item.accountId) && <span className="plan-board-tag">Compañía</span>}</td><td>{item.company}</td><td>{item.year}</td><td><span className={`plan-status ${finished ? "plan-status-good" : "plan-status-pending"}`}>{statusLabels[item.status] ?? item.status}</span></td><td>{item.responsible}</td><td className="plan-board-actions">{fullPlan && <>{canApprove && item.status === "SUBMITTED" && <button type="button" className="clay-primary" onClick={() => onApprove(fullPlan)}>Aprobar comercialmente</button>}<button type="button" className="paper-button" onClick={() => onOpen(fullPlan)}>Abrir</button></>}</td></tr>;
     })}</tbody></table>{visibleBoardPlans.length === 0 && <p className="plan-board-empty">No hay Planes sin autorizar o finalizar.</p>}</div></section>}
-    {(!plan && adminPlans.length > 0) && <label className="admin-plan-picker">Cuenta / Plan<select value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Selecciona una cuenta</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select></label>}
-    {(plan || targetPlanId || !plan) ? <>
-      {activePlan && <section className="plain-note"><b>{activeAccountName} · {plan?.companyName ?? adminPlans.find((item) => item.id === targetPlanId)?.company ?? ""} · {activePlan.year}</b><p>El administrador concede capacidades concretas para esta cuenta. Ser administrador no sustituye la revisión o aprobación comercial.</p></section>}
-      <form className="contribution-builder access-form" onSubmit={grant}>
-        {!plan && <label>Plan destino<select name="planId" value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Administración global</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select><small>Déjalo en Administración global para administrar personas con acceso a toda la aplicación.</small></label>}
-        <label>Persona<select name="email" required defaultValue=""><option value="" disabled>Selecciona</option>{people.map((person) => <option key={person.correo} value={person.correo}>{person.nombre} · {person.correo}</option>)}</select><small>Del directorio de personas de CatHunt Hub. Si falta alguien, créalo primero ahí.</small></label>
-        <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option>{Object.entries(capabilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <button className="clay-primary">Conceder acceso</button>
-      </form>
-      {message && <section className="plain-note"><p>{message}</p></section>}
-      <section className="contribution-register"><div className="section-title"><small>Acceso vigente</small><h2>Personas asignadas a esta cuenta</h2></div>{assignments.map((item, index) => <article key={`${item.email}:${item.capability}:${index}`}><div><b>{item.display_name}</b><span>{item.email}</span></div><div><strong>{capabilityLabels[item.capability] ?? String(item.capability).replaceAll("_"," ")}</strong><span>{item.business_function}</span></div><div><strong>{String(item.scope_type).startsWith("MONITOR_") ? String(item.scope_type).replace("MONITOR_", "Monitoreo · ") : "Plan completo"}</strong><span>{String(item.scope_id)}</span></div><button className="paper-button" onClick={() => revoke(item)}>Retirar</button></article>)}</section>
-    </> : <EmptyAnswer title="No hay cuentas cargadas" copy="Crea el primer Plan para que el administrador pueda asignar responsables y capacidades." />}
   </div>;
 }
