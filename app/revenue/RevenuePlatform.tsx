@@ -394,6 +394,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
   function navigate(module: RevenueModule) {
     if (module === "contexto") {
       startCreate();
+      setActive("contexto");
       return;
     }
     // El menú lateral es persistente: cualquier destino debe cerrar el formulario
