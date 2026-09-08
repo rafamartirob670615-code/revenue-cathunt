@@ -20,14 +20,14 @@ test("el recorrido vacío no presenta cifras demostrativas como resultados", asy
   assert.match(source, /No hay una cuenta activa/);
 });
 
-test("la información comienza con un Excel y revela lo demás después", async () => {
+test("Información muestra los 4 archivos esenciales desde el inicio", async () => {
   const source = await readFile(modulesUrl, "utf8");
   assert.match(source, /criticality === "ESSENTIAL"/);
   assert.doesNotMatch(source, /requirement\.essential/);
-  assert.match(source, /salesReceived \? essential/);
+  assert.doesNotMatch(source, /salesReceived/);
+  assert.match(source, /essential\.map/);
   assert.match(source, /Seleccionar archivo/);
   assert.match(source, /Fuentes complementarias/);
-  assert.match(source, /conserva el original/);
   assert.match(source, /Confirmar información/);
 });
 

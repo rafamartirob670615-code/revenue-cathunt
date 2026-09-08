@@ -1,0 +1,4 @@
+sku_id,source_unit,base_unit,conversion_factor
+CAF-001,CAJA,PZA,6
+PUR-001,PZA,PZA,1
+LIC-001,CAJA,PZA,4

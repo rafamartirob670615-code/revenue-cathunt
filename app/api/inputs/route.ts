@@ -302,7 +302,7 @@ export async function PUT() {
     // Replacing an uploaded file must invalidate the accepted package and DELETE FROM baseline_reviews;
     // it also clears DELETE FROM baseline_calculations before any new official file is accepted.
     // this endpoint is intentionally disabled so no non-official synthetic source can be generated.
-    throw new Error("La demo usa exclusivamente los archivos oficiales de outputs/demo_sintetica_oficial/; cárgalos directamente en Información");
+    throw new Error("La demo usa exclusivamente los archivos oficiales de samples/erp-package/; cárgalos directamente en Información");
   } catch (error) {
     return responseError(error);
   }

@@ -1,0 +1,4 @@
+account_id,sku_id,valid_from,price,currency,price_type
+UCM-0161,CAF-001,2026-01,1450,MXN,LIST
+UCM-0161,PUR-001,2026-01,2380,MXN,LIST
+UCM-0161,LIC-001,2026-01,920,MXN,LIST

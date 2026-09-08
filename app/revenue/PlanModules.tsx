@@ -63,14 +63,12 @@ export function InformationModule({
   const [showGuide, setShowGuide] = useState(false);
   const [draftSource, setDraftSource] = useState<string | null>(null);
   const essential = PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "ESSENTIAL");
-  const salesReceived = files.some((file) => file.requirementId === "sales-history" && file.status === "READY");
-  const visibleEssential = salesReceived ? essential : essential.filter((requirement) => requirement.id === "sales-history");
   return <div className="module-page">
-    <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" description="No hay formatos escondidos ni una captura interminable. REVENUE conserva el original, interpreta la tabla y muestra qué entendió." />
+    <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" description="Estos 4 archivos son obligatorios para calcular el Plan. REVENUE conserva el original, interpreta la tabla y muestra qué entendió." />
     <section className="plain-note"><b>Información básica para empezar</b><p>REVENUE necesita información real de tu ERP o sistema de facturación y de las áreas que conocen cada cuenta. Puedes cargar Excel o CSV, ver un ejemplo del formato esperado o armar una fuente aquí para dejar registrada la información mínima y validarla antes de calcular.</p><div className="inline-actions"><button className="paper-button" type="button" onClick={() => setShowGuide(!showGuide)}>{showGuide ? "Cerrar información básica" : "Información básica"}</button></div></section>
     {showGuide && <section className="plain-note guide-panel"><b>Qué debe contener cada fuente</b><p>Historia de ventas: cuenta, producto, periodo, unidades, valor y moneda. Catálogo y correspondencias: producto de la cuenta y producto REVENUE. Conversiones: unidad origen, unidad base y factor. Precios: cuenta, producto, precio, moneda y vigencia. Las demás fuentes —condiciones, costos, inversiones, cuota y venta actual— alimentan rentabilidad, seguimiento y Billing. Cada tarjeta conserva el original, valida columnas y explica cualquier campo faltante.</p></section>}
     <section className="source-board">
-      {visibleEssential.map((requirement, index) => {
+      {essential.map((requirement, index) => {
         const received = files.find((file) => file.requirementId === requirement.id);
         return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}>
           <i>{received?.status === "READY" ? "✓" : index + 1}</i>
