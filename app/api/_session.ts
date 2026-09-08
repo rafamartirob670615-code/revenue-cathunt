@@ -91,6 +91,41 @@ export function sessionCookie(user: CanonicalUser) {
   return `${COOKIE}=${payload}.${signature(payload)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_MS / 1000}`;
 }
 
+export type CanonicalPerson = { nombre: string; correo: string };
+
+// Directorio compartido de personas: la misma tabla public.usuarios que ya
+// usa el Hub, PRECIO y PRODUCTO — evita que cada app tenga su propia lista
+// de nombres/correos tecleados a mano y desalineados entre sí.
+export async function listCanonicalPeople(): Promise<CanonicalPerson[]> {
+  const supabase = supabaseServiceClient();
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("nombre, correo")
+    .eq("activo", true)
+    .not("correo", "is", null)
+    .order("nombre");
+  if (error) {
+    console.error("Revenue: fallo al leer el directorio de personas", error.message);
+    return [];
+  }
+  return (data ?? []).filter((row): row is CanonicalPerson => Boolean(row.correo && row.nombre));
+}
+
+export async function lookupCanonicalPerson(email: string): Promise<CanonicalPerson | null> {
+  const supabase = supabaseServiceClient();
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("nombre, correo")
+    .eq("activo", true)
+    .ilike("correo", email.trim())
+    .maybeSingle();
+  if (error) {
+    console.error("Revenue: fallo al buscar la persona en el directorio", error.message);
+    return null;
+  }
+  return data?.correo && data.nombre ? { nombre: data.nombre, correo: data.correo } : null;
+}
+
 export async function consumeSsoToken(token: string, destination: string): Promise<CanonicalUser | null> {
   const supabase = supabaseServiceClient();
   const { data: row, error: readError } = await supabase

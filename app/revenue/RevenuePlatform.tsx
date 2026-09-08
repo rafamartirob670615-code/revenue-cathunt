@@ -502,13 +502,15 @@ function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen
   const [message, setMessage] = useState("");
   const [configuration, setConfiguration] = useState<Record<string,string>>({});
   const [onlyPending, setOnlyPending] = useState(false);
+  const [people, setPeople] = useState<Array<{ nombre: string; correo: string }>>([]);
   const load = useCallback(async () => {
     const selectedPlanId = plan?.id ?? "";
     const response = await fetch(selectedPlanId ? `/api/admin/access?planId=${encodeURIComponent(selectedPlanId)}` : "/api/admin/access", { cache: "no-store" });
-    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; configuration?: Record<string,string>; error?: string };
+    const body = await response.json() as { ok: boolean; assignments?: Array<Record<string,string>>; users?: Array<Record<string,string>>; plans?: Array<{ id: string; account: string; accountId: string; company: string; year: number; status: string; responsible: string }>; people?: Array<{ nombre: string; correo: string }>; configuration?: Record<string,string>; error?: string };
     if (response.ok && body.ok) {
       setAssignments(body.assignments ?? body.users ?? []);
       setAdminPlans(body.plans ?? []);
+      setPeople(body.people ?? []);
       setConfiguration(body.configuration ?? {});
     }
     else setMessage(body.error ?? "No pudimos recuperar los accesos.");
@@ -524,7 +526,7 @@ function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen
     const capability = String(form.get("capability") ?? "");
     const response = await fetch("/api/admin/access", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ planId: capability === "ADMINISTER_ACCESS" ? "" : selectedPlanId, email: form.get("email"), displayName: form.get("displayName"), capability }),
+      body: JSON.stringify({ planId: capability === "ADMINISTER_ACCESS" ? "" : selectedPlanId, email: form.get("email"), capability }),
     });
     const body = await response.json() as { ok: boolean; error?: string };
     setMessage(response.ok && body.ok ? "Acceso concedido para esta cuenta." : body.error ?? "No pudimos guardar el acceso.");
@@ -553,8 +555,7 @@ function AdministrationModule({ plan, accounts, onChanged, existingPlans, onOpen
       {activePlan && <section className="plain-note"><b>{activeAccountName} · {plan?.companyName ?? adminPlans.find((item) => item.id === targetPlanId)?.company ?? ""} · {activePlan.year}</b><p>El administrador concede capacidades concretas para esta cuenta. Ser administrador no sustituye la revisión o aprobación comercial.</p></section>}
       <form className="contribution-builder access-form" onSubmit={grant}>
         {!plan && <label>Plan destino<select name="planId" value={targetPlanId} onChange={(event) => setTargetPlanId(event.target.value)}><option value="">Administración global</option>{adminPlans.map((item) => <option key={item.id} value={item.id}>{item.account} · {item.year}</option>)}</select><small>Déjalo en Administración global para administrar personas con acceso a toda la aplicación.</small></label>}
-        <label>Nombre<input name="displayName" required placeholder="Nombre de la persona" /></label>
-        <label>Correo del workspace<input name="email" type="email" required placeholder="persona@empresa.com" /></label>
+        <label>Persona<select name="email" required defaultValue=""><option value="" disabled>Selecciona</option>{people.map((person) => <option key={person.correo} value={person.correo}>{person.nombre} · {person.correo}</option>)}</select><small>Del directorio de personas de CatHunt Hub. Si falta alguien, créalo primero ahí.</small></label>
         <label>Capacidad<select name="capability" required defaultValue=""><option value="" disabled>Selecciona</option>{Object.entries(capabilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <button className="clay-primary">Conceder acceso</button>
       </form>

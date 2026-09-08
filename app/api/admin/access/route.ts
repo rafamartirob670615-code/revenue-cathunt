@@ -10,6 +10,7 @@ import {
   type AssignableCapability,
 } from "../../_access.ts";
 import { database } from "../../_infrastructure.ts";
+import { listCanonicalPeople, lookupCanonicalPerson } from "../../_session.ts";
 
 export const runtime = "nodejs";
 
@@ -48,9 +49,10 @@ export async function GET(request: Request) {
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     await requireAdministrator(request, planId || undefined);
     if (!planId) {
-      const [users, plans] = await Promise.all([
+      const [users, plans, people] = await Promise.all([
         database().prepare(`SELECT u.email,u.display_name,om.business_function,aa.capability,aa.scope_type,aa.scope_id,aa.valid_from,aa.valid_until FROM users u LEFT JOIN organization_memberships om ON om.user_id=u.id AND om.status='ACTIVE' LEFT JOIN access_assignments aa ON aa.membership_id=om.id ORDER BY u.display_name,aa.capability`).run<Record<string, unknown>>(),
         database().prepare("SELECT aggregate_json FROM plan_aggregates ORDER BY updated_at DESC").run<{ aggregate_json: string }>(),
+        listCanonicalPeople(),
       ]);
       return Response.json({ ok: true, users: users.results ?? [], plans: (plans.results ?? []).map((row) => {
         const plan = JSON.parse(row.aggregate_json) as Plan;
@@ -60,24 +62,27 @@ export async function GET(request: Request) {
           accountId: plan.accountId, year: plan.year, organizationId: plan.organizationId,
           status: version?.status ?? "DRAFT", responsible: version?.createdBy ?? "",
         };
-      }), assignableCapabilities: ASSIGNABLE_CAPABILITIES, configuration: { monitoringVisibility: "ALL_AUTHENTICATED_USERS", constructionAccess: "PLAN_OWNER_OR_ADMINISTRATOR", accountScope: "PLAN_ACCOUNT_UNIVERSE", reviewApproval: "SEPARATE_REVIEW_AND_APPROVE_CAPABILITIES" } });
+      }), people, assignableCapabilities: ASSIGNABLE_CAPABILITIES, configuration: { monitoringVisibility: "ALL_AUTHENTICATED_USERS", constructionAccess: "PLAN_OWNER_OR_ADMINISTRATOR", accountScope: "PLAN_ACCOUNT_UNIVERSE", reviewApproval: "SEPARATE_REVIEW_AND_APPROVE_CAPABILITIES" } });
     }
-    const result = await database().prepare(
-      `SELECT u.email,u.display_name,om.business_function,aa.capability,aa.valid_from,aa.valid_until
-       FROM access_assignments aa
-       JOIN organization_memberships om ON om.id=aa.membership_id
-       JOIN users u ON u.id=om.user_id
-       WHERE aa.scope_type='PLAN' AND aa.scope_id=?
-       ORDER BY u.display_name,aa.capability`,
-    ).bind(planId).run<Record<string, unknown>>();
-    return Response.json({ ok: true, assignments: result.results ?? [], assignableCapabilities: ASSIGNABLE_CAPABILITIES });
+    const [result, people] = await Promise.all([
+      database().prepare(
+        `SELECT u.email,u.display_name,om.business_function,aa.capability,aa.valid_from,aa.valid_until
+         FROM access_assignments aa
+         JOIN organization_memberships om ON om.id=aa.membership_id
+         JOIN users u ON u.id=om.user_id
+         WHERE aa.scope_type='PLAN' AND aa.scope_id=?
+         ORDER BY u.display_name,aa.capability`,
+      ).bind(planId).run<Record<string, unknown>>(),
+      listCanonicalPeople(),
+    ]);
+    return Response.json({ ok: true, assignments: result.results ?? [], people, assignableCapabilities: ASSIGNABLE_CAPABILITIES });
   } catch (error) { return accessError(error, "No pudimos recuperar los accesos"); }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as {
-      planId?: string; email?: string; displayName?: string; capability?: AssignableCapability;
+      planId?: string; email?: string; capability?: AssignableCapability;
     };
     const planId = body.planId ?? "";
     if ((!planId && body.capability !== "ADMINISTER_ACCESS") || !body.email?.trim() || !ASSIGNABLE_CAPABILITIES.includes(body.capability as AssignableCapability)) {
@@ -86,6 +91,8 @@ export async function POST(request: Request) {
     const admin = await requireAdministrator(request, planId || undefined);
     const plan = planId ? (await authorizePlan(request, planId)).plan : { organizationId: "revenue-pilot" };
     const email = body.email.trim().toLowerCase();
+    const person = await lookupCanonicalPerson(email);
+    if (!person) throw new Error("Esa persona no existe en el directorio de CatHunt Hub. Créala primero en Administración del Hub.");
     const userId = `user:${email}`;
     const capability = body.capability as AssignableCapability;
     const businessFunction = FUNCTION_BY_CAPABILITY[capability];
@@ -95,7 +102,7 @@ export async function POST(request: Request) {
       `INSERT INTO users (id,email,display_name,status,created_at,updated_at)
        VALUES (?,?,?,?,?,?)
        ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name,status='ACTIVE',updated_at=excluded.updated_at`,
-    ).bind(userId, email, body.displayName?.trim() || email, "ACTIVE", now, now).run();
+    ).bind(userId, email, person.nombre, "ACTIVE", now, now).run();
     const membershipId = `membership:${plan.organizationId}:${userId}:${businessFunction}`;
     await database().prepare(
       `INSERT INTO organization_memberships
