@@ -157,12 +157,11 @@ async function realActivities(
       });
     }
   }
-  const hasMarketing = activities.some((item) => item.family === "MARKETING");
-  const hasTrade = activities.some((item) => item.family === "TRADE_MARKETING");
-  if (!hasMarketing || !hasTrade) {
-    throw new Error("Marketing y Trade deben entregar al menos una fuente o aportación aceptada");
-  }
   return activities;
+}
+
+function hasBothFamilies(activities: EditableActivity[]) {
+  return activities.some((item) => item.family === "MARKETING") && activities.some((item) => item.family === "TRADE_MARKETING");
 }
 
 function syntheticActivities(baseline: { targetYear: number; lines: Array<{ accountId: string; skuId: string }> }) {
@@ -209,9 +208,19 @@ export async function POST(request: Request) {
     if (!planId) throw new Error("planId es obligatorio");
     const { dataOwnerId: ownerId, actor } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const baseline = await approvedBaseline(planId, ownerId);
-    const activities = baseline.dataClassification === "USER_PROVIDED"
-      ? await realActivities(planId, ownerId, baseline)
-      : syntheticActivities(baseline);
+    // Las fuentes reales de Marketing y Trade se usan siempre que existan,
+    // sin importar si el resto del paquete quedó etiquetado como sintético
+    // (ese etiquetado depende del nombre de otros archivos, como la historia
+    // de ventas, y no debe descartar Marketing/Trade real ya entregado).
+    const real = await realActivities(planId, ownerId, baseline);
+    let activities: EditableActivity[];
+    if (hasBothFamilies(real)) {
+      activities = real;
+    } else if (baseline.dataClassification === "USER_PROVIDED") {
+      throw new Error("Marketing y Trade deben entregar al menos una fuente o aportación aceptada");
+    } else {
+      activities = syntheticActivities(baseline);
+    }
     const result = reconcileActivities(activities, actor.email, baseline.dataClassification);
     const updatedAt = await persistGrowth(planId, ownerId, result);
     return Response.json({ ok:true, result, updatedAt });

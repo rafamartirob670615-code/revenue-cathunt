@@ -59,14 +59,16 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [canonicalAccounts, setCanonicalAccounts] = useState<AlfaUniverseAccount[]>([]);
+  const [existingPlans, setExistingPlans] = useState<Plan[]>([]);
 
   const loadHome = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [accessResponse, accountsResponse] = await Promise.all([
+      const [accessResponse, accountsResponse, plansResponse] = await Promise.all([
         fetch("/api/access", { cache: "no-store" }),
         fetch("/api/canonical/accounts", { cache: "no-store" }),
+        fetch("/api/plans", { cache: "no-store" }),
       ]);
       const accessBody = await accessResponse.json() as { ok: boolean; identity?: RevenueIdentity };
       if (accessResponse.ok && accessBody.ok && accessBody.identity) setEffectiveIdentity(accessBody.identity);
@@ -75,6 +77,8 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
         throw new Error(accountsBody.error || "CANÓNICOS no devolvió cuentas utilizables.");
       }
       setCanonicalAccounts(accountsBody.accounts);
+      const plansBody = await plansResponse.json() as { ok: boolean; plans?: Plan[] };
+      if (plansResponse.ok && plansBody.ok) setExistingPlans(plansBody.plans ?? []);
     } catch (cause) {
       setError(friendly(cause instanceof Error ? cause.message : ""));
     } finally {
@@ -391,6 +395,11 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
     setError("");
   }
 
+  async function openPlan(plan: Plan) {
+    setCreating(false);
+    await loadPlan(plan);
+  }
+
   function navigate(module: RevenueModule) {
     if (module === "contexto") {
       startCreate();
@@ -438,7 +447,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
-      creating ? <CreatePlanModule accounts={canonicalAccounts} busy={busy} onSubmit={createPlan} onCancel={() => { setCreating(false); setActive("monitoreo"); }} /> :
+      creating ? <CreatePlanModule accounts={canonicalAccounts} existingPlans={existingPlans} busy={busy} onSubmit={createPlan} onOpen={openPlan} onCancel={() => { setCreating(false); setActive("monitoreo"); }} /> :
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule accounts={canonicalAccounts} files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
@@ -457,8 +466,17 @@ function NoPlan({ onCreate }: { onCreate: () => void }) {
   return <div className="module-page"><ModuleHead eyebrow="Información" title="Primero selecciona o crea un Plan" description="El contexto de compañía, cuenta, año y versión gobierna toda la información." /><EmptyAnswer title="No hay una cuenta activa" copy="Registra el contexto una sola vez y REVENUE lo conservará durante todo el recorrido." action={<button className="clay-primary" onClick={onCreate}>Crear un Plan</button>} /></div>;
 }
 
-function CreatePlanModule({ accounts, busy, onSubmit, onCancel }: { accounts: AlfaUniverseAccount[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
-  return <div className="module-page"><ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
+const statusLabels: Record<string, string> = {
+  DRAFT: "En construcción", SUBMITTED: "En revisión", COMMERCIAL_APPROVED: "Aprobado comercialmente", OFFICIAL: "Oficial",
+};
+
+function CreatePlanModule({ accounts, existingPlans, busy, onSubmit, onOpen, onCancel }: { accounts: AlfaUniverseAccount[]; existingPlans: Plan[]; busy: string; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onOpen: (plan: Plan) => void; onCancel: () => void }) {
+  return <div className="module-page">
+    {existingPlans.length > 0 && <section className="paper-panel plan-picker"><b>Tus Planes</b><p>Continúa un Plan que ya empezaste; REVENUE te lleva exactamente donde lo dejaste.</p><div className="plan-picker-list">{existingPlans.map((plan) => {
+      const version = plan.versions.at(-1);
+      return <article key={plan.id}><div><b>{plan.accountName ?? plan.accountId}</b><small>{plan.companyName ?? ""} · {plan.year}</small></div><div><span>{statusLabels[version?.status ?? "DRAFT"] ?? version?.status ?? "Borrador"}</span><button type="button" className="paper-button" onClick={() => onOpen(plan)}>Abrir</button></div></article>;
+    })}</div></section>}
+    <ModuleHead eyebrow="Nuevo Plan" title="Registra el contexto una sola vez" description="Elige una cuenta del universo comercial o búscala escribiendo. El identificador técnico se conserva en el sistema y no necesitas capturarlo." /><section className="plain-note"><b>Cuenta existente</b><p>La cuenta no se crea como texto libre: debe coincidir con CANÓNICOS para que Monitoreo, responsables y Billing compartan la misma clave.</p></section><form className="paper-panel create-paper-form" onSubmit={onSubmit}><label>Compañía<input name="company" required autoComplete="off" placeholder="Ej. Turmix de México" /></label><label>Cuenta<input name="account" required list="revenue-account-options" placeholder="Busca por nombre, por ejemplo Liverpool" /><datalist id="revenue-account-options">{accounts.map((account) => <option key={account.id} value={account.name}>{account.id} · {account.territory} · {account.channel}</option>)}</datalist></label><label>Año del Plan<input name="year" required type="number" min="2026" defaultValue="2027" /></label><label>Moneda<input name="currency" value="MXN" readOnly /></label><div><button type="button" className="paper-button" onClick={onCancel}>Cancelar</button><button className="clay-primary" disabled={Boolean(busy) || accounts.length === 0}>{busy || "Guardar y continuar"}</button></div></form></div>;
 }
 
 function AdministrationModule({ plan, onChanged }: { plan: Plan | null; onChanged: () => Promise<void> }) {
