@@ -6,15 +6,21 @@ import { FUNCTION_LABELS, type RevenueIdentity } from "./access";
 
 const sidebarModules: RevenueModule[] = ["monitoreo", "contexto", "administracion"];
 
+const planSteps = REVENUE_MODULES.filter((module) => module.group === "build").sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
+
 export default function Shell({
   active,
   identity,
   onNavigate,
+  showSteps = false,
+  onStepNavigate,
   children,
 }: {
   active: RevenueModule;
   identity: RevenueIdentity;
   onNavigate: (module: RevenueModule) => void;
+  showSteps?: boolean;
+  onStepNavigate?: (module: RevenueModule) => void;
   children: React.ReactNode;
 }) {
   const modules = sidebarModules.flatMap((slug) => REVENUE_MODULES.filter((module) => module.slug === slug));
@@ -38,7 +44,19 @@ export default function Shell({
         </nav>
         <footer><i /><span><b>{identity.displayName}</b><small>{FUNCTION_LABELS[identity.functions[0]]} · sesión autorizada</small><small className="copyright">© 2026 REVENUE · CatHunt</small></span></footer>
       </aside>
-      <main className="revenue-stage revenue-content">{children}</main>
+      <main className="revenue-stage revenue-content">
+        {showSteps && onStepNavigate && <nav className="plan-stepper" aria-label="Pasos del Plan">
+          {planSteps.map((module) => <button
+            key={module.slug}
+            type="button"
+            className={active === module.slug ? "active" : ""}
+            onClick={() => onStepNavigate(module.slug)}
+          >
+            <i>{module.step}</i><span>{module.name}</span>
+          </button>)}
+        </nav>}
+        {children}
+      </main>
     </div>
   );
 }

@@ -402,6 +402,13 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
     setCreating(false);
     setActive(module);
   }
+  // El stepper del Plan navega entre los 8 pasos de un Plan ya existente;
+  // a diferencia de navigate(), "contexto" aquí muestra el Plan actual en
+  // vez de abrir el formulario de creación de uno nuevo.
+  function goToStep(module: RevenueModule) {
+    setCreating(false);
+    setActive(module);
+  }
 
   const syntheticPlan =
     state.baseline?.dataClassification === "SYNTHETIC_NON_COMMERCIAL" ||
@@ -427,7 +434,7 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
   const financeOnly = can("VIEW_FINANCIALS") && !canIntegrate && !can("REVIEW") && !can("APPROVE");
 
   return (
-    <Shell active={active} identity={effectiveIdentity} onNavigate={navigate}>
+    <Shell active={active} identity={effectiveIdentity} onNavigate={navigate} showSteps={Boolean(selected) && !creating} onStepNavigate={goToStep}>
       {error && <div className="platform-error" role="alert">{error}<button onClick={() => setError("")}>Cerrar</button></div>}
       {notice && <div className="answer-card good"><div><small>Registro de versión</small><p>{notice}</p></div><button className="paper-button" onClick={() => setNotice("")}>Cerrar</button></div>}
       {busy === "Abriendo el Plan…" || loading ? <div className="platform-loading"><span /><b>{busy || "Abriendo REVENUE…"}</b></div> :
