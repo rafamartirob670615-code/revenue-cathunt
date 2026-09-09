@@ -90,6 +90,50 @@ export async function readCanonicalRevenueAccounts(): Promise<AlfaUniverseAccoun
   });
 }
 
+type CanonicalProductRow = {
+  id: string;
+  nombre: string;
+  sku_codigo: string | null;
+  categoria_id: string | null;
+  categoria_nombre: string | null;
+};
+
+export type CanonicalProduct = {
+  id: string;
+  name: string;
+  skuCode: string;
+  categoryName: string;
+};
+
+export type CanonicalCategory = {
+  id: string;
+  name: string;
+};
+
+/** Único catálogo de productos del ecosistema; vive en CANÓNICOS, gobernado por la app Producto. */
+export async function readCanonicalProducts(): Promise<CanonicalProduct[]> {
+  const rows = await canonicalDatabase()<CanonicalProductRow[]>`
+    SELECT p.id, p.nombre, p.sku_codigo, p.categoria_id, c.nombre AS categoria_nombre
+    FROM public.productos p
+    LEFT JOIN public.categorias c ON c.id = p.categoria_id
+    WHERE p.competidor_id IS NULL
+    ORDER BY p.nombre ASC
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.nombre,
+    skuCode: row.sku_codigo?.trim() || row.id,
+    categoryName: row.categoria_nombre?.trim() || "Sin categoría",
+  }));
+}
+
+export async function readCanonicalCategories(): Promise<CanonicalCategory[]> {
+  const rows = await canonicalDatabase()<{ id: string; nombre: string }[]>`
+    SELECT id, nombre FROM public.categorias ORDER BY nombre ASC
+  `;
+  return rows.map((row) => ({ id: row.id, name: row.nombre }));
+}
+
 function canonicalNumber(value: number | string | null) {
   return value === null ? null : Number(value);
 }

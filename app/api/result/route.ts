@@ -16,6 +16,26 @@ function records(csvText: string) {
   );
 }
 
+/** Cifra bruta (sin costos ni condiciones) para no depender de Rentabilidad (Paso 7). */
+async function priorYearGrossSales(planId: string, ownerId: string, planYear: number) {
+  const priorYear = planYear - 1;
+  const row = await database()
+    .prepare(
+      "SELECT object_key FROM input_package_files WHERE plan_id = ? AND owner_id = ? AND requirement_id = 'sales-history'",
+    )
+    .bind(planId, ownerId)
+    .first<{ object_key: string }>();
+  const object = row ? await files().get(row.object_key) : null;
+  if (!object) return { priorYear, grossSales: null, units: null };
+  const priorRows = records(await object.text()).filter((line) => String(line.period ?? "").startsWith(`${priorYear}-`));
+  if (!priorRows.length) return { priorYear, grossSales: null, units: null };
+  return {
+    priorYear,
+    grossSales: Number(priorRows.reduce((sum, line) => sum + Number(line.value || 0), 0).toFixed(2)),
+    units: priorRows.reduce((sum, line) => sum + Number(line.units || 0), 0),
+  };
+}
+
 async function prerequisites(planId: string, ownerId: string) {
   const row = await database()
     .prepare(
@@ -47,16 +67,20 @@ export async function GET(request: Request) {
   try {
     const planId = new URL(request.url).searchParams.get("planId") ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    const { dataOwnerId: ownerId } = await authorizePlan(request, planId);
+    const { dataOwnerId: ownerId, plan } = await authorizePlan(request, planId);
     await prerequisites(planId, ownerId);
     const row = await database()
       .prepare("SELECT result_json, updated_at FROM plan_results WHERE plan_id = ? AND owner_id = ?")
       .bind(planId, ownerId)
       .first<{ result_json: string; updated_at: string }>();
+    const priorYear = await priorYearGrossSales(planId, ownerId, plan.year);
     return Response.json({
       ok: true,
       result: row ? JSON.parse(row.result_json) : null,
       updatedAt: row?.updated_at,
+      priorYear: priorYear.priorYear,
+      priorYearGrossSales: priorYear.grossSales,
+      priorYearUnits: priorYear.units,
     });
   } catch (error) {
     return responseError(error);
@@ -68,7 +92,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { planId?: string };
     const planId = body.planId ?? "";
     if (!planId) throw new Error("planId es obligatorio");
-    const { dataOwnerId: ownerId } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
+    const { dataOwnerId: ownerId, plan } = await authorizePlan(request, planId, ["PLAN_INTEGRATE"]);
     const source = await prerequisites(planId, ownerId);
     const baseline = JSON.parse(source.baseline_json) as {
       lines: Array<{
@@ -200,7 +224,15 @@ export async function POST(request: Request) {
       )
       .bind(planId, ownerId, JSON.stringify(result), source.data_classification, now, now)
       .run();
-    return Response.json({ ok: true, result, updatedAt: now });
+    const priorYear = await priorYearGrossSales(planId, ownerId, plan.year);
+    return Response.json({
+      ok: true,
+      result,
+      updatedAt: now,
+      priorYear: priorYear.priorYear,
+      priorYearGrossSales: priorYear.grossSales,
+      priorYearUnits: priorYear.units,
+    });
   } catch (error) {
     return responseError(error);
   }

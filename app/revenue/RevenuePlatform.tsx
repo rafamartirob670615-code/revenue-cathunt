@@ -28,6 +28,7 @@ import type { RevenueModule } from "./modules";
 import { EmptyAnswer, ModuleHead } from "./ui";
 import type { RevenueIdentity } from "./access";
 import type { AlfaUniverseAccount } from "../../domain/alfa-turmix-monitoring";
+import type { CanonicalCategory, CanonicalProduct } from "../../application/canonical-data";
 import AlfaTurmixMonitor from "./AlfaTurmixMonitor";
 
 const emptyPlanState = {
@@ -39,6 +40,9 @@ const emptyPlanState = {
   review: null as BaselineReview | null,
   growth: null as GrowthResult | null,
   result: null as PlanResult | null,
+  priorYear: null as number | null,
+  priorYearGrossSales: null as number | null,
+  priorYearUnits: null as number | null,
   profitability: null as ProfitabilityResult | null,
   contributions: [] as Contribution[],
 };
@@ -59,15 +63,18 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [canonicalAccounts, setCanonicalAccounts] = useState<AlfaUniverseAccount[]>([]);
+  const [canonicalProducts, setCanonicalProducts] = useState<CanonicalProduct[]>([]);
+  const [canonicalCategories, setCanonicalCategories] = useState<CanonicalCategory[]>([]);
   const [existingPlans, setExistingPlans] = useState<Plan[]>([]);
 
   const loadHome = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [accessResponse, accountsResponse, plansResponse] = await Promise.all([
+      const [accessResponse, accountsResponse, productsResponse, plansResponse] = await Promise.all([
         fetch("/api/access", { cache: "no-store" }),
         fetch("/api/canonical/accounts", { cache: "no-store" }),
+        fetch("/api/canonical/products", { cache: "no-store" }),
         fetch("/api/plans", { cache: "no-store" }),
       ]);
       const accessBody = await accessResponse.json() as { ok: boolean; identity?: RevenueIdentity };
@@ -77,6 +84,11 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
         throw new Error(accountsBody.error || "CANÓNICOS no devolvió cuentas utilizables.");
       }
       setCanonicalAccounts(accountsBody.accounts);
+      const productsBody = await productsResponse.json() as { ok: boolean; products?: CanonicalProduct[]; categories?: CanonicalCategory[] };
+      if (productsResponse.ok && productsBody.ok) {
+        setCanonicalProducts(productsBody.products ?? []);
+        setCanonicalCategories(productsBody.categories ?? []);
+      }
       const plansBody = await plansResponse.json() as { ok: boolean; plans?: Plan[] };
       if (plansResponse.ok && plansBody.ok) setExistingPlans(plansBody.plans ?? []);
     } catch (cause) {
@@ -128,8 +140,13 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       }
       if (next.growth?.controls.reconciled) {
         const response = await fetch(`/api/result?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
-        const body = await response.json() as { ok: boolean; result?: PlanResult | null };
-        if (response.ok && body.ok) next.result = body.result ?? null;
+        const body = await response.json() as { ok: boolean; result?: PlanResult | null; priorYear?: number | null; priorYearGrossSales?: number | null; priorYearUnits?: number | null };
+        if (response.ok && body.ok) {
+          next.result = body.result ?? null;
+          next.priorYear = body.priorYear ?? null;
+          next.priorYearGrossSales = body.priorYearGrossSales ?? null;
+          next.priorYearUnits = body.priorYearUnits ?? null;
+        }
       }
       if (next.result?.controls.unitsReconciled && next.result.controls.valueReconciled) {
         const response = await fetch(`/api/profitability?planId=${encodeURIComponent(plan.id)}`, { cache: "no-store" });
@@ -326,7 +343,26 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
     finally { setBusy(""); }
   }
   async function buildResult() {
-    await run("Consolidando Plan…", "/api/result", "POST", (result) => setState((current) => ({ ...current, result: result as PlanResult, profitability: null })));
+    if (!selected) return;
+    setBusy("Consolidando Plan…");
+    setError("");
+    try {
+      const response = await fetch("/api/result", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ planId: selected.id }) });
+      const body = await response.json() as { ok: boolean; result?: PlanResult; priorYear?: number | null; priorYearGrossSales?: number | null; priorYearUnits?: number | null; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error);
+      setState((current) => ({
+        ...current,
+        result: body.result as PlanResult,
+        priorYear: body.priorYear ?? null,
+        priorYearGrossSales: body.priorYearGrossSales ?? null,
+        priorYearUnits: body.priorYearUnits ?? null,
+        profitability: null,
+      }));
+    } catch (cause) {
+      setError(friendly(cause instanceof Error ? cause.message : ""));
+    } finally {
+      setBusy("");
+    }
   }
   async function buildProfitability() {
     await run("Calculando rentabilidad…", "/api/profitability", "POST", (result) => setState((current) => ({ ...current, profitability: result as ProfitabilityResult })));
@@ -466,9 +502,9 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       active === "contexto" ? selected ? <ContextModule plan={selected} /> : <NoPlan onCreate={startCreate} /> :
       active === "informacion" ? selected ? <InformationModule accounts={canonicalAccounts} files={state.files} accepted={state.accepted} systemReady={state.systemReady} busy={busy} onUpload={upload} onGuidedCapture={guidedCapture} onAccept={acceptInformation} /> : <NoPlan onCreate={startCreate} /> :
       active === "volumen-base" ? selected ? <BaselineModule baseline={state.baseline} review={state.review} ready={state.accepted} busy={busy} onCalculate={calculateBaseline} onApprove={approveBaseline} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeMarketing} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
-      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} growth={state.growth} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-marketing" ? selected ? <GrowthPlanModule family="MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeMarketing} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} products={canonicalProducts} categories={canonicalCategories} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-marketing")} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-trade" ? selected ? <GrowthPlanModule family="TRADE_MARKETING" plan={selected} contributions={state.contributions} growth={state.growth} source={state.files.find((file) => file.requirementId === "trade-marketing-plan")} synthetic={syntheticPlan} canBuild={growthCanBuild && canIntegrate} canContribute={canContributeTrade} canIntegrate={canIntegrate} waitingFor={growthWaitingFor} busy={busy} products={canonicalProducts} categories={canonicalCategories} onUpload={upload} onBuild={buildGrowth} onContribute={createContribution} onDecide={(id,status) => decideContribution(id,status,"plan-trade")} /> : <NoPlan onCreate={startCreate} /> :
+      active === "plan-anual" ? selected ? <ResultModule result={state.result} baselineUnits={state.review?.approvedAnnualUnits ?? state.baseline?.annualUnits ?? 0} growthUnits={state.growth?.netUnits ?? 0} growth={state.growth} priorYear={state.priorYear} priorYearGrossSales={state.priorYearGrossSales} ready={Boolean(state.growth?.controls.reconciled)} busy={busy} onBuild={buildResult} /> : <NoPlan onCreate={startCreate} /> :
       active === "rentabilidad" ? selected ? <ProfitabilityModule profitability={state.profitability} files={state.files} onUpload={(requirementId, file) => upload(requirementId, file, "rentabilidad")} ready={!financeOnly && Boolean(state.result?.controls.unitsReconciled && state.result.controls.valueReconciled)} busy={busy} onBuild={buildProfitability} readOnly={financeOnly} /> : <NoPlan onCreate={startCreate} /> :
       active === "revision" ? selected ? <ReviewModule baseline={state.review} baselineResult={state.baseline} growth={state.growth} result={state.result} profitability={state.profitability} synthetic={syntheticPlan} busy={busy} onSubmit={submit} /> : <NoPlan onCreate={startCreate} /> :
       active === "monitoreo" ? selected ? <MonitoringModule planId={selected.id} /> : <AlfaTurmixMonitor /> :
@@ -508,7 +544,7 @@ function AdministrationModule({ accounts, existingPlans, onOpen, canApprove, onA
   const companyAccountIds = new Set(accounts.filter((account) => account.channel === "Marca / fabricante").map((account) => account.id));
   const boardPlans = [...adminPlans].sort((a, b) => Number(companyAccountIds.has(b.accountId)) - Number(companyAccountIds.has(a.accountId)));
   const visibleBoardPlans = onlyPending ? boardPlans.filter((item) => !FINISHED_STATUSES.has(item.status)) : boardPlans;
-  return <div className="module-page"><ModuleHead eyebrow="Administración · sólo administrador" title="Todos los Planes del año, por cuenta" description="El estado de cada Plan de cada cuenta a lo largo del año." />
+  return <div className="module-page"><ModuleHead eyebrow="Planes · sólo administrador" title="Todos los Planes del año, por cuenta" description="El estado de cada Plan de cada cuenta a lo largo del año." />
     {message && <section className="plain-note"><p>{message}</p></section>}
     {boardPlans.length > 0 && <section className="section-title"><small>Tablero de estado</small><h2>Planes por cuenta</h2><p>El Plan de compañía (marca/fabricante) aparece primero; el resto son cuentas cliente.</p><label className="plan-board-filter"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} /> Solo Planes trabajados sin autorizar ni finalizar</label></section>}
     {boardPlans.length > 0 && <section className="plan-board"><div className="plan-board-scroll"><table><thead><tr><th>Cuenta</th><th>Compañía</th><th>Año</th><th>Estado</th><th>Responsable</th><th>Acciones</th></tr></thead><tbody>{visibleBoardPlans.map((item) => {

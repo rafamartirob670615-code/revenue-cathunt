@@ -6,12 +6,12 @@ export function ModuleHead({
 }: {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   action?: React.ReactNode;
 }) {
   return (
     <header className="module-head">
-      <div><p>{eyebrow}</p><h1>{title}</h1><span>{description}</span></div>
+      <div><p>{eyebrow}</p><h1>{title}</h1>{description && <span>{description}</span>}</div>
       {action}
     </header>
   );

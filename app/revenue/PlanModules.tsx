@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
 import type { AlfaUniverseAccount } from "../../domain/alfa-turmix-monitoring";
+import type { CanonicalCategory, CanonicalProduct } from "../../application/canonical-data";
 import type { BaselineResult, BaselineReview, Contribution, GrowthResult, PlanResult, ProfitabilityResult, ReceivedFile } from "./model";
 import { EmptyAnswer, Metric, ModuleHead, formatMoney } from "./ui";
 
@@ -41,19 +42,22 @@ function OfficialPlanBilling({ result }: { result: PlanResult }) {
   return <section className="billing-matrix"><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Billing File · Plan</th>{billingColumns.map(([key, label]) => <th key={key} className={key.startsWith("Q") || key === "YTD" ? "summary-col" : ""}>{label}</th>)}</tr></thead><tbody><tr className="matrix-block"><th colSpan={billingColumns.length + 1}>Unidades del Plan</th></tr>{products.map((skuId) => <tr className="matrix-row" key={`units-${skuId}`}><th>{skuId}</th>{cells(skuId, "planUnits").map((value, index) => <td key={billingColumns[index][0]} className={billingColumns[index][0].startsWith("Q") || billingColumns[index][0] === "YTD" ? "summary-col" : ""}>{value.toLocaleString("es-MX")}</td>)}</tr>)}<tr className="matrix-block"><th colSpan={billingColumns.length + 1}>Valor del Plan · {result.currency}</th></tr>{products.map((skuId) => <tr className="matrix-row" key={`value-${skuId}`}><th>{skuId}</th>{cells(skuId, "planValue").map((value, index) => <td key={billingColumns[index][0]} className={billingColumns[index][0].startsWith("Q") || billingColumns[index][0] === "YTD" ? "summary-col" : ""}>{formatMoney(value, result.currency)}</td>)}</tr>)}</tbody></table></div></section>;
 }
 
-function BuildingBlocksWaterfall({ result, growth }: { result: PlanResult; growth: GrowthResult | null }) {
+function BuildingBlocksWaterfall({ result, growth, priorYear, priorYearGrossSales }: { result: PlanResult; growth: GrowthResult | null; priorYear: number | null; priorYearGrossSales: number | null }) {
   const blocks = (growth?.activities ?? []).map((activity) => ({
     ...activity,
     value: result.lines.filter((line) => line.skuId === activity.skuId && line.period === activity.period).reduce((sum, line) => sum + activity.netUnits * line.unitPrice, 0),
   }));
-  const max = Math.max(...blocks.map((block) => Math.abs(block.value)), 1);
-  return <section className="building-blocks-visual"><header className="section-title"><small>Vista primordial del Plan</small><h2>Building blocks · puente monetario</h2><p>El gráfico tipo puente muestra cómo cada actividad incrementa el Plan desde el volumen base; los eventos quedan debajo agrupados por familia.</p></header><div className="waterfall-track"><div className="waterfall-start"><b>Base</b><strong>{formatMoney(result.lines.reduce((sum, line) => sum + line.baselineUnits * line.unitPrice, 0), result.currency)}</strong></div>{blocks.map((block) => <article className={block.value < 0 ? "negative" : "positive"} key={block.id}><span style={{ height: `${Math.max(12, Math.round(Math.abs(block.value) / max * 100))}%` }} /><b>{block.name}</b><small>{formatMoney(block.value, result.currency)}</small></article>)}<div className="waterfall-total"><b>Plan</b><strong>{formatMoney(result.annualValue, result.currency)}</strong></div></div><div className="building-block-events">{blocks.map((block) => <span key={`${block.id}-event`}><b>{block.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</b> · {block.name} · {block.period} · {formatMoney(block.value, result.currency)}</span>)}</div></section>;
+  const baseValue = result.lines.reduce((sum, line) => sum + line.baselineUnits * line.unitPrice, 0);
+  const marketingValue = blocks.filter((block) => block.family === "MARKETING").reduce((sum, block) => sum + block.value, 0);
+  const tradeValue = blocks.filter((block) => block.family === "TRADE_MARKETING").reduce((sum, block) => sum + block.value, 0);
+  const max = Math.max(Math.abs(marketingValue), Math.abs(tradeValue), 1);
+  return <section className="building-blocks-visual"><header className="section-title"><small>Vista primordial del Plan</small><h2>Building blocks · puente monetario</h2><p>Año anterior, volumen base y el aporte agregado de Marketing y Trade Marketing, hasta llegar al Plan final.</p></header><div className="waterfall-track"><div className="waterfall-start"><b>Año anterior</b><strong>{priorYearGrossSales === null ? "Sin historia" : formatMoney(priorYearGrossSales, result.currency)}</strong>{priorYear && <small>{priorYear}</small>}</div><div className="waterfall-start"><b>Volumen base</b><strong>{formatMoney(baseValue, result.currency)}</strong></div><article className={marketingValue < 0 ? "negative" : "positive"}><span style={{ height: `${Math.max(12, Math.round(Math.abs(marketingValue) / max * 100))}%` }} /><b>Plan de Marketing</b><small>{formatMoney(marketingValue, result.currency)}</small></article><article className={tradeValue < 0 ? "negative" : "positive"}><span style={{ height: `${Math.max(12, Math.round(Math.abs(tradeValue) / max * 100))}%` }} /><b>Plan de Trade Marketing</b><small>{formatMoney(tradeValue, result.currency)}</small></article><div className="waterfall-total"><b>Plan final</b><strong>{formatMoney(result.annualValue, result.currency)}</strong></div></div><div className="building-block-events">{blocks.map((block) => <span key={`${block.id}-event`}><b>{block.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</b> · {block.name} · {block.period} · {formatMoney(block.value, result.currency)}</span>)}</div></section>;
 }
 
 export function ContextModule({ plan }: { plan: Plan }) {
   const version = plan.versions.at(-1);
   return <div className="module-page">
-    <ModuleHead eyebrow="Paso 1 de 8 · Contexto" title="El Plan comienza con una sola cuenta" description="Este contexto gobierna archivos, cálculos, decisiones, aprobaciones y seguimiento. No se vuelve a capturar en cada pantalla." />
+    <ModuleHead eyebrow="Paso 1 de 8 · Contexto" title={`Plan de ${plan.accountName} ${plan.year}`} description="Este contexto gobierna archivos, cálculos, decisiones, aprobaciones y seguimiento. No se vuelve a capturar en cada pantalla." />
     <section className="context-sheet">
       <div><span>Compañía</span><strong>{plan.companyName}</strong><small>Organización responsable</small></div>
       <div><span>Cuenta</span><strong>{plan.accountName}</strong><small>Cliente que se está planeando</small></div>
@@ -62,7 +66,6 @@ export function ContextModule({ plan }: { plan: Plan }) {
       <div><span>Versión</span><strong>V{version?.number ?? 1}</strong><small>Historia controlada del Plan</small></div>
       <div><span>Estado</span><strong>{version?.status === "DRAFT" ? "En construcción" : version?.status ?? "Borrador"}</strong><small>Gobierno de la versión</small></div>
     </section>
-    <section className="plain-note"><b>Regla del recorrido</b><p>Cada pantalla responde una sola pregunta. Puedes abrir todas las etapas desde el menú; cuando falte una dependencia, REVENUE te dirá exactamente cuál es.</p></section>
   </div>;
 }
 
@@ -76,6 +79,45 @@ function FormatSpec({ requirementId, fields }: { requirementId: string; fields: 
   return <small className="format-spec"><b>{isCsv ? "CSV · encabezados exactos" : "Excel · encabezados libres"}</b>{isCsv ? ` · ${fields.join(", ")}` : " · REVENUE reconoce las columnas automáticamente"}</small>;
 }
 
+function buildErpQueryDocument(): string {
+  const lines: string[] = [
+    "INSTRUCCIONES PARA EL ERP — REVENUE",
+    "Pide estos reportes tal cual se describen; cada uno alimenta un archivo del Paso 2.",
+  ];
+  const sections: Array<[string, readonly (typeof PILOT_INPUT_REQUIREMENTS)[number][]]> = [
+    ["Archivos obligatorios", PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "ESSENTIAL")],
+    ["Archivos recomendados / condicionales", PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "CONDITIONAL")],
+  ];
+  for (const [title, requirements] of sections) {
+    lines.push("", `== ${title} ==`);
+    for (const requirement of requirements) {
+      const format = CSV_EXACT_REQUIREMENTS.has(requirement.id) ? "CSV con encabezados exactos" : "Excel con encabezados libres";
+      lines.push(
+        "",
+        requirement.name,
+        `Para qué sirve: ${requirement.purpose}`,
+        `Quién lo genera normalmente: ${requirement.suggestedOwner}`,
+        `Nivel de detalle esperado: ${requirement.expectedGrain}`,
+        `Cobertura mínima: ${requirement.minimumCoverage}`,
+        `Formato: ${format}`,
+        `Campos/columnas que debe incluir: ${requirement.requiredFields.join(", ")}`,
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+function ErpQueryGuide() {
+  const [copied, setCopied] = useState(false);
+  const document = buildErpQueryDocument();
+  return <section className="plain-note guide-panel">
+    <b>Instrucciones para pasarle al ERP</b>
+    <p>Copia este texto y entrégalo a Sistemas o a quien administre el ERP: describe exactamente qué reporte pedir por cada archivo, con sus campos y formato, para que estos reportes se los baje directamente.</p>
+    <pre className="erp-query-document">{document}</pre>
+    <div className="inline-actions"><button className="paper-button" type="button" onClick={() => { navigator.clipboard.writeText(document); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>{copied ? "Copiado" : "Copiar instrucciones"}</button></div>
+  </section>;
+}
+
 export function InformationModule({
   accounts, files, accepted, systemReady, busy, onUpload, onGuidedCapture, onAccept,
 }: {
@@ -84,13 +126,12 @@ export function InformationModule({
   onUpload: (requirementId: string, file?: File) => void; onAccept: () => void;
   onGuidedCapture: (requirementId: string, values: { account: string; product: string; period: string; units: string; value: string; currency: string; evidence: string }) => void;
 }) {
-  const [showGuide, setShowGuide] = useState(false);
   const [draftSource, setDraftSource] = useState<string | null>(null);
+  const [showErpGuide, setShowErpGuide] = useState(false);
   const essential = PILOT_INPUT_REQUIREMENTS.filter((requirement) => requirement.criticality === "ESSENTIAL");
   return <div className="module-page">
-    <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" description="Estos 4 archivos son obligatorios para calcular el Plan. REVENUE conserva el original, interpreta la tabla y muestra qué entendió." />
-    <section className="plain-note"><b>Información básica para empezar</b><p>REVENUE necesita información real de tu ERP o sistema de facturación y de las áreas que conocen cada cuenta. Hay dos formatos según la fuente: unas piden CSV con encabezados exactos (los verás abajo) y otras aceptan Excel con encabezados libres — REVENUE detecta la tabla y las variantes en español. Cada tarjeta muestra exactamente qué columnas necesita.</p><div className="inline-actions"><button className="paper-button" type="button" onClick={() => setShowGuide(!showGuide)}>{showGuide ? "Cerrar información básica" : "Información básica"}</button></div></section>
-    {showGuide && <section className="plain-note guide-panel"><b>Cómo REVENUE lee cada archivo</b><p><b>CSV con encabezados exactos</b> (Catálogo y correspondencias, Unidades y conversiones, Precios y moneda, Historia de promociones): usa los nombres de columna tal cual se muestran en la tarjeta, en la primera fila. <b>Excel con encabezados libres</b> (Historia de ventas, planes de Marketing/Trade, y las fuentes financieras): REVENUE busca la tabla dentro del archivo y reconoce variantes en español o inglés de cada campo — no necesitas acomodar tus columnas a un formato fijo. En ambos casos, el archivo original se conserva y cualquier campo faltante se explica en la tarjeta.</p></section>}
+    <ModuleHead eyebrow="Paso 2 de 8 · Información" title="Entrega los archivos que la empresa ya usa" action={<button className="paper-button" type="button" onClick={() => setShowErpGuide(!showErpGuide)}>{showErpGuide ? "Cerrar creador de queries" : "Creador de Queries para el ERP"}</button>} />
+    {showErpGuide && <ErpQueryGuide />}
     <section className="source-board">
       {essential.map((requirement, index) => {
         const received = files.find((file) => file.requirementId === requirement.id);
@@ -108,6 +149,7 @@ export function InformationModule({
         return <article className={received?.status === "READY" ? "ready" : ""} key={requirement.id}><i>{received?.status === "READY" ? "✓" : "·"}</i><div><b>{requirement.name} <em>· Opcional según etapa</em></b><p>{requirement.purpose}</p><small>Se usa en: {requirement.suggestedOwner} · Necesita: {requirement.minimumCoverage}</small><FormatSpec requirementId={requirement.id} fields={requirement.requiredFields} />{received?.status === "INCOMPLETE" && <small className="negative">Falta: {received.missingFields.join(", ") || "corregir filas"}</small>}</div><label>{received ? "Reemplazar" : "Cargar"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirement.id, event.target.files?.[0])} /></label></article>;
       })}
     </div></details>
+    <p className="plain-note-inline">Muy recomendadas para cualquier plan. Si estás armando un plan total compañía, estas fuentes son obligatorias.</p>
     {!accepted && systemReady && <EmptyAnswer title="La información esencial está completa" copy="Confirma la interpretación para construir el Volumen base." action={<button className="clay-primary" onClick={onAccept}>Confirmar información</button>} />}
     {accepted && <section className="answer-card good"><div><small>Resultado</small><h2>Información aceptada</h2><p>Los datasets canónicos ya pueden alimentar los cálculos de este Plan.</p></div><span>Listo</span></section>}
   </div>;
@@ -132,10 +174,12 @@ export function BaselineModule({ baseline, review, ready, busy, onCalculate, onA
   </div>;
 }
 
-export function GrowthPlanModule({ family, plan, contributions, growth, source, synthetic, canBuild, canContribute, canIntegrate, waitingFor, busy, onUpload, onBuild, onContribute, onDecide }: {
+export function GrowthPlanModule({ family, plan, contributions, growth, source, synthetic, canBuild, canContribute, canIntegrate, waitingFor, busy, products, categories, onUpload, onBuild, onContribute, onDecide }: {
   plan: Plan; contributions: Contribution[];
   family: "MARKETING" | "TRADE_MARKETING"; growth: GrowthResult | null; source?: ReceivedFile;
-  synthetic: boolean; canBuild: boolean; canContribute: boolean; canIntegrate: boolean; waitingFor: string; busy: string; onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
+  synthetic: boolean; canBuild: boolean; canContribute: boolean; canIntegrate: boolean; waitingFor: string; busy: string;
+  products: CanonicalProduct[]; categories: CanonicalCategory[];
+  onUpload: (requirementId: string, file?: File) => void; onBuild: () => void;
   onContribute: (event: React.FormEvent<HTMLFormElement>, family: "MARKETING" | "TRADE_MARKETING") => void;
   onDecide: (id: string, status: "ACCEPTED" | "RETURNED") => void;
 }) {
@@ -159,10 +203,10 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
     {!synthetic && canContribute && <section className="contribution-builder">
       <div className="section-title"><small>Construir dentro de REVENUE</small><h2>Registrar una aportación sin preparar otro Excel</h2></div>
       <form onSubmit={(event) => onContribute(event, family)}>
-        <label>Palanca<select name="lever" required defaultValue=""><option value="" disabled>Selecciona</option>{levers.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-        <label>Actividad<input name="title" required placeholder={isMarketing ? "Ej. Campaña Back to School" : "Ej. Promoción aniversario"} /></label>
+        <label>Actividad<select name="lever" required defaultValue=""><option value="" disabled>Selecciona</option>{levers.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+        <label>Nombre de la actividad<input name="title" required placeholder={isMarketing ? "Ej. Campaña Back to School" : "Ej. Promoción aniversario"} /></label>
         <label>Calidad del supuesto<select name="assumptionQuality" defaultValue="PROXY"><option value="COMMITMENT">Compromiso</option><option value="ESTIMATE">Estimación</option><option value="PROXY">Proxy provisional</option><option value="IDEA">Idea sin cifra</option></select></label>
-        <label>Productos<input name="productScope" placeholder="SKU, familia o portafolio" /></label>
+        <label>Productos<input name="productScope" list="product-scope-options" placeholder="Busca un SKU o una categoría del catálogo; separa varios con coma" /><datalist id="product-scope-options">{products.map((product) => <option key={product.id} value={product.skuCode}>{product.name} · {product.categoryName}</option>)}{categories.map((category) => <option key={category.id} value={category.name}>Categoría completa</option>)}</datalist></label>
         <label>Desde<input name="periodStart" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} required /></label>
         <label>Hasta<input name="periodEnd" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} required /></label>
         <label>Volumen incremental<input name="grossUnits" type="number" min="0" step="1" placeholder="Unidades" /></label>
@@ -188,14 +232,14 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
   </div>;
 }
 
-export function ResultModule({ result, baselineUnits, growthUnits, growth, ready, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; growth: GrowthResult | null; ready: boolean; busy: string; onBuild: () => void }) {
+export function ResultModule({ result, baselineUnits, growthUnits, growth, priorYear, priorYearGrossSales, ready, busy, onBuild }: { result: PlanResult | null; baselineUnits: number; growthUnits: number; growth: GrowthResult | null; priorYear: number | null; priorYearGrossSales: number | null; ready: boolean; busy: string; onBuild: () => void }) {
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 6 de 8 · Plan anual" title="El Plan anual, consolidado en un solo número" description="Volumen base + Marketing + Trade Marketing, sumados y reconciliados por cuenta, producto y mes." />
     <span className="billing-filter-hint">Detalle mensual por producto · formato Billing oficial</span>
     {result ? <>
       <section className="double-answer"><div><span>Unidades del Plan</span><strong>{result.annualUnits.toLocaleString("es-MX")}</strong><small>unidades reconciliadas</small></div><div><span>Revenue del Plan</span><strong>{formatMoney(result.annualValue, result.currency)}</strong><small>{result.currency}</small></div></section>
       <section className="equation-strip"><div><span>Volumen base</span><b>{baselineUnits.toLocaleString("es-MX")}</b></div><strong>+</strong><div><span>Crecimiento neto</span><b>{growthUnits.toLocaleString("es-MX")}</b></div><strong>=</strong><div><span>Plan anual</span><b>{result.annualUnits.toLocaleString("es-MX")}</b></div></section>
-      <section aria-label="Building blocks reconciliados"><BuildingBlocksWaterfall result={result} growth={growth} /></section>
+      <section aria-label="Building blocks reconciliados"><BuildingBlocksWaterfall result={result} growth={growth} priorYear={priorYear} priorYearGrossSales={priorYearGrossSales} /></section>
       <OfficialPlanBilling result={result} />
     </> : <EmptyAnswer title="Todavía no existe el Plan consolidado" copy={ready ? "Volumen base, Marketing y Trade Marketing están reconciliados." : "Primero deben quedar reconciliados Volumen base, Marketing y Trade Marketing."} action={ready ? <button className="clay-primary" disabled={Boolean(busy)} onClick={onBuild}>{busy ? "Consolidando…" : "Consolidar Plan anual"}</button> : undefined} />}
   </div>;
