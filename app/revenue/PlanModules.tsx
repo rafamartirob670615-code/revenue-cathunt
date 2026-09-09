@@ -188,6 +188,8 @@ type PromocionSuggestion = {
   periodEnd: string;
   investmentAmount: number;
   evidence: string;
+  planOrigin: "ANNUAL" | "ADHOC";
+  planYear?: number;
 };
 
 function PromocionSuggestions({ accountId, family, currency, onUse }: { accountId: string; family: "MARKETING" | "TRADE_MARKETING"; currency: string; onUse: (suggestion: PromocionSuggestion) => void }) {
@@ -205,14 +207,23 @@ function PromocionSuggestions({ accountId, family, currency, onUse }: { accountI
     return () => { active = false; };
   }, [accountId, family]);
   if (!loaded || suggestions.length === 0) return null;
-  return <section className="contribution-register">
-    <div className="section-title"><small>Sugerencias de Promoción</small><h2>Actividades ya aprobadas para esta cuenta</h2><p>Vienen de FAM/FAP; revísalas y usa la que corresponda para no volver a capturarla desde cero.</p></div>
-    {suggestions.map((suggestion) => <article key={suggestion.id}>
-      <div><small>{suggestion.periodStart} a {suggestion.periodEnd} · {suggestion.productScope}</small><b>{suggestion.title}</b><span>{suggestion.evidence}</span></div>
-      <div><strong>{formatMoney(suggestion.investmentAmount, currency)}</strong><span>Inversión planeada</span></div>
-      <button type="button" className="paper-button" onClick={() => onUse(suggestion)}>Usar esta actividad</button>
-    </article>)}
-  </section>;
+  const annual = suggestions.filter((item) => item.planOrigin === "ANNUAL");
+  const adhoc = suggestions.filter((item) => item.planOrigin !== "ANNUAL");
+  const row = (suggestion: PromocionSuggestion) => <article key={suggestion.id}>
+    <div><small>{suggestion.periodStart} a {suggestion.periodEnd} · {suggestion.productScope}</small><b>{suggestion.title}</b><span>{suggestion.evidence}</span></div>
+    <div><strong>{formatMoney(suggestion.investmentAmount, currency)}</strong><span>Inversión planeada</span></div>
+    <button type="button" className="paper-button" onClick={() => onUse(suggestion)}>Usar esta actividad</button>
+  </article>;
+  return <>
+    {annual.length > 0 && <section className="contribution-register">
+      <div className="section-title"><small>Plan anual de Promoción</small><h2>Actividades ya comprometidas para esta cuenta</h2><p>Vienen del plan anual aprobado por Trade Marketing/Marketing — ya cuentan como compromiso, incorpóralas al Plan.</p></div>
+      {annual.map(row)}
+    </section>}
+    {adhoc.length > 0 && <section className="contribution-register">
+      <div className="section-title"><small>Sugerencias de Promoción</small><h2>Actividades ad hoc ya aprobadas para esta cuenta</h2><p>Vienen de FAM/FAP; revísalas y usa la que corresponda para no volver a capturarla desde cero.</p></div>
+      {adhoc.map(row)}
+    </section>}
+  </>;
 }
 
 export function GrowthPlanModule({ family, plan, contributions, growth, source, synthetic, canBuild, canContribute, canIntegrate, waitingFor, busy, products, categories, onUpload, onBuild, onContribute, onDecide }: {

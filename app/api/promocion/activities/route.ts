@@ -21,6 +21,8 @@ type PromotionEvent = {
   startDate: string;
   endDate: string;
   plannedInvestment: number;
+  planOrigin?: "ANNUAL" | "ADHOC";
+  planYear?: number;
 };
 
 export async function GET(request: Request) {
@@ -43,6 +45,8 @@ export async function GET(request: Request) {
         periodEnd: (event.endDate || "").slice(0, 7),
         investmentAmount: event.plannedInvestment ?? 0,
         evidence: `Importado de Promoción · ${event.eventType} ${event.eventCode} · ${event.mechanic}${event.objective ? ` · ${event.objective}` : ""}`,
+        planOrigin: event.planOrigin === "ANNUAL" ? "ANNUAL" : "ADHOC",
+        planYear: event.planYear,
       }));
     return Response.json({ ok: true, suggestions });
   } catch (error) {
