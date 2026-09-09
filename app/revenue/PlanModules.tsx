@@ -42,7 +42,7 @@ function OfficialPlanBilling({ result }: { result: PlanResult }) {
   return <section className="billing-matrix"><div className="billing-matrix-scroll"><table><thead><tr><th className="matrix-label">Billing File · Plan</th>{billingColumns.map(([key, label]) => <th key={key} className={key.startsWith("Q") || key === "YTD" ? "summary-col" : ""}>{label}</th>)}</tr></thead><tbody><tr className="matrix-block"><th colSpan={billingColumns.length + 1}>Unidades del Plan</th></tr>{products.map((skuId) => <tr className="matrix-row" key={`units-${skuId}`}><th>{skuId}</th>{cells(skuId, "planUnits").map((value, index) => <td key={billingColumns[index][0]} className={billingColumns[index][0].startsWith("Q") || billingColumns[index][0] === "YTD" ? "summary-col" : ""}>{value.toLocaleString("es-MX")}</td>)}</tr>)}<tr className="matrix-block"><th colSpan={billingColumns.length + 1}>Valor del Plan · {result.currency}</th></tr>{products.map((skuId) => <tr className="matrix-row" key={`value-${skuId}`}><th>{skuId}</th>{cells(skuId, "planValue").map((value, index) => <td key={billingColumns[index][0]} className={billingColumns[index][0].startsWith("Q") || billingColumns[index][0] === "YTD" ? "summary-col" : ""}>{formatMoney(value, result.currency)}</td>)}</tr>)}</tbody></table></div></section>;
 }
 
-function BuildingBlocksWaterfall({ result, growth, priorYear, priorYearGrossSales }: { result: PlanResult; growth: GrowthResult | null; priorYear: number | null; priorYearGrossSales: number | null }) {
+function growthBridge(result: PlanResult, growth: GrowthResult | null) {
   const blocks = (growth?.activities ?? []).map((activity) => ({
     ...activity,
     value: result.lines.filter((line) => line.skuId === activity.skuId && line.period === activity.period).reduce((sum, line) => sum + activity.netUnits * line.unitPrice, 0),
@@ -50,6 +50,11 @@ function BuildingBlocksWaterfall({ result, growth, priorYear, priorYearGrossSale
   const baseValue = result.lines.reduce((sum, line) => sum + line.baselineUnits * line.unitPrice, 0);
   const marketingValue = blocks.filter((block) => block.family === "MARKETING").reduce((sum, block) => sum + block.value, 0);
   const tradeValue = blocks.filter((block) => block.family === "TRADE_MARKETING").reduce((sum, block) => sum + block.value, 0);
+  return { blocks, baseValue, marketingValue, tradeValue };
+}
+
+function BuildingBlocksWaterfall({ result, growth, priorYear, priorYearGrossSales }: { result: PlanResult; growth: GrowthResult | null; priorYear: number | null; priorYearGrossSales: number | null }) {
+  const { blocks, baseValue, marketingValue, tradeValue } = growthBridge(result, growth);
   const max = Math.max(Math.abs(marketingValue), Math.abs(tradeValue), 1);
   return <section className="building-blocks-visual"><header className="section-title"><small>Vista primordial del Plan</small><h2>Building blocks · puente monetario</h2><p>Año anterior, volumen base y el aporte agregado de Marketing y Trade Marketing, hasta llegar al Plan final.</p></header><div className="waterfall-track"><div className="waterfall-start"><b>Año anterior</b><strong>{priorYearGrossSales === null ? "Sin historia" : formatMoney(priorYearGrossSales, result.currency)}</strong>{priorYear && <small>{priorYear}</small>}</div><div className="waterfall-start"><b>Volumen base</b><strong>{formatMoney(baseValue, result.currency)}</strong></div><article className={marketingValue < 0 ? "negative" : "positive"}><span style={{ height: `${Math.max(12, Math.round(Math.abs(marketingValue) / max * 100))}%` }} /><b>Plan de Marketing</b><small>{formatMoney(marketingValue, result.currency)}</small></article><article className={tradeValue < 0 ? "negative" : "positive"}><span style={{ height: `${Math.max(12, Math.round(Math.abs(tradeValue) / max * 100))}%` }} /><b>Plan de Trade Marketing</b><small>{formatMoney(tradeValue, result.currency)}</small></article><div className="waterfall-total"><b>Plan final</b><strong>{formatMoney(result.annualValue, result.currency)}</strong></div></div><div className="building-block-events">{blocks.map((block) => <span key={`${block.id}-event`}><b>{block.family === "MARKETING" ? "Marketing" : "Trade Marketing"}</b> · {block.name} · {block.period} · {formatMoney(block.value, result.currency)}</span>)}</div></section>;
 }
@@ -261,11 +266,52 @@ export function ProfitabilityModule({ profitability, files, onUpload, ready, bus
   </div>;
 }
 
-export function ReviewModule({ baseline, growth, result, profitability, synthetic, busy, onSubmit }: { baseline: BaselineReview | null; baselineResult?: BaselineResult | null; growth?: GrowthResult | null; result: PlanResult | null; profitability: ProfitabilityResult | null; synthetic: boolean; busy: string; onSubmit: () => void }) {
+function assumptionLabel(quality?: string) {
+  return quality === "PROXY" ? "Proxy provisional" : quality === "ESTIMATE" ? "Estimación" : quality === "COMMITMENT" ? "Compromiso" : quality === "IDEA" ? "Idea sin cifra" : "Sin calidad declarada";
+}
+
+function executiveNarrative({ plan, baselineResult, growth, result, profitability }: { plan: Plan; baselineResult?: BaselineResult | null; growth?: GrowthResult | null; result: PlanResult | null; profitability: ProfitabilityResult | null }) {
+  if (!result || !baselineResult) return null;
+  const { baseValue, marketingValue, tradeValue } = growthBridge(result, growth ?? null);
+  const growthValuePct = baseValue ? Math.round(((result.annualValue - baseValue) / baseValue) * 1000) / 10 : null;
+  const combined = Math.abs(marketingValue) + Math.abs(tradeValue);
+  const dominant = Math.abs(marketingValue) >= Math.abs(tradeValue) ? "Marketing" : "Trade Marketing";
+  const dominantShare = combined > 0 ? Math.round((Math.max(Math.abs(marketingValue), Math.abs(tradeValue)) / combined) * 100) : null;
+  const sentences: string[] = [];
+  sentences.push(`El Plan de ${plan.accountName} para ${plan.year} consolida ${result.annualUnits.toLocaleString("es-MX")} unidades y ${formatMoney(result.annualValue, result.currency)}${growthValuePct !== null ? `, ${growthValuePct >= 0 ? "un crecimiento de" : "una caída de"} ${Math.abs(growthValuePct)}% sobre el Volumen base (${formatMoney(baseValue, result.currency)}).` : "."}`);
+  if (dominantShare !== null) sentences.push(`El crecimiento neto se explica principalmente por ${dominant} (${dominantShare}% del incremental combinado de Marketing y Trade Marketing).`);
+  if (profitability) {
+    const { netSales, grossMarginRate, contribution, contributionRate } = profitability.planAnnual;
+    sentences.push(`En rentabilidad, el Plan proyecta ${formatMoney(netSales, profitability.currency)} de net sales, ${((grossMarginRate ?? 0) * 100).toFixed(1)}% de margen bruto y ${formatMoney(contribution, profitability.currency)} de contribución (${((contributionRate ?? 0) * 100).toFixed(1)}% de net sales).`);
+  } else {
+    sentences.push("La rentabilidad del Plan todavía no se ha calculado.");
+  }
+  return sentences.join(" ");
+}
+
+function bridgeNarrative(result: PlanResult, growth: GrowthResult | null) {
+  const { baseValue, marketingValue, tradeValue } = growthBridge(result, growth);
+  return `Partiendo de un Volumen base de ${formatMoney(baseValue, result.currency)}, Marketing aporta ${formatMoney(marketingValue, result.currency)} y Trade Marketing ${formatMoney(tradeValue, result.currency)}, para llegar a un Plan final de ${formatMoney(result.annualValue, result.currency)}.`;
+}
+
+export function ReviewModule({ plan, baseline, baselineResult, growth, result, profitability, priorYear, priorYearGrossSales, synthetic, busy, onSubmit }: { plan: Plan; baseline: BaselineReview | null; baselineResult?: BaselineResult | null; growth?: GrowthResult | null; result: PlanResult | null; profitability: ProfitabilityResult | null; priorYear: number | null; priorYearGrossSales: number | null; synthetic: boolean; busy: string; onSubmit: () => void }) {
   const checks = [["Información y base", baseline?.status === "APPROVED_FROZEN"],["Marketing y Trade", Boolean(growth?.controls.reconciled)],["Unidades y valor", Boolean(result?.controls.unitsReconciled && result.controls.valueReconciled)],["Rentabilidad", Boolean(profitability?.controls.planReconciled)]] as const;
   const ready = checks.every(([,ok]) => ok);
+  const version = plan.versions.at(-1);
+  const narrative = executiveNarrative({ plan, baselineResult, growth, result, profitability });
+  const topActivities = result ? [...growthBridge(result, growth ?? null).blocks].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 5) : [];
+  const weakAssumptions = (growth?.activities ?? []).filter((activity) => activity.assumptionQuality === "PROXY" || activity.assumptionQuality === "IDEA");
   return <div className="module-page">
     <ModuleHead eyebrow="Paso 8 de 8 · Revisión y aprobación" title="Todo el Plan, listo para su revisión final" description="Las decisiones y controles de cada paso se reúnen aquí antes de enviar la versión a revisión." />
+    <section className="section-title"><small>Documento del Plan</small><h2>{plan.accountName} · {plan.year}</h2><p>{plan.companyName} · Versión V{version?.number ?? 1} · Moneda {plan.currency}</p></section>
+    <section className="plain-note"><b>Resumen ejecutivo</b><p>{narrative ?? "El resumen ejecutivo aparecerá cuando el Plan anual esté consolidado."}</p></section>
+    {result && <section aria-label="Building blocks reconciliados">
+      <BuildingBlocksWaterfall result={result} growth={growth ?? null} priorYear={priorYear} priorYearGrossSales={priorYearGrossSales} />
+      <p className="billing-report-note">{bridgeNarrative(result, growth ?? null)}</p>
+    </section>}
+    {topActivities.length > 0 && <section className="activity-sheet"><h3>Actividades relevantes</h3>{topActivities.map((activity) => <article key={activity.id}><div><small>{activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"} · {activity.period}{activity.assumptionQuality ? ` · ${assumptionLabel(activity.assumptionQuality)}` : ""}</small><b>{activity.name}</b></div><div><strong>{formatMoney(activity.value, result?.currency ?? "MXN")}</strong></div></article>)}</section>}
+    {profitability && <section className="paper-metrics"><Metric label="Net sales" value={formatMoney(profitability.planAnnual.netSales, profitability.currency)} note="proyectado del Plan" /><Metric label="Margen bruto" value={`${((profitability.planAnnual.grossMarginRate ?? 0) * 100).toFixed(1)}%`} note={formatMoney(profitability.planAnnual.grossMargin, profitability.currency)} /><Metric label="Contribución" value={formatMoney(profitability.planAnnual.contribution, profitability.currency)} note={`${((profitability.planAnnual.contributionRate ?? 0) * 100).toFixed(1)}% de net sales`} tone="good" /></section>}
+    {weakAssumptions.length > 0 && <section className="plain-note warning"><b>Supuestos a vigilar</b><p>Estas actividades todavía no tienen una cifra firme; su impacto en el Plan puede cambiar.</p>{weakAssumptions.map((activity) => <p key={activity.id}><b>{activity.name}</b> · {activity.family === "MARKETING" ? "Marketing" : "Trade Marketing"} · {assumptionLabel(activity.assumptionQuality)}</p>)}</section>}
     <section className="approval-sheet">{checks.map(([label,ok], index) => <article className={ok ? "ready" : ""} key={label}><i>{ok ? "✓" : index + 1}</i><div><b>{label}</b><small>{ok ? "Listo" : "Pendiente"}</small></div></article>)}</section>
     <section className="official-document"><header><small>Documento oficial actualizado · Billing File oficial</small><h2>Única vista para revisar antes de aprobar</h2><p>Este Billing mensual es la base inamovible que pasará a Seguimiento después de la aprobación.</p></header><h3>Billing mensual del Plan</h3>{result ? <OfficialPlanBilling result={result} /> : <p>El Billing mensual aparecerá cuando el Plan anual esté consolidado.</p>}<p className="billing-report-note"><b>Regla:</b> la aprobación no se habilita mientras el Billing File no esté completo y reconciliado.</p></section>
     {synthetic && <section className="plain-note warning"><b>Prueba no comercial</b><p>Este recorrido demuestra la maquinaria, pero no puede convertirse en compromiso oficial.</p></section>}
