@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import type { Plan } from "../../domain/types";
 import { PILOT_INPUT_REQUIREMENTS } from "../../domain/input-package";
@@ -179,6 +179,42 @@ export function BaselineModule({ baseline, review, ready, busy, onCalculate, onA
   </div>;
 }
 
+type PromocionSuggestion = {
+  id: string;
+  family: "MARKETING" | "TRADE_MARKETING";
+  title: string;
+  productScope: string;
+  periodStart: string;
+  periodEnd: string;
+  investmentAmount: number;
+  evidence: string;
+};
+
+function PromocionSuggestions({ accountId, family, currency, onUse }: { accountId: string; family: "MARKETING" | "TRADE_MARKETING"; currency: string; onUse: (suggestion: PromocionSuggestion) => void }) {
+  const [suggestions, setSuggestions] = useState<PromocionSuggestion[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/promocion/activities?accountId=${encodeURIComponent(accountId)}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body: { ok: boolean; suggestions?: PromocionSuggestion[] }) => {
+        if (active && body.ok) setSuggestions((body.suggestions ?? []).filter((item) => item.family === family));
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setLoaded(true); });
+    return () => { active = false; };
+  }, [accountId, family]);
+  if (!loaded || suggestions.length === 0) return null;
+  return <section className="contribution-register">
+    <div className="section-title"><small>Sugerencias de Promoción</small><h2>Actividades ya aprobadas para esta cuenta</h2><p>Vienen de FAM/FAP; revísalas y usa la que corresponda para no volver a capturarla desde cero.</p></div>
+    {suggestions.map((suggestion) => <article key={suggestion.id}>
+      <div><small>{suggestion.periodStart} a {suggestion.periodEnd} · {suggestion.productScope}</small><b>{suggestion.title}</b><span>{suggestion.evidence}</span></div>
+      <div><strong>{formatMoney(suggestion.investmentAmount, currency)}</strong><span>Inversión planeada</span></div>
+      <button type="button" className="paper-button" onClick={() => onUse(suggestion)}>Usar esta actividad</button>
+    </article>)}
+  </section>;
+}
+
 export function GrowthPlanModule({ family, plan, contributions, growth, source, synthetic, canBuild, canContribute, canIntegrate, waitingFor, busy, products, categories, onUpload, onBuild, onContribute, onDecide }: {
   plan: Plan; contributions: Contribution[];
   family: "MARKETING" | "TRADE_MARKETING"; growth: GrowthResult | null; source?: ReceivedFile;
@@ -188,6 +224,7 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
   onContribute: (event: React.FormEvent<HTMLFormElement>, family: "MARKETING" | "TRADE_MARKETING") => void;
   onDecide: (id: string, status: "ACCEPTED" | "RETURNED") => void;
 }) {
+  const [prefill, setPrefill] = useState<PromocionSuggestion | null>(null);
   const isMarketing = family === "MARKETING";
   const activities = growth?.activities.filter((activity) => activity.family === family) ?? [];
   const gross = activities.reduce((sum, activity) => sum + activity.grossUnits, 0);
@@ -205,18 +242,19 @@ export function GrowthPlanModule({ family, plan, contributions, growth, source, 
       <div><small>Fuente de esta sección</small><h2>{source ? source.originalName : synthetic ? "Caso guiado sintético" : `Excel del Plan de ${isMarketing ? "Marketing" : "Trade Marketing"}`}</h2><p>{source ? `${source.summary.rowCount} filas interpretadas y preservadas.` : synthetic ? "Fuente de demostración aislada y no comercial." : "Carga el archivo que ya utiliza el área responsable."}</p></div>
       {!synthetic && canContribute && <label className="paper-button">{busy === requirementId ? "Leyendo…" : source ? "Reemplazar Excel" : "Seleccionar Excel"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => onUpload(requirementId, event.target.files?.[0])} /></label>}
     </section>
+    {!synthetic && canContribute && <PromocionSuggestions accountId={plan.accountId} family={family} currency={plan.currency} onUse={setPrefill} />}
     {!synthetic && canContribute && <section className="contribution-builder">
       <div className="section-title"><small>Construir dentro de REVENUE</small><h2>Registrar una aportación sin preparar otro Excel</h2></div>
-      <form onSubmit={(event) => onContribute(event, family)}>
+      <form key={prefill?.id ?? "blank"} onSubmit={(event) => onContribute(event, family)}>
         <label>Actividad<select name="lever" required defaultValue=""><option value="" disabled>Selecciona</option>{levers.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-        <label>Nombre de la actividad<input name="title" required placeholder={isMarketing ? "Ej. Campaña Back to School" : "Ej. Promoción aniversario"} /></label>
-        <label>Calidad del supuesto<select name="assumptionQuality" defaultValue="PROXY"><option value="COMMITMENT">Compromiso</option><option value="ESTIMATE">Estimación</option><option value="PROXY">Proxy provisional</option><option value="IDEA">Idea sin cifra</option></select></label>
-        <label>Productos<input name="productScope" list="product-scope-options" placeholder="Busca un SKU o una categoría del catálogo; separa varios con coma" /><datalist id="product-scope-options">{products.map((product) => <option key={product.id} value={product.skuCode}>{product.name} · {product.categoryName}</option>)}{categories.map((category) => <option key={category.id} value={category.name}>Categoría completa</option>)}</datalist></label>
-        <label>Desde<input name="periodStart" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} required /></label>
-        <label>Hasta<input name="periodEnd" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} required /></label>
+        <label>Nombre de la actividad<input name="title" required defaultValue={prefill?.title ?? ""} placeholder={isMarketing ? "Ej. Campaña Back to School" : "Ej. Promoción aniversario"} /></label>
+        <label>Calidad del supuesto<select name="assumptionQuality" defaultValue={prefill ? "COMMITMENT" : "PROXY"}><option value="COMMITMENT">Compromiso</option><option value="ESTIMATE">Estimación</option><option value="PROXY">Proxy provisional</option><option value="IDEA">Idea sin cifra</option></select></label>
+        <label>Productos<input name="productScope" list="product-scope-options" defaultValue={prefill?.productScope ?? ""} placeholder="Busca un SKU o una categoría del catálogo; separa varios con coma" /><datalist id="product-scope-options">{products.map((product) => <option key={product.id} value={product.skuCode}>{product.name} · {product.categoryName}</option>)}{categories.map((category) => <option key={category.id} value={category.name}>Categoría completa</option>)}</datalist></label>
+        <label>Desde<input name="periodStart" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} defaultValue={prefill?.periodStart ?? ""} required /></label>
+        <label>Hasta<input name="periodEnd" type="month" min={`${plan.year}-01`} max={`${plan.year}-12`} defaultValue={prefill?.periodEnd ?? ""} required /></label>
         <label>Volumen incremental<input name="grossUnits" type="number" min="0" step="1" placeholder="Unidades" /></label>
-        <label>Inversión (MXN)<input name="investmentAmount" type="number" min="0" step=".01" placeholder="0.00" /></label>
-        <label className="wide">Evidencia o explicación<textarea name="evidence" placeholder="Origen del supuesto, acuerdo o cálculo utilizado" /></label>
+        <label>Inversión (MXN)<input name="investmentAmount" type="number" min="0" step=".01" defaultValue={prefill?.investmentAmount ?? ""} placeholder="0.00" /></label>
+        <label className="wide">Evidencia o explicación<textarea name="evidence" defaultValue={prefill?.evidence ?? ""} placeholder="Origen del supuesto, acuerdo o cálculo utilizado" /></label>
         <button className="clay-primary wide" disabled={Boolean(busy)}>{busy === "Guardando aportación…" ? busy : "Entregar aportación al KAM"}</button>
       </form>
     </section>}
