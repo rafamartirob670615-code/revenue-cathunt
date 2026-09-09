@@ -433,7 +433,9 @@ export default function RevenuePlatform({ identity, initialModule = "monitoreo" 
       const body = await response.json() as { ok: boolean; result?: Plan; error?: string };
       if (!response.ok || !body.ok || !body.result) throw new Error(body.error);
       setCreating(false);
-      await loadPlan(body.result);
+      // El botón de arranque de un Plan nuevo siempre debe mostrar el Paso 1
+      // primero; loadPlan() sin destino saltaría directo a "informacion".
+      await loadPlan(body.result, "contexto");
     } catch (cause) { setError(friendly(cause instanceof Error ? cause.message : "")); }
     finally { setBusy(""); }
   }
